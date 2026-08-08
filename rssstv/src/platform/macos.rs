@@ -23,7 +23,7 @@ pub fn manual_fallback() -> Option<PathBuf> {
 pub const APP_DIRECTORY: &str = "RSSSTV";
 
 /// The window is themed by AppKit from the system appearance, and the menu
-/// bar is attached by muda, so nothing has to be arranged in advance.
+/// bar is drawn inside the window, so nothing has to be arranged in advance.
 pub fn prepare_process() {}
 
 pub fn prepare_window(_cc: &eframe::CreationContext<'_>) {}

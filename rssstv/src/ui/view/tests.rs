@@ -335,9 +335,9 @@ fn status_errors_are_left_and_audio_facts_are_right() {
 
 #[test]
 fn the_in_window_menu_bar_renders_on_every_platform() {
-    // muda is not compiled on Linux, so this renderer is the only menu
-    // there. Exercising it here keeps it working on a machine that never
-    // takes that path at run time.
+    // muda is compiled only on Windows, so this renderer is the only menu
+    // everywhere else. Exercising it here keeps it working on a machine
+    // that never takes that path at run time.
     let model = menu::model(&App::headless());
     let labels: Vec<String> = model.iter().map(|menu| menu.label.clone()).collect();
     let mut harness = Harness::new_ui(|ui| {

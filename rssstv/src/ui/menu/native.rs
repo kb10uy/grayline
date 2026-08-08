@@ -21,7 +21,6 @@ pub struct MenuHost {
     items: Vec<Entry>,
     actions: HashMap<MenuId, Action>,
     model: Vec<Menu>,
-    #[cfg(target_os = "windows")]
     hwnd: Option<isize>,
 }
 
@@ -63,7 +62,6 @@ impl MenuHost {
             items: Vec::new(),
             actions: HashMap::new(),
             model: Vec::new(),
-            #[cfg(target_os = "windows")]
             hwnd: None,
         };
         native.build(model)?;
@@ -71,7 +69,6 @@ impl MenuHost {
         Ok(native)
     }
 
-    #[cfg(target_os = "windows")]
     fn attach(&mut self, cc: &eframe::CreationContext<'_>) -> Result<(), muda::Error> {
         use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
@@ -89,21 +86,11 @@ impl MenuHost {
         Ok(())
     }
 
-    #[cfg(target_os = "macos")]
-    fn attach(&mut self, _cc: &eframe::CreationContext<'_>) -> Result<(), muda::Error> {
-        self.menu.init_for_nsapp();
-        Ok(())
-    }
-
-    #[cfg(target_os = "windows")]
     pub fn prepare_for_close(&self) {
         if let Some(hwnd) = self.hwnd {
             crate::platform::hide_window(hwnd);
         }
     }
-
-    #[cfg(target_os = "macos")]
-    pub fn prepare_for_close(&self) {}
 
     /// Replaces every menu entry from `model`.
     fn build(&mut self, model: &[Menu]) -> Result<(), muda::Error> {
@@ -192,7 +179,6 @@ impl MenuHost {
             items: Vec::new(),
             actions: HashMap::new(),
             model: Vec::new(),
-            #[cfg(target_os = "windows")]
             hwnd: None,
         };
         native.build(model).expect("a detached menu can be built");

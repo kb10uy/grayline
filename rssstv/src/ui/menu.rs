@@ -1,10 +1,12 @@
 //! The application menu, described once and rendered per platform.
 //!
-//! muda can only attach a native menu to a window the platform owns, which
-//! rules out Linux: it needs a gtk window there and winit does not create one.
-//! Rather than maintain two menu definitions, the menu is built as a
-//! platform-independent [model](model) that the native and in-window renderers
-//! both consume, so the two paths cannot drift apart.
+//! Only Windows takes the native menu bar. muda cannot attach one on Linux —
+//! it needs a gtk window there and winit does not create one — and on macOS
+//! it could, but the project has no Mac to verify the native bar's behavior
+//! on, so macOS draws the same in-window bar. Rather than maintain two menu
+//! definitions, the menu is built as a platform-independent [model](model)
+//! that the native and in-window renderers both consume, so the two paths
+//! cannot drift apart.
 
 use crate::{
     app::App,
@@ -12,16 +14,16 @@ use crate::{
     storage::{history::HistoryFormat, paths::Folder},
 };
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 mod native;
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(target_os = "windows"))]
 mod in_window;
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 pub use native::MenuHost;
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(target_os = "windows"))]
 pub use in_window::MenuHost;
 
 /// What activating a menu entry asks the application to do.
@@ -325,7 +327,7 @@ const ZOOM_STEP: f32 = 0.1;
 ///
 /// The in-window bar draws straight from the model, so this is built only
 /// where the native menu is, and for the tests that cover it everywhere.
-#[cfg(any(target_os = "windows", target_os = "macos", test))]
+#[cfg(any(target_os = "windows", test))]
 pub fn flatten(menus: &[Menu]) -> Vec<&Item> {
     fn walk<'a>(items: &'a [Item], out: &mut Vec<&'a Item>) {
         for item in items {
@@ -345,7 +347,7 @@ pub fn flatten(menus: &[Menu]) -> Vec<&Item> {
 
 /// Whether the menu has to be drawn inside the window.
 pub const fn is_in_window() -> bool {
-    !cfg!(any(target_os = "windows", target_os = "macos"))
+    !cfg!(target_os = "windows")
 }
 
 /// Draws the menu bar as egui widgets.
