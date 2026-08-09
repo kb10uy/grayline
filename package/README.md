@@ -10,7 +10,7 @@ install:
   falls back to when no `help/` directory sits beside the executable
 
 Not packaged: the `encode-wav` and `decode-wav` command-line tools, and the
-MMSSTV templates in [templates/](../templates) — copy those into
+MMSSTV templates in [assets/templates/](../assets/templates) — copy those into
 `~/.local/share/rssstv/templates` yourself. Installing them under
 `/usr/share/rssstv/templates` is a possible follow-up.
 

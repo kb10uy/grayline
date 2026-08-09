@@ -1,7 +1,7 @@
 # MMSSTV Rust Porting Notes
 
 This document describes proposed boundaries for porting the original MMSSTV
-implementation in `original/mmsstv` to Rust. The architecture of the original
+implementation in `docs/reference/mmsstv` to Rust. The architecture of the original
 application is documented separately in [architecture.md](architecture.md). Detailed
 references are available for the [DSP implementation](dsp.md) and
 [supported SSTV formats](../sstv/modes.md). MMSSTV's six-bit station identifier

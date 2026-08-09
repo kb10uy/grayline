@@ -6,7 +6,7 @@ identification.
 There is no single formal standard covering every mode here; most are de facto
 protocols created by scan-converter or software authors, and public sources
 conflict with each other. Values below are therefore largely derived from the
-original MMSSTV source in `original/mmsstv`, which remains the most complete
+original MMSSTV source in `docs/reference/mmsstv`, which remains the most complete
 single reference. Where that source departs from published descriptions, the
 departure is recorded in [mmsstv/modes.md](../mmsstv/modes.md) rather than
 here.

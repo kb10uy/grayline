@@ -1,0 +1,19 @@
+[package]
+name = "grayline-sstv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+std = ["thiserror/std"]
+
+[dependencies]
+libm.workspace = true
+grayline-sstv-fskid = { path = "../sstv-fskid" }
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+rstest.workspace = true

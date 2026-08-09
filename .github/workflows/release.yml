@@ -40,7 +40,7 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           version="$(cargo metadata --format-version 1 --no-deps \
-            | jq -r '.packages[] | select(.name == "rssstv") | .version')"
+            | jq -r '.packages[] | select(.name == "grayline-sstv-app") | .version')"
           if [ "$TAG" != "v$version" ]; then
             echo "the tag $TAG does not match the workspace version $version" >&2
             exit 1
@@ -104,7 +104,7 @@ jobs:
       - name: Build the release executable
         run: >
           cargo build --release --locked --target ${{ matrix.target }}
-          -p rssstv
+          -p grayline-sstv-app
 
       # A dependency on the Visual C++ redistributable is the one thing an
       # archive cannot repair on the operator's machine, so the invariant is
@@ -159,7 +159,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p "staging/$ARCHIVE_NAME/assets"
-          cp rssstv/assets/rssstv.desktop rssstv/assets/icon.png \
+          cp apps/sstv/assets/rssstv.desktop apps/sstv/assets/icon.png \
             "staging/$ARCHIVE_NAME/assets/"
 
       # macOS gets a bundle in a disk image rather than an archive of bare

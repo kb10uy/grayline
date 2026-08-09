@@ -12,7 +12,7 @@ archives carry, rendered to HTML by `docs/help/build.sh`.
 `rssstv` is the desktop interface, built with egui and eframe:
 
 ```text
-cargo run -p rssstv
+cargo run -p grayline-sstv-app
 ```
 
 Selecting an input device opens a capture stream and starts a worker that
@@ -25,7 +25,7 @@ template and stock image, and choose Set for transmit after the composite
 preview is ready. TX streams the complete VOX, VIS, raster, footer, FSKID, and
 trailing-silence sequence to the selected device. The same button stops an
 active transmission. See
-[docs/memo/rssstv/gui-design.md](docs/memo/rssstv/gui-design.md) for the design
+[docs/memo/grayline/gui-design.md](docs/memo/grayline/gui-design.md) for the design
 and remaining work.
 
 Rig control goes through Hamlib's `rigctld` rather than a linked library, so
@@ -39,7 +39,7 @@ rig in more ways than one protocol covers. The band plan the radio panel offers
 comes from a file beside it. Both are built in and need no files; write either
 out from Settings › Rig Control, as `rigcontrol.lua` and `bands.toml` beside
 `config.toml`, to take it over. See
-[docs/memo/rssstv/rig-control.md](docs/memo/rssstv/rig-control.md).
+[docs/memo/grayline/rig-control.md](docs/memo/grayline/rig-control.md).
 
 On Linux the window icon comes from a desktop entry rather than from the
 application, because a Wayland compositor has no other way to learn one. The
@@ -48,9 +48,9 @@ the same name; installing it and the icon it points at is what makes the icon
 appear in the task switcher and the dock:
 
 ```text
-install -Dm644 rssstv/assets/rssstv.desktop \
+install -Dm644 apps/sstv/assets/rssstv.desktop \
   ~/.local/share/applications/rssstv.desktop
-install -Dm644 rssstv/assets/icon.png \
+install -Dm644 apps/sstv/assets/icon.png \
   ~/.local/share/icons/hicolor/512x512/apps/rssstv.png
 update-desktop-database ~/.local/share/applications
 ```
@@ -61,7 +61,7 @@ instead if you are running from `cargo run`. Distribution packages that
 install all of this — binary, entry, icon, and manual — are described in
 [package/](package/README.md), for Arch Linux and Debian/Ubuntu.
 
-[templates/](templates) holds the five templates MMSSTV ships, ported to the
+[assets/templates/](assets/templates) holds the five templates MMSSTV ships, ported to the
 KDL format. Copy the ones you want into the application's templates directory;
 each file records in a comment what its original did that this format cannot.
 
@@ -102,10 +102,10 @@ same Rust the desktop application uses. Its images are identical to the ones
 ```text
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack
-wasm-pack build web-demo --target web --out-dir www/pkg --release
-python -m http.server -d web-demo/www 8080
+wasm-pack build apps/web-demo --target web --out-dir www/pkg --release
+python -m http.server -d apps/web-demo/www 8080
 ```
 
 A server is required: `file://` blocks the module and the microphone needs a
 secure context. See
-[docs/memo/rssstv/web-demo.md](docs/memo/rssstv/web-demo.md).
+[docs/memo/grayline/web-demo.md](docs/memo/grayline/web-demo.md).

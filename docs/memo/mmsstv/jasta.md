@@ -1,6 +1,6 @@
 # MMJASTA
 
-`original/mmsstv/JASTA` is a separate Borland C++ Builder application, not part
+`docs/reference/mmsstv/JASTA` is a separate Borland C++ Builder application, not part
 of MMSSTV proper. It scores the JASTA SSTV Activity Contest from a log MMSSTV
 recorded, and writes the log sheet, summary sheet, and an analysis file the
 entrant mails to the contest secretary. It shares its lower layers with MMSSTV

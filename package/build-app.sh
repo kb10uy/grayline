@@ -24,11 +24,11 @@ mkdir -p "$contents/MacOS" "$contents/Resources"
 iconset="$staging/rssstv.iconset"
 mkdir "$iconset"
 for size in 16 32 128 256 512; do
-  sips -z "$size" "$size" "$root/rssstv/assets/icon.png" \
+  sips -z "$size" "$size" "$root/apps/sstv/assets/icon.png" \
     --out "$iconset/icon_${size}x${size}.png" > /dev/null
 done
 for size in 16 32 128 256; do
-  sips -z "$((size * 2))" "$((size * 2))" "$root/rssstv/assets/icon.png" \
+  sips -z "$((size * 2))" "$((size * 2))" "$root/apps/sstv/assets/icon.png" \
     --out "$iconset/icon_${size}x${size}@2x.png" > /dev/null
 done
 iconutil -c icns "$iconset" -o "$contents/Resources/rssstv.icns"

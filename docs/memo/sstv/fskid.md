@@ -5,7 +5,7 @@ transmission. It carries a callsign, optionally a contest value, and in narrow
 modes the mode identifier itself.
 
 There is no formal standard. The published description in
-`original/mmsstv/fskid.txt` is the closest thing to one, but the executable
+`docs/reference/mmsstv/fskid.txt` is the closest thing to one, but the executable
 behavior of MMSSTV is authoritative where the two disagree, and one such
 disagreement is recorded below. How MMSSTV detects and acquires the signal is
 described in [mmsstv/fskid.md](../mmsstv/fskid.md).

@@ -1,7 +1,7 @@
 # MMSSTV Architecture
 
 This document describes the overall structure of the original MMSSTV
-application in `original/mmsstv`. Signal-processing details and supported SSTV
+application in `docs/reference/mmsstv`. Signal-processing details and supported SSTV
 formats are documented separately:
 
 - [MMSSTV DSP Implementation](dsp.md)
@@ -36,7 +36,7 @@ types, Windows handles, and direct references to the main form.
 
 ## Project Structure
 
-The entry point is `WinMain` in `original/mmsstv/Mmsstv.cpp:130`. It checks for
+The entry point is `WinMain` in `docs/reference/mmsstv/Mmsstv.cpp:130`. It checks for
 an existing MMSSTV window unless `-Z` is specified, initializes VCL, creates the
 global `TMmsstv` form, and starts the VCL message loop.
 

@@ -882,18 +882,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
-name = "decode-wav"
-version = "0.3.1"
-dependencies = [
- "anyhow",
- "hound",
- "image",
- "rssstv-demodulator",
- "rssstv-fskid",
- "rssstv-sstv",
-]
-
-[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1179,22 +1167,6 @@ dependencies = [
  "toml",
  "vswhom",
  "winreg",
-]
-
-[[package]]
-name = "encode-wav"
-version = "0.3.1"
-dependencies = [
- "anyhow",
- "decode-wav",
- "hound",
- "image",
- "jiff",
- "rssstv-fskid",
- "rssstv-modulator",
- "rssstv-sstv",
- "rssstv-template",
- "rstest",
 ]
 
 [[package]]
@@ -1811,6 +1783,161 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
 dependencies = [
  "bitflags 2.13.1",
+]
+
+[[package]]
+name = "grayline-audio"
+version = "0.3.1"
+dependencies = [
+ "cpal",
+ "ringbuf",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-decode-wav"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "grayline-sstv",
+ "grayline-sstv-fskid",
+ "grayline-sstv-rx",
+ "hound",
+ "image",
+]
+
+[[package]]
+name = "grayline-dsp"
+version = "0.3.1"
+dependencies = [
+ "libm",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-encode-wav"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "grayline-decode-wav",
+ "grayline-sstv",
+ "grayline-sstv-fskid",
+ "grayline-sstv-template",
+ "grayline-tone-tx",
+ "hound",
+ "image",
+ "jiff",
+ "rstest",
+]
+
+[[package]]
+name = "grayline-rig"
+version = "0.3.1"
+dependencies = [
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-sstv"
+version = "0.3.1"
+dependencies = [
+ "grayline-sstv-fskid",
+ "libm",
+ "proptest",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-sstv-app"
+version = "0.3.1"
+dependencies = [
+ "directories",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "egui_kittest",
+ "embed-resource",
+ "fluent-bundle",
+ "fontdb",
+ "grayline-audio",
+ "grayline-dsp",
+ "grayline-rig",
+ "grayline-sstv",
+ "grayline-sstv-fskid",
+ "grayline-sstv-rx",
+ "grayline-sstv-template",
+ "grayline-tone-tx",
+ "hound",
+ "image",
+ "image-webp",
+ "jiff",
+ "mlua",
+ "muda",
+ "png",
+ "raw-window-handle",
+ "rstest",
+ "thiserror 2.0.20",
+ "toml_edit",
+ "unic-langid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "grayline-sstv-fskid"
+version = "0.3.1"
+dependencies = [
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-sstv-rx"
+version = "0.3.1"
+dependencies = [
+ "grayline-dsp",
+ "grayline-sstv",
+ "grayline-sstv-fskid",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-sstv-template"
+version = "0.3.1"
+dependencies = [
+ "grayline-sstv",
+ "image",
+ "jiff",
+ "kdl",
+ "proptest",
+ "resvg",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-tone-tx"
+version = "0.3.1"
+dependencies = [
+ "grayline-dsp",
+ "grayline-sstv",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-web-demo"
+version = "0.3.1"
+dependencies = [
+ "console_error_panic_hook",
+ "grayline-sstv",
+ "grayline-sstv-fskid",
+ "grayline-sstv-rx",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3614,133 +3741,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "rssstv"
-version = "0.3.1"
-dependencies = [
- "directories",
- "eframe",
- "egui",
- "egui_extras",
- "egui_kittest",
- "embed-resource",
- "fluent-bundle",
- "fontdb",
- "hound",
- "image",
- "image-webp",
- "jiff",
- "mlua",
- "muda",
- "png",
- "raw-window-handle",
- "rssstv-audio",
- "rssstv-demodulator",
- "rssstv-dsp",
- "rssstv-fskid",
- "rssstv-modulator",
- "rssstv-rig",
- "rssstv-sstv",
- "rssstv-template",
- "rstest",
- "thiserror 2.0.20",
- "toml_edit",
- "unic-langid",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "rssstv-audio"
-version = "0.3.1"
-dependencies = [
- "cpal",
- "ringbuf",
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-demodulator"
-version = "0.3.1"
-dependencies = [
- "rssstv-dsp",
- "rssstv-fskid",
- "rssstv-sstv",
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-dsp"
-version = "0.3.1"
-dependencies = [
- "libm",
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-fskid"
-version = "0.3.1"
-dependencies = [
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-modulator"
-version = "0.3.1"
-dependencies = [
- "rssstv-dsp",
- "rssstv-sstv",
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-rig"
-version = "0.3.1"
-dependencies = [
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-sstv"
-version = "0.3.1"
-dependencies = [
- "libm",
- "proptest",
- "rssstv-fskid",
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-template"
-version = "0.3.1"
-dependencies = [
- "image",
- "jiff",
- "kdl",
- "proptest",
- "resvg",
- "rssstv-sstv",
- "rstest",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssstv-web-demo"
-version = "0.3.1"
-dependencies = [
- "console_error_panic_hook",
- "rssstv-demodulator",
- "rssstv-fskid",
- "rssstv-sstv",
- "wasm-bindgen",
 ]
 
 [[package]]

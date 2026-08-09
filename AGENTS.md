@@ -6,10 +6,20 @@ This project implements SSTV (Slow Scan Television) software for amateur radio
 in Rust. The goal is to port the core behavior of MMSSTV while separating its
 signal-processing and protocol logic from the original Win32/VCL application.
 
+The repository is a monorepo holding one application per mode, over a shared
+signal-processing and platform core. SSTV is the first; WEFAX, RTTY, and PSK
+are planned.
+
 The repository contains:
 
-- `rssstv/`: the Rust application and workspace crate.
-- `original/mmsstv/`: the original MMSSTV source code, included as a Git
+- `apps/`: one directory per shipped application, plus the browser demo.
+  `apps/sstv/` is the SSTV desktop application.
+- `crates/`: the libraries. Directory names carry no prefix; the packages they
+  hold are named `grayline-*`.
+- `tools/`: development command-line tools that are not shipped.
+- `assets/`: data the repository ships outside any one crate, such as the
+  ported MMSSTV templates under `assets/templates/`.
+- `docs/reference/mmsstv/`: the original MMSSTV source code, included as a Git
   submodule and used as the behavioral reference.
 - `docs/memo/`: development documentation, divided by subject.
   `docs/memo/README.md` indexes it.
@@ -17,17 +27,18 @@ The repository contains:
     FSKID — independent of any one implementation.
   - `docs/memo/mmsstv/`: the behavior of the original application, including
     its DSP implementation and where it departs from published descriptions.
-  - `docs/memo/rssstv/`: this project — target architecture, the desktop
+  - `docs/memo/grayline/`: this project — target architecture, the desktop
     application, and the transmit overlay format.
 - `docs/help/`: the manual the release archives carry, written for the operator
   rather than for this repository.
 
 Put a new development document under the directory matching what it is about. A
 protocol description answers to the on-air signal, a description of MMSSTV
-answers to its source, and a description of RSSSTV answers to this repository's
-code; a document that would answer to two of those belongs in two documents.
+answers to its source, and a description of this project answers to this
+repository's code; a document that would answer to two of those belongs in two
+documents.
 
-Treat `original/mmsstv/` as reference material. Do not modify the submodule
+Treat `docs/reference/mmsstv/` as reference material. Do not modify the submodule
 unless the task explicitly requires changes to the original source.
 
 ## Architecture
@@ -93,7 +104,7 @@ in the original DSP classes.
 - Write documentation under `docs/memo/` in English.
 - The manual under `docs/help/` is written in Japanese, for the operator. It
   describes what the application does, not how it is built, and names controls
-  by the labels `rssstv/locales/ja.ftl` gives them.
+  by the labels `apps/sstv/locales/ja.ftl` gives them.
 - `docs/help/build.sh` renders the manual with pandoc into `target/help`, which
   is what a release archive carries as `help/`. Add a page by writing its
   Markdown source, listing it in the script, and linking it from the navigation
@@ -109,16 +120,16 @@ This repository uses a Cargo workspace. Run commands from the workspace root.
 
 - Build all workspace members with `cargo build --workspace`.
 - Run all tests with `cargo test --workspace`.
-- Check that `rssstv-sstv` still builds without `std` using
-  `cargo build -p rssstv-sstv --no-default-features`. A workspace build does not
-  cover this: another member enabling the `std` feature hides a core primitive
-  used through `std` alone, so the crate can stop being `no_std` without any
-  workspace command noticing.
+- Check that `grayline-sstv` still builds without `std` using
+  `cargo build -p grayline-sstv --no-default-features`. A workspace build does
+  not cover this: another member enabling the `std` feature hides a core
+  primitive used through `std` alone, so the crate can stop being `no_std`
+  without any workspace command noticing.
 - Check that the browser demo still builds for its own target using
-  `cargo clippy -p rssstv-web-demo --target wasm32-unknown-unknown`. A workspace
-  build does not cover this either: on the host the JavaScript bindings compile
-  to stubs nothing calls, so the crate can stop building for wasm without any
-  workspace command noticing.
+  `cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown`. A
+  workspace build does not cover this either: on the host the JavaScript
+  bindings compile to stubs nothing calls, so the crate can stop building for
+  wasm without any workspace command noticing.
 - Run Clippy with `cargo clippy --workspace --all-targets`.
 - Check formatting with `cargo fmt --all --check`.
 - Apply formatting with `cargo fmt --all` when needed.
@@ -130,8 +141,8 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
-cargo build -p rssstv-sstv --no-default-features
-cargo clippy -p rssstv-web-demo --target wasm32-unknown-unknown
+cargo build -p grayline-sstv --no-default-features
+cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown
 ```
 
 Add focused unit tests for DSP and protocol behavior. Prefer deterministic test
