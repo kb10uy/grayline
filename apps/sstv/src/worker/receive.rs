@@ -269,7 +269,7 @@ impl RxWorker {
             let sync_start = Arc::clone(&sync_start);
             let mailbox = Arc::clone(&mailbox);
             thread::Builder::new()
-                .name("rssstv-receive".to_owned())
+                .name("grayline-sstv-receive".to_owned())
                 .spawn(move || {
                     run(
                         reader,

@@ -6,13 +6,19 @@ use std::{
 
 use directories::{BaseDirs, UserDirs};
 
-use crate::platform::APP_DIRECTORY;
+use crate::{
+    identity::{APP_DIRECTORY, PICTURES_DIRECTORY},
+    platform::FAMILY_DIRECTORY,
+};
 
 /// The settings file, named here because a test writes one directly.
 pub const CONFIG_FILE: &str = "config.toml";
 
 /// The rolling log the application writes under its state directory.
-const LOG_FILE: &str = "rssstv.log";
+///
+/// Named after the executable rather than after the directory holding it, so a
+/// log sent to someone else still says which application wrote it.
+const LOG_FILE: &str = "grayline-sstv.log";
 
 const DEFAULT_CONFIG: &str = "";
 
@@ -84,11 +90,22 @@ impl AppPaths {
             .state_dir()
             .unwrap_or_else(|| base_dirs.data_local_dir());
 
+        // Every application in the family nests under one directory, so the
+        // settings they share have somewhere to sit beside them and the whole
+        // family can be backed up or removed as a unit. The pictures directory
+        // is the exception: the operator browses that one themselves, so it is
+        // flat and spelled the way the application is.
         Ok(Self::from_roots(
-            base_dirs.config_dir().join(APP_DIRECTORY),
-            base_dirs.data_dir().join(APP_DIRECTORY),
-            pictures_dir.join("RSSSTV"),
-            state_dir.join(APP_DIRECTORY),
+            base_dirs
+                .config_dir()
+                .join(FAMILY_DIRECTORY)
+                .join(APP_DIRECTORY),
+            base_dirs
+                .data_dir()
+                .join(FAMILY_DIRECTORY)
+                .join(APP_DIRECTORY),
+            pictures_dir.join(PICTURES_DIRECTORY),
+            state_dir.join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
         ))
     }
 

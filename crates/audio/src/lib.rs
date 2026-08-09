@@ -1,4 +1,4 @@
-//! Host audio adapters for RSSSTV.
+//! Host audio adapters for Grayline.
 //!
 //! This crate owns device enumeration, stream formats, and callback
 //! scheduling. It exposes normalized mono `f32` samples with stream positions

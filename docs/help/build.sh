@@ -20,6 +20,6 @@ for page in "${pages[@]}"; do
     --template "$here/template.html" \
     --lua-filter "$here/link-to-html.lua" \
     --variable "current-$page=1" \
-    ${RSSSTV_VERSION:+--variable "version=$RSSSTV_VERSION"} \
+    ${GRAYLINE_VERSION:+--variable "version=$GRAYLINE_VERSION"} \
     --output "$out/$page.html"
 done

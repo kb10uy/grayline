@@ -22,7 +22,7 @@ pub enum TemplateError {
     /// The KDL document is not syntactically valid.
     #[error("invalid KDL template: {0}")]
     Kdl(#[from] kdl::KdlError),
-    /// The document violates the RSSSTV template schema.
+    /// The document violates the Grayline SSTV template schema.
     #[error("invalid template: {0}")]
     Schema(String),
     /// A text expression references a value absent from the render context.

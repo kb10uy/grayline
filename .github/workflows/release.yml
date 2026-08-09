@@ -57,7 +57,7 @@ jobs:
 
       - name: Build the manual
         env:
-          RSSSTV_VERSION: ${{ steps.resolve.outputs.tag }}
+          GRAYLINE_VERSION: ${{ steps.resolve.outputs.tag }}
         run: bash docs/help/build.sh
 
       - uses: actions/upload-artifact@v4
@@ -114,11 +114,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $path = "target/${{ matrix.target }}/release/rssstv.exe"
+          $path = "target/${{ matrix.target }}/release/grayline-sstv.exe"
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $text = [System.Text.Encoding]::ASCII.GetString($bytes)
           if ($text -match "VCRUNTIME140|api-ms-win-crt-") {
-            throw "rssstv.exe links the C runtime dynamically"
+            throw "grayline-sstv.exe links the C runtime dynamically"
           }
 
       # Generated on the platform being packaged rather than once for all
@@ -139,17 +139,18 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           TARGET: ${{ matrix.target }}
         run: |
-          name="rssstv-$TAG-$TARGET"
+          name="grayline-sstv-$TAG-$TARGET"
           root="staging/$name"
           mkdir -p "$root"
-          if [ -f "target/$TARGET/release/rssstv.exe" ]; then
-            cp "target/$TARGET/release/rssstv.exe" "$root/"
+          if [ -f "target/$TARGET/release/grayline-sstv.exe" ]; then
+            cp "target/$TARGET/release/grayline-sstv.exe" "$root/"
           else
-            cp "target/$TARGET/release/rssstv" "$root/"
+            cp "target/$TARGET/release/grayline-sstv" "$root/"
           fi
-          cp LICENSE README.md licenses.html "$root/"
+          cp LICENSE licenses.html "$root/"
+          cp apps/sstv/README.md "$root/"
           cp -r manual "$root/help"
-          cp -r templates "$root/"
+          cp -r assets/templates "$root/"
           echo "ARCHIVE_NAME=$name" >> "$GITHUB_ENV"
 
       # A Wayland compositor has no way to learn the window icon from the
@@ -159,7 +160,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p "staging/$ARCHIVE_NAME/assets"
-          cp apps/sstv/assets/rssstv.desktop apps/sstv/assets/icon.png \
+          cp apps/sstv/assets/grayline-sstv.desktop apps/sstv/assets/icon.png \
             "staging/$ARCHIVE_NAME/assets/"
 
       # macOS gets a bundle in a disk image rather than an archive of bare
@@ -171,9 +172,9 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           TARGET: ${{ matrix.target }}
         run: |
-          name="rssstv-$TAG-$TARGET"
+          name="grayline-sstv-$TAG-$TARGET"
           bash package/build-app.sh \
-            "target/$TARGET/release/rssstv" manual licenses.html "$name.dmg"
+            "target/$TARGET/release/grayline-sstv" manual licenses.html "$name.dmg"
           echo "ARCHIVE_NAME=$name" >> "$GITHUB_ENV"
 
       - name: Create the tar archive
@@ -208,34 +209,34 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: rssstv-*
+          pattern: grayline-sstv-*
           merge-multiple: true
 
       - name: Write the checksums and the release notes
         working-directory: artifacts
         run: |
-          sha256sum rssstv-* > SHA256SUMS
+          sha256sum grayline-sstv-* > SHA256SUMS
           cat > notes.md <<'NOTES'
-          Each download holds the `rssstv` application, this project's
+          Each download holds the `grayline-sstv` application, this project's
           license, the licenses of its dependencies as `licenses.html`, the
           manual, and the MMSSTV templates ported to the KDL format.
 
           | Platform | Download |
           | --- | --- |
-          | Windows x86_64 | `rssstv-TAG-x86_64-pc-windows-msvc.zip` |
-          | Linux x86_64 | `rssstv-TAG-x86_64-unknown-linux-gnu.tar.gz` |
-          | macOS Apple Silicon | `rssstv-TAG-aarch64-apple-darwin.dmg` |
+          | Windows x86_64 | `grayline-sstv-TAG-x86_64-pc-windows-msvc.zip` |
+          | Linux x86_64 | `grayline-sstv-TAG-x86_64-unknown-linux-gnu.tar.gz` |
+          | macOS Apple Silicon | `grayline-sstv-TAG-aarch64-apple-darwin.dmg` |
 
-          The macOS disk image installs by dragging `RSSSTV.app` into
+          The macOS disk image installs by dragging `GraylineSSTV.app` into
           `Applications`. The bundle is ad-hoc signed rather than notarized,
           so open the first launch from the context menu, or clear the
           quarantine attribute:
 
           ```text
-          xattr -dr com.apple.quarantine /Applications/RSSSTV.app
+          xattr -dr com.apple.quarantine /Applications/GraylineSSTV.app
           ```
 
-          The Linux archive carries `assets/rssstv.desktop` and
+          The Linux archive carries `assets/grayline-sstv.desktop` and
           `assets/icon.png`; installing both is what makes the window icon
           appear, as `README.md` describes.
 
@@ -250,9 +251,9 @@ jobs:
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release edit "$TAG" --notes-file notes.md
-            gh release upload "$TAG" rssstv-* SHA256SUMS --clobber
+            gh release upload "$TAG" grayline-sstv-* SHA256SUMS --clobber
           else
             gh release create "$TAG" --verify-tag \
-              --title "RSSSTV $TAG" --notes-file notes.md \
-              rssstv-* SHA256SUMS
+              --title "Grayline SSTV $TAG" --notes-file notes.md \
+              grayline-sstv-* SHA256SUMS
           fi

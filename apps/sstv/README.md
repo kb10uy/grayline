@@ -45,19 +45,19 @@ out from Settings › Rig Control, as `rigcontrol.lua` and `bands.toml` beside
 
 On Linux the window icon comes from a desktop entry rather than from the
 application, because a Wayland compositor has no other way to learn one. The
-application names itself `rssstv`, and the compositor looks for the entry of
-the same name; installing it and the icon it points at is what makes the icon
-appear in the task switcher and the dock:
+application names itself `grayline-sstv`, and the compositor looks for the
+entry of the same name; installing it and the icon it points at is what makes
+the icon appear in the task switcher and the dock:
 
 ```text
-install -Dm644 apps/sstv/assets/rssstv.desktop \
-  ~/.local/share/applications/rssstv.desktop
+install -Dm644 apps/sstv/assets/grayline-sstv.desktop \
+  ~/.local/share/applications/grayline-sstv.desktop
 install -Dm644 apps/sstv/assets/icon.png \
-  ~/.local/share/icons/hicolor/512x512/apps/rssstv.png
+  ~/.local/share/icons/hicolor/512x512/apps/grayline-sstv.png
 update-desktop-database ~/.local/share/applications
 ```
 
-The entry's `Exec=rssstv` expects the executable on `PATH`, which
+The entry's `Exec=grayline-sstv` expects the executable on `PATH`, which
 `cargo install --path apps/sstv` arranges; point it at the build directory
 instead if you are running from `cargo run`. Distribution packages that
 install all of this — binary, entry, icon, and manual — are described in

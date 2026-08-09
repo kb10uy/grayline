@@ -1,4 +1,4 @@
-app-title = rssstv
+app-title = Grayline SSTV
 
 menu-file = File
 menu-view = View

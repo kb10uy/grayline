@@ -99,7 +99,7 @@ identical anyway.
 | `x86_64-unknown-linux-gnu` | `ubuntu-latest` | `.tar.gz` |
 | `aarch64-apple-darwin` | `macos-latest` | `.tar.gz` |
 
-Each builds `rssstv`, `encode-wav`, and `decode-wav` with `--locked`, so a
+Each builds `grayline-sstv`, `encode-wav`, and `decode-wav` with `--locked`, so a
 release is built from the committed `Cargo.lock` and not from whatever resolves
 that day.
 
@@ -110,7 +110,7 @@ repository's code rather than to the operator, and a release that carried it
 would be handing out notes on an implementation instead of a manual. The page is
 generated per platform rather than once for all three because the dependency
 graph differs by target: a page built on Linux would list neither `muda` nor
-`windows-sys`. The Linux archive also carries `assets/rssstv.desktop` and
+`windows-sys`. The Linux archive also carries `assets/grayline-sstv.desktop` and
 `assets/icon.png`, which a Wayland compositor needs to find the window icon.
 
 ## The Windows C runtime

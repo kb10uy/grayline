@@ -802,7 +802,7 @@ impl App {
         let templates_dir = self.paths.templates_dir().to_path_buf();
         let stocks_dir = self.paths.stocks_dir().to_path_buf();
         let spawned = thread::Builder::new()
-            .name("rssstv-library".to_owned())
+            .name("grayline-sstv-library".to_owned())
             .spawn(move || {
                 let _ = sender.send(LibraryScan {
                     templates: template_entries(&templates_dir),
@@ -867,7 +867,7 @@ impl App {
         let directory = self.paths.received_dir().to_path_buf();
         let format = self.history_format;
         let spawned = thread::Builder::new()
-            .name("rssstv-history".to_owned())
+            .name("grayline-sstv-history".to_owned())
             .spawn(move || {
                 if let Err(error) = crate::storage::history::save(&directory, candidate, format) {
                     crate::storage::log::note(&format!("failed to save receive history: {error}"));

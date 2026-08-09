@@ -20,7 +20,7 @@ pub fn manual_fallback() -> Option<PathBuf> {
     )
 }
 
-pub const APP_DIRECTORY: &str = "RSSSTV";
+pub const FAMILY_DIRECTORY: &str = "Grayline";
 
 /// The window is themed by AppKit from the system appearance, and the menu
 /// bar is drawn inside the window, so nothing has to be arranged in advance.

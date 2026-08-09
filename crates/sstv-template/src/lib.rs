@@ -1,4 +1,4 @@
-//! Portable transmit-image templates for RSSSTV.
+//! Portable transmit-image templates for Grayline SSTV.
 //!
 //! This crate parses KDL templates and renders them as straight-alpha RGBA
 //! overlays. Background preparation and SSTV encoding remain separate.

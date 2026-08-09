@@ -9,6 +9,8 @@ use std::{
 };
 
 use egui::IconData;
+
+use crate::identity;
 use windows_sys::Win32::{
     Foundation::{
         CloseHandle, ERROR_ALREADY_EXISTS, FreeLibrary, GetLastError, HANDLE, HWND,
@@ -53,7 +55,7 @@ pub fn manual_fallback() -> Option<PathBuf> {
     None
 }
 
-pub const APP_DIRECTORY: &str = "RSSSTV";
+pub const FAMILY_DIRECTORY: &str = "Grayline";
 
 /// Identifies the application to the shell.
 ///
@@ -61,14 +63,20 @@ pub const APP_DIRECTORY: &str = "RSSSTV";
 /// string. A process that sets none is grouped by its executable path
 /// instead, so a development build and an installed copy would be treated as
 /// unrelated applications.
-const APP_USER_MODEL_ID: &str = "kb10uy.RSSSTV";
+const APP_USER_MODEL_ID: &str = "kb10uy.GraylineSSTV";
 
 /// Names the objects that coordinate the single-instance claim.
 ///
 /// The `Local\` prefix keeps them in the signed-in session's namespace, so two
-/// operators signed in to the same machine each get their own copy.
-const INSTANCE_MUTEX: &str = concat!(r"Local\", env!("CARGO_PKG_NAME"), "-instance");
-const INSTANCE_WINDOW: &str = concat!(r"Local\", env!("CARGO_PKG_NAME"), "-instance-window");
+/// operators signed in to the same machine each get their own copy. Built from
+/// the process name rather than the package name, so the claim survives the
+/// package being renamed and two applications in this family never share one.
+fn instance_names() -> (String, String) {
+    (
+        format!(r"Local\{}-instance", identity::PROCESS_NAME),
+        format!(r"Local\{}-instance-window", identity::PROCESS_NAME),
+    )
+}
 
 pub fn prepare_process() {
     let _ = set_app_user_model_id();
@@ -124,7 +132,8 @@ pub struct Claim {
 }
 
 pub fn claim_single_instance() -> Option<Claim> {
-    claim_named(INSTANCE_MUTEX, INSTANCE_WINDOW)
+    let (mutex, window) = instance_names();
+    claim_named(&mutex, &window)
 }
 
 /// Takes the claim held under `mutex_name`, publishing to `window_name`.
@@ -482,8 +491,8 @@ mod tests {
     fn test_names() -> (String, String) {
         let process = std::process::id();
         (
-            format!(r"Local\rssstv-test-instance-{process}"),
-            format!(r"Local\rssstv-test-window-{process}"),
+            format!(r"Local\grayline-sstv-test-instance-{process}"),
+            format!(r"Local\grayline-sstv-test-window-{process}"),
         )
     }
 

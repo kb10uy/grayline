@@ -7,7 +7,10 @@ use std::{
 use image::{ExtendedColorType, ImageEncoder, codecs::jpeg::JpegEncoder};
 use image_webp::{ColorType as WebPColorType, WebPEncoder};
 
-use crate::worker::receive::HistoryCandidate;
+use crate::{
+    identity::{DISPLAY_NAME, XMP_NAMESPACE},
+    worker::receive::HistoryCandidate,
+};
 
 const JPEG_QUALITY: u8 = 90;
 const XMP_JPEG_HEADER: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
@@ -160,7 +163,7 @@ fn xmp_packet(candidate: &HistoryCandidate) -> String {
         "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
 <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
 <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
-<rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmlns:sstv=\"https://github.com/kb10uy/rssstv/ns/1.0/\" xmp:CreatorTool=\"RSSSTV\" xmp:CreateDate=\"{}\" sstv:Mode=\"{}\">\n\
+<rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmlns:sstv=\"{namespace}\" xmp:CreatorTool=\"{tool}\" xmp:CreateDate=\"{}\" sstv:Mode=\"{}\">\n\
 <sstv:FskId><rdf:Bag>{identifiers}</rdf:Bag></sstv:FskId>\n\
 </rdf:Description>\n\
 </rdf:RDF>\n\
@@ -168,6 +171,8 @@ fn xmp_packet(candidate: &HistoryCandidate) -> String {
 <?xpacket end=\"w\"?>",
         escape_xml(&candidate.received_at),
         escape_xml(candidate.mode.spec().name()),
+        namespace = XMP_NAMESPACE,
+        tool = DISPLAY_NAME,
     )
 }
 

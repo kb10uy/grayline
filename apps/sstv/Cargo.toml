@@ -10,7 +10,7 @@ repository.workspace = true
 # The package carries the `-app` suffix so it does not collide with the
 # `grayline-sstv` protocol library; the binary keeps the product's own name.
 [[bin]]
-name = "rssstv"
+name = "grayline-sstv"
 path = "src/main.rs"
 
 [dependencies]
@@ -72,7 +72,7 @@ rstest.workspace = true
 # target/release/ paths, which cargo-deb resolves against the workspace target
 # directory.
 [package.metadata.deb]
-name = "rssstv"
+name = "grayline-sstv"
 section = "hamradio"
 priority = "optional"
 license-file = ["../../LICENSE", "0"]
@@ -80,7 +80,7 @@ extended-description = """\
 Slow-scan television for amateur radio: receives and decodes SSTV \
 transmissions from a capture device, and composes and transmits pictures \
 from KDL templates, with optional rig control through Hamlib's rigctld. \
-The operator's manual is installed under /usr/share/doc/rssstv/help."""
+The operator's manual is installed under /usr/share/doc/grayline-sstv/help."""
 # $auto covers what the binary links (glibc, ALSA, gcc-s); the graphics and
 # keyboard libraries are dlopen'd at runtime, which dpkg-shlibdeps cannot see,
 # so they are named explicitly.
@@ -88,8 +88,8 @@ depends = ["$auto", "libxkbcommon0", "libxkbcommon-x11-0", "libegl1", "libgl1"]
 recommends = ["xdg-utils", "fonts-noto-cjk"]
 suggests = ["fonts-dejavu-core"]
 assets = [
-    ["target/release/rssstv", "usr/bin/", "755"],
-    ["assets/rssstv.desktop", "usr/share/applications/", "644"],
-    ["assets/icon.png", "usr/share/icons/hicolor/512x512/apps/rssstv.png", "644"],
-    ["../../target/help/*", "usr/share/doc/rssstv/help/", "644"],
+    ["target/release/grayline-sstv", "usr/bin/", "755"],
+    ["assets/grayline-sstv.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/512x512/apps/grayline-sstv.png", "644"],
+    ["../../target/help/*", "usr/share/doc/grayline-sstv/help/", "644"],
 ]

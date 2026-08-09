@@ -1,4 +1,4 @@
-//! Allocation-backed, `no_std` signal-processing primitives for RSSSTV.
+//! Allocation-backed, `no_std` signal-processing primitives for Grayline.
 //!
 //! Processors own their state and allocate only during construction or explicit
 //! reconfiguration. Per-sample and in-place block processing do not allocate.

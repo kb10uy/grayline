@@ -7,7 +7,7 @@ entrant mails to the contest secretary. It shares its lower layers with MMSSTV
 by file copy rather than by reference: `ComLib`, `LogFile`, `LogConv`,
 `country`, and `ARRL.DX` all exist in both trees and have diverged.
 
-Nothing in RSSSTV corresponds to this program; RSSSTV has no logging. The part
+Nothing here corresponds to this program; this project has no logging. The part
 worth keeping is the description of the MDT log file and the DXCC prefix
 matcher, because both are MMSSTV formats that a log feature would have to read.
 

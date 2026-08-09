@@ -1,9 +1,9 @@
-# RSSSTV Development Documentation
+# Grayline Development Documentation
 
 The documentation is divided by what each document is about, because the three
 subjects answer to different authorities. A protocol description answers to the
 on-air signal, a description of MMSSTV answers to its source, and a description
-of RSSSTV answers to this repository's code.
+of Grayline answers to this repository's code.
 
 None of it is written for the operator. The manual the release archives carry
 is [../help/index.md](../help/index.md), which describes the application from
@@ -43,17 +43,17 @@ that program does, including where it departs from published descriptions.
 
 The Rust implementation: what it is meant to be, and what it currently is.
 
-- [rssstv/architecture.md](grayline/architecture.md): target architecture and the
+- [grayline/architecture.md](grayline/architecture.md): target architecture and the
   current crate structure.
-- [rssstv/gui-design.md](grayline/gui-design.md): the desktop application, its
+- [grayline/gui-design.md](grayline/gui-design.md): the desktop application, its
   audio boundary, and its platform integration.
-- [rssstv/rig-control.md](grayline/rig-control.md): the transports the rig is
+- [grayline/rig-control.md](grayline/rig-control.md): the transports the rig is
   reached over, the script that decides what is sent, and the band plan both
   read. Describes a target design ahead of what is implemented.
-- [rssstv/template-design.md](grayline/template-design.md): the portable transmit
+- [grayline/template-design.md](grayline/template-design.md): the portable transmit
   overlay format.
-- [rssstv/web-demo.md](grayline/web-demo.md): the browser build of the receive
+- [grayline/web-demo.md](grayline/web-demo.md): the browser build of the receive
   path, what the page has to do around it, and what the audio APIs do to the
   samples on the way in.
-- [rssstv/release.md](grayline/release.md): what CI checks, and how a tag becomes
+- [grayline/release.md](grayline/release.md): what CI checks, and how a tag becomes
   a release.

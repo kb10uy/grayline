@@ -1,4 +1,4 @@
-# RSSSTV Architecture
+# Grayline SSTV Architecture
 
 This document defines the intended architecture of the Rust implementation and
 maps the current codebase onto that design. It is both a guide for new work and
@@ -15,7 +15,7 @@ described in [gui-design.md](gui-design.md).
 
 ## Design Goals
 
-RSSSTV aims to preserve the signal-processing and protocol behavior of MMSSTV
+Grayline SSTV aims to preserve the signal-processing and protocol behavior of MMSSTV
 without preserving its Win32/VCL structure. The design should have these
 properties:
 
@@ -51,10 +51,10 @@ platform integration, and application behavior.
 | Modulator | Timed frequencies to PCM samples | `grayline-tone-tx` |
 | Audio adapters | Platform-specific input and output streams | `grayline-audio`; capture and playback implemented |
 | Rig transport | How a rig is reached: a `rigctld` socket | `grayline-rig`; implemented |
-| Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `rssstv` |
+| Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-sstv` |
 | Integration | Composition of core stages for a particular environment | `decode-wav`, `encode-wav`, and `web-demo` |
 | Template composition | KDL scene parsing, variables, RGBA overlay rendering, and RGB composition | `grayline-sstv-template` |
-| Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `rssstv` receive interface; designed in [gui-design.md](gui-design.md) |
+| Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv` receive interface; designed in [gui-design.md](gui-design.md) |
 
 These are responsibility boundaries, not a requirement that every row become a
 separate crate. Closely related protocol types currently live together in
@@ -101,7 +101,7 @@ WAV file
   -> BMP/JPEG/PNG image
 ```
 
-A live receive path also exists in `rssstv`, where the same stages run on a
+A live receive path also exists in `grayline-sstv`, where the same stages run on a
 worker thread fed by `grayline-audio` instead of a WAV reader.
 
 `decode-wav` reads and processes PCM packets without retaining the complete WAV
@@ -362,7 +362,7 @@ The workspace currently contains twelve packages:
 | `web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
-| `rssstv` | Application composition root | egui interface with live receive and transmit |
+| `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
 Their current dependency direction is:
 
@@ -392,7 +392,7 @@ grayline-audio ----------+
 grayline-sstv-rx ----+
 grayline-sstv-fskid ----------+
 grayline-tone-tx ------+
-grayline-rig ------------+-> rssstv
+grayline-rig ------------+-> grayline-sstv-app
 grayline-sstv -----------+
 grayline-sstv-template -------+
 ```
@@ -525,9 +525,9 @@ directories. Portable storage beside the executable is not supported.
 
 | Content | Windows | macOS | Linux |
 | --- | --- | --- | --- |
-| Configuration | `%APPDATA%\RSSSTV\config.toml` | `~/Library/Application Support/RSSSTV/config.toml` | `$XDG_CONFIG_HOME/rssstv/config.toml` |
-| Templates and assets | `%APPDATA%\RSSSTV\templates`, `%APPDATA%\RSSSTV\assets` | `~/Library/Application Support/RSSSTV/templates`, `~/Library/Application Support/RSSSTV/assets` | `$XDG_DATA_HOME/rssstv/templates`, `$XDG_DATA_HOME/rssstv/assets` |
-| User images | `Pictures\RSSSTV` | `~/Pictures/RSSSTV` | `$XDG_PICTURES_DIR/RSSSTV` |
+| Configuration | `%APPDATA%\Grayline\sstv\config.toml` | `~/Library/Application Support/Grayline/sstv/config.toml` | `$XDG_CONFIG_HOME/grayline/sstv/config.toml` |
+| Templates and assets | `%APPDATA%\Grayline\sstv\templates`, `%APPDATA%\Grayline\sstv\assets` | `~/Library/Application Support/Grayline/sstv/templates`, `~/Library/Application Support/Grayline/sstv/assets` | `$XDG_DATA_HOME/grayline/sstv/templates`, `$XDG_DATA_HOME/grayline/sstv/assets` |
+| User images | `Pictures\Grayline SSTV` | `~/Pictures/Grayline SSTV` | `$XDG_PICTURES_DIR/Grayline SSTV` |
 
 The image directory contains `Stocks`, `Sent`, and `Received`. Images are kept
 directly in those directories without year or month subdivisions. Templates

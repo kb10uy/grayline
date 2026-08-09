@@ -1,4 +1,4 @@
-# RSSSTV GUI Design
+# Grayline SSTV GUI Design
 
 This document defines the application composition root: the desktop user
 interface, its state model, and the boundaries between the interface and the
@@ -120,9 +120,9 @@ winit's Wayland backend implements `set_window_icon` as a no-op, because the
 protocol has no way to carry one. There a window is identified by its `app_id`,
 which the compositor matches against an installed desktop entry and takes the
 icon from that. The application therefore sets an explicit `app_id` of
-`rssstv`, rather than letting eframe derive one from the window title — the
+`grayline-sstv`, rather than letting eframe derive one from the window title — the
 title carries the version, so the derived identity would change with every
-release and match no entry at all. `apps/sstv/assets/rssstv.desktop` is the entry
+release and match no entry at all. `apps/sstv/assets/grayline-sstv.desktop` is the entry
 that name expects; README records where it and the icon are installed.
 
 Reproducing a specific visual style is not a goal. The design mock defines
@@ -135,7 +135,7 @@ not add SSTV or DSP behavior.
 
 | Package | Role | Status |
 | --- | --- | --- |
-| `rssstv` | Composition root: window, state, views, worker supervision | Receive and transmit implemented |
+| `grayline-sstv-app` | Composition root: window, state, views, worker supervision | Receive and transmit implemented |
 | `grayline-audio` | Capture and playback adapters over the host audio API | Implemented |
 
 `grayline-audio` splits an open input device into a `Capture` and
@@ -676,7 +676,7 @@ system locale when it matches an available translation.
 
 ## Current Implementation
 
-The `rssstv` shell implements the state model, message dispatch, and view
+The `grayline-sstv-app` shell implements the state model, message dispatch, and view
 composition described above. Tabs, mode selection, DSP toggles, QSO fields,
 and locale switching are interactive. Template and stock lists are loaded from
 the application directories at startup; each list can be refreshed and its

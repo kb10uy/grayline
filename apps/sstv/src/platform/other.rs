@@ -21,16 +21,16 @@ pub const FILE_MANAGER: Option<&str> = if cfg!(target_os = "linux") {
 /// Only Linux has distribution packages that install the manual; another
 /// platform reaching here has no package and therefore no fallback.
 pub fn manual_fallback() -> Option<PathBuf> {
-    cfg!(target_os = "linux").then(|| PathBuf::from("/usr/share/doc/rssstv/help/index.html"))
+    cfg!(target_os = "linux").then(|| PathBuf::from("/usr/share/doc/grayline-sstv/help/index.html"))
 }
 
 /// Linux keeps its per-application directories lowercase, under a base
 /// directory that is already hidden. The platforms that show these to the
-/// operator name them the way the application is named.
-pub const APP_DIRECTORY: &str = if cfg!(target_os = "linux") {
-    "rssstv"
+/// operator name them the way the family is named.
+pub const FAMILY_DIRECTORY: &str = if cfg!(target_os = "linux") {
+    "grayline"
 } else {
-    "RSSSTV"
+    "Grayline"
 };
 
 pub fn prepare_process() {}

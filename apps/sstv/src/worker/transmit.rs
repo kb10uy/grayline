@@ -186,7 +186,7 @@ impl TxWorker {
         identification: Option<Identification>,
         gain: Arc<TxGain>,
     ) -> Self {
-        Self::start("rssstv-transmit", move |snapshot, cancel| {
+        Self::start("grayline-sstv-transmit", move |snapshot, cancel| {
             transmit_loop(writer, mode, frame, identification, gain, snapshot, cancel);
         })
     }
@@ -197,7 +197,7 @@ impl TxWorker {
     /// except the last: it primes, produces, and then keeps producing until the
     /// operator or the time limit takes it down.
     pub fn spawn_tune(writer: PlaybackWriter, frequency_hz: u32, gain: Arc<TxGain>) -> Self {
-        Self::start("rssstv-tune", move |snapshot, cancel| {
+        Self::start("grayline-sstv-tune", move |snapshot, cancel| {
             tune_loop(writer, frequency_hz, gain, snapshot, cancel);
         })
     }

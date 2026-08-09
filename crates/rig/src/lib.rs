@@ -1,4 +1,4 @@
-//! The rig transport for RSSSTV.
+//! The rig transport for Grayline.
 //!
 //! This crate is how a rig is reached, not what it is told. What to send is the
 //! operator's own script, hosted by the application, because what a rig wants

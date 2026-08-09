@@ -102,13 +102,13 @@ title: 困ったとき
 いないので、最初の 1 回だけ属性を外してください。
 
 ```text
-xattr -dr com.apple.quarantine rssstv
+xattr -dr com.apple.quarantine grayline-sstv
 ```
 
 ## Linux でアイコンが出ない
 
 Wayland ではアプリケーション側からアイコンを渡せません。同梱の
-`assets/rssstv.desktop` と `assets/icon.png` をインストールすると、
+`assets/grayline-sstv.desktop` と `assets/icon.png` をインストールすると、
 コンポジタがそこからアイコンを見つけます。手順は `README.md` にあります。
 
 ## それでも解決しない

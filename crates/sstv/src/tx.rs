@@ -1,4 +1,4 @@
-//! Streaming encoders for the conventional-VIS SSTV modes supported by RSSSTV.
+//! Streaming encoders for the conventional-VIS SSTV modes supported by Grayline SSTV.
 
 mod image;
 mod transmission;

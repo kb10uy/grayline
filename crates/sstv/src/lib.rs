@@ -1,4 +1,4 @@
-//! Allocation-backed, `no_std` SSTV protocol primitives for RSSSTV.
+//! Allocation-backed, `no_std` SSTV protocol primitives for Grayline.
 //!
 //! This crate contains mode, image, color, timing, signal, and streaming
 //! transmit and receive types. It deliberately does not depend on audio or

@@ -45,7 +45,8 @@ pub fn open(path: &Path) -> io::Result<()> {
     // the caller is told nothing changed, which is what it asked for anyway.
     let _ = SINK.set(Mutex::new(file));
     note(&format!(
-        "RSSSTV {} starting on {}",
+        "{} {} starting on {}",
+        crate::identity::DISPLAY_NAME,
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS
     ));

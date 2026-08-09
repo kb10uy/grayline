@@ -2,7 +2,7 @@
 title: はじめに
 ---
 
-rssstv は、アマチュア無線の SSTV(Slow Scan Television)を送受信するデスクトップ
+Grayline SSTV は、アマチュア無線の SSTV(Slow Scan Television)を送受信するデスクトップ
 アプリケーションです。無線機の音声を取り込んで画像を復調し、テンプレートを重ねた
 画像を送信します。
 
@@ -13,7 +13,7 @@ rssstv は、アマチュア無線の SSTV(Slow Scan Television)を送受信す�
 
 | 名前 | 内容 |
 | --- | --- |
-| `rssstv` | 本体。このマニュアルが説明するアプリケーション |
+| `grayline-sstv` | 本体。このマニュアルが説明するアプリケーション |
 | `encode-wav` | テンプレートを重ねた画像を SSTV の WAV に書き出すコマンド |
 | `decode-wav` | SSTV の WAV から画像を復元するコマンド |
 | `templates/` | MMSSTV 付属の 5 つのテンプレートを KDL 形式に移植したもの |
@@ -26,7 +26,7 @@ rssstv は、アマチュア無線の SSTV(Slow Scan Television)を送受信す�
 
 ## 起動する
 
-アーカイブを展開して `rssstv` を実行します。インストーラーはありません。展開先は
+アーカイブを展開して `grayline-sstv` を実行します。インストーラーはありません。展開先は
 どこでも構いませんが、設定や画像は実行ファイルの隣ではなく OS のユーザー
 ディレクトリに置かれます([ファイルの場所](files.md))。
 
@@ -37,11 +37,11 @@ rssstv は、アマチュア無線の SSTV(Slow Scan Television)を送受信す�
 アーカイブに検疫属性が付くので、最初の 1 回だけ外してください。
 
 ```text
-xattr -dr com.apple.quarantine rssstv
+xattr -dr com.apple.quarantine grayline-sstv
 ```
 
 Linux でタスクスイッチャーやドックにアイコンを出すには、同梱の
-`assets/rssstv.desktop` と `assets/icon.png` をインストールします。手順は
+`assets/grayline-sstv.desktop` と `assets/icon.png` をインストールします。手順は
 `README.md` にあります。
 
 ## 最初にすること

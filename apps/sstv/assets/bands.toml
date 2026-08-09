@@ -1,4 +1,4 @@
-# The band plan RSSSTV starts with.
+# The band plan Grayline SSTV starts with.
 #
 # This is what runs when no bands.toml has been written beside config.toml.
 # Copy it there to change it: band plans are regional, and the frequencies

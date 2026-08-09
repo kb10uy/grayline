@@ -7,6 +7,7 @@ use egui::{FontData, FontDefinitions, FontFamily};
 mod app;
 mod error;
 mod i18n;
+mod identity;
 mod platform;
 mod storage;
 mod ui;
@@ -97,8 +98,9 @@ fn load_face(database: &fontdb::Database, family: &str) -> Option<(Vec<u8>, u32)
 /// compositor can match a window against a desktop entry with, and therefore
 /// the only route to a window icon there: winit's Wayland backend discards the
 /// pixels [`platform::window_icon`] provides. It has to equal the base name of
-/// the installed `rssstv.desktop`.
-const APP_ID: &str = env!("CARGO_PKG_NAME");
+/// the installed `grayline-sstv.desktop`, which is why it is the process name
+/// rather than the package name.
+const APP_ID: &str = identity::PROCESS_NAME;
 
 /// The window size the interface is laid out for, in points.
 const DEFAULT_WINDOW_SIZE: [f32; 2] = [1024.0, 768.0];
@@ -145,7 +147,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
     eframe::run_native(
-        concat!("RSSSTV ", env!("CARGO_PKG_VERSION")),
+        &format!("{} {}", identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION")),
         options,
         Box::new(|cc| Ok(Box::new(Interface::new(cc, paths, instance)))),
     )?;

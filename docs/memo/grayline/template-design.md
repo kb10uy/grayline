@@ -1,8 +1,9 @@
 # Template Design
 
-This document defines the intended design of the RSSSTV transmit image template
-system. Templates are portable RGBA overlays that are rendered independently of
-the selected SSTV mode, source image, UI toolkit, and transmit encoder.
+This document defines the intended design of the Grayline SSTV transmit image
+template system. Templates are portable RGBA overlays that are rendered
+independently of the selected SSTV mode, source image, UI toolkit, and
+transmit encoder.
 
 The initial implementation is provided by the `grayline-sstv-template` crate. It parses
 KDL v2, generates a controlled static SVG subset, and rasterizes that SVG with
@@ -344,9 +345,9 @@ macros. Anticipated values include:
 - `custom.*`, whose names the operator chooses
 - `application.version`
 
-Contact detail beyond the callsign is deliberately absent. RSSSTV does not set
-out to keep a QSO log, so a field that exists only to be typed into a template
-is not worth the entry it would need.
+Contact detail beyond the callsign is deliberately absent. Grayline SSTV does
+not set out to keep a QSO log, so a field that exists only to be typed into a
+template is not worth the entry it would need.
 
 The evaluation context supplies typed values, including the image used by an
 `rximage` layer. Text interpolation converts only values used in text; images
@@ -370,8 +371,9 @@ text "${tx.timestamp.utc:%d %b %Y %H:%MZ}"
 The format follows the first colon and runs to the closing brace, so a format
 containing colons needs no escaping. It is a `jiff` `strtime` format string,
 the same `%`-directive vocabulary as `strftime`; `jiff` is already the
-application's date library, so templates and the rest of RSSSTV describe time
-the same way. A directive the formatter rejects is a render error, reported
+application's date library, so templates and the rest of the application
+describe time the same way. A directive the formatter rejects is a render
+error, reported
 like any other template error. A timestamp written without a format uses
 `%Y-%m-%d %H:%M`, and a format applied to any other kind of value is an error.
 

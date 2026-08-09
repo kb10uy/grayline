@@ -24,7 +24,7 @@ mod windows {
         println!("cargo:rerun-if-changed=build.rs");
 
         let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR should be set"));
-        let script = out_dir.join("rssstv.rc");
+        let script = out_dir.join("grayline-sstv.rc");
         fs::write(&script, resource_script()).expect("could not write the resource script");
 
         // The resource is linked into every artifact rather than the binary
@@ -76,7 +76,7 @@ BEGIN
             VALUE "InternalName", "{name}"
             VALUE "LegalCopyright", "{copyright}"
             VALUE "OriginalFilename", "{name}.exe"
-            VALUE "ProductName", "RSSSTV"
+            VALUE "ProductName", "Grayline SSTV"
             VALUE "ProductVersion", "{dotted}"
         END
     END

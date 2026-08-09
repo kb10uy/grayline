@@ -36,7 +36,7 @@ with the receiver AFC.
 At a decision point, MMSSTV requires the absolute envelope difference to be at
 least 2048 on its 16384-scale detector input. The larger envelope then selects
 mark or space. An insufficient difference is ambiguous and resets an active
-record. The corresponding normalized contrast in RSSSTV is 0.125.
+record. The corresponding normalized contrast in this project is 0.125.
 
 ## Receive Acquisition
 

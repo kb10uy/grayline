@@ -36,11 +36,14 @@ mod imp;
 /// hairline.
 pub use imp::UI_FONTS;
 
-/// The directory name the application keeps its own files under.
+/// The directory every application in this family keeps its files under.
 ///
-/// Named by the platform because the conventions differ: the directories are
-/// hidden on Linux and shown to the operator elsewhere.
-pub use imp::APP_DIRECTORY;
+/// Each application owns a directory beneath this one, and the settings they
+/// share sit alongside those. The name is chosen by the platform because the
+/// conventions differ: the base directory is already hidden on Linux, which
+/// spells these lowercase, while the other two show them to the operator and
+/// nest vendor before product.
+pub use imp::FAMILY_DIRECTORY;
 
 /// Where an installed copy keeps the manual's first page, when the platform
 /// has one.
@@ -234,7 +237,7 @@ fn lock_file_claim() -> Option<FileLock> {
         .write(true)
         .create(true)
         .truncate(false)
-        .open(directory.join(concat!(env!("CARGO_PKG_NAME"), ".lock")))
+        .open(directory.join(format!("{}.lock", crate::identity::PROCESS_NAME)))
         .ok()?;
     file.try_lock().ok()?;
     Some(FileLock { file })

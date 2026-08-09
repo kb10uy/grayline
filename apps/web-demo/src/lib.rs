@@ -1,4 +1,4 @@
-//! Browser bindings for the RSSSTV receive pipeline.
+//! Browser bindings for the Grayline SSTV receive pipeline.
 //!
 //! The whole decode path is portable, so this crate adds no signal processing
 //! of its own: it drives [`ReceivePipeline`] with the PCM the page hands it and

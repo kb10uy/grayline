@@ -86,7 +86,7 @@ impl Composer {
         let worker_control = Arc::clone(&control);
         let worker_result = Arc::clone(&result);
         let thread = thread::Builder::new()
-            .name("rssstv-compose".to_owned())
+            .name("grayline-sstv-compose".to_owned())
             .spawn(move || compose_loop(worker_control, worker_result))
             .ok();
         Self {

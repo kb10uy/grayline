@@ -474,7 +474,7 @@ impl<'a> SvgGenerator<'a> {
     }
 
     fn insert_resource(&mut self, kind: &str, resource: Resource) -> String {
-        let uri = format!("rssstv-{kind}:{}", self.next_resource);
+        let uri = format!("grayline-{kind}:{}", self.next_resource);
         self.next_resource += 1;
         self.resources.insert(uri.clone(), resource);
         uri
