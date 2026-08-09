@@ -89,7 +89,6 @@ pub use imp::window_icon;
 #[cfg(target_os = "windows")]
 pub use imp::hide_window;
 
-/// Decodes the icon the application carries.
 fn embedded_icon(identity: &Identity) -> Option<IconData> {
     let image = image::load_from_memory_with_format(identity.icon_png, ImageFormat::Png)
         .ok()?

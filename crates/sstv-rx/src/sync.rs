@@ -184,7 +184,6 @@ impl SyncIntervalDetector {
     }
 }
 
-/// Returns the modes a sync-interval match may report.
 fn candidates(scope: SyncStart) -> impl Iterator<Item = Mode> {
     let only = match scope {
         SyncStart::Only(mode) => Some(mode),

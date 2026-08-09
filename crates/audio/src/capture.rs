@@ -48,8 +48,6 @@ struct Timeline {
 }
 
 impl Timeline {
-    /// Records a read of `count` samples taken when the device had dropped
-    /// `dropped_total` samples in total.
     fn advance(&mut self, dropped_total: u64, count: usize) -> Reading {
         let dropped_before = dropped_total.saturating_sub(self.observed_drops);
         self.observed_drops = dropped_total;

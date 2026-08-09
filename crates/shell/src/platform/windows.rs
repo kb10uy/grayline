@@ -261,7 +261,6 @@ pub fn hide_window(hwnd: isize) {
     unsafe { ShowWindow(hwnd as HWND, SW_HIDE) };
 }
 
-/// Returns the handle of the window eframe created, if the platform gave one.
 fn main_window(cc: &eframe::CreationContext<'_>) -> Option<isize> {
     use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
