@@ -6,7 +6,6 @@
 
 use grayline_shell::i18n::Catalog;
 
-/// The Fluent sources compiled into the binary.
 pub const CATALOG: Catalog = Catalog {
     en: include_str!("../locales/en.ftl"),
     ja: include_str!("../locales/ja.ftl"),

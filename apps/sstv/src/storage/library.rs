@@ -9,7 +9,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// One file a library list offers.
 #[derive(Clone, Debug)]
 pub struct Entry {
     pub name: String,
@@ -19,7 +18,6 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// Builds an entry that names no real file, for tests.
     #[cfg(test)]
     pub(crate) fn sample(name: &str, geometry: &str) -> Self {
         Self {
@@ -43,7 +41,6 @@ impl Entry {
     }
 }
 
-/// What a library scan brought back, adopted on the frame it arrives.
 pub(crate) struct LibraryScan {
     pub(crate) templates: io::Result<Vec<Entry>>,
     pub(crate) stocks: io::Result<Vec<Entry>>,

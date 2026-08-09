@@ -54,7 +54,6 @@ pub(super) fn library(ui: &mut Ui, app: &mut App) {
     });
 }
 
-/// Half of the panel, or the minimum width a list is readable at.
 fn list_width(ui: &Ui) -> f32 {
     let available = ui.available_width() - ui.spacing().item_spacing.x;
     (available / 2.0).max(LIST_WIDTH)

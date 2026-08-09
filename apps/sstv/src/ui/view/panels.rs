@@ -35,7 +35,6 @@ pub(super) fn radio_panel(ui: &mut Ui, app: &mut App) {
     tuning_row(ui, app);
 }
 
-/// The switch, and what the connection has to say for itself.
 pub(super) fn connection_row(ui: &mut Ui, app: &mut App) {
     let failed = app.rig_snapshot.state == RigState::Failed;
     let label = app.i18n.text(if app.rig.enabled {

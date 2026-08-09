@@ -131,7 +131,6 @@ pub struct Settings {
 /// none of that belongs hard-coded in an SSTV application.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RigSettings {
-    /// Whether the application connects at all.
     pub enabled: bool,
     /// The transports to open, under the names the script reaches them by.
     pub ports: BTreeMap<String, PortSettings>,
@@ -249,7 +248,6 @@ impl Config {
         }
     }
 
-    /// Builds a configuration backed by no file at all, for tests.
     #[cfg(test)]
     pub fn detached() -> Self {
         Self {
@@ -509,7 +507,6 @@ fn store_custom_variables(document: &mut DocumentMut, variables: &BTreeMap<Strin
     }
 }
 
-/// Reads how the rig is reached and what it is told.
 fn rig_settings(document: &DocumentMut) -> RigSettings {
     let defaults = RigSettings::default();
     RigSettings {
@@ -536,7 +533,6 @@ fn rig_settings(document: &DocumentMut) -> RigSettings {
     }
 }
 
-/// Reads a rig duration, held within what the application can act on.
 fn seconds(
     document: &DocumentMut,
     key: &str,
@@ -604,7 +600,6 @@ fn store_rig(document: &mut DocumentMut, rig: &RigSettings) {
     }
 }
 
-/// Resolves a stored mode name, tolerating a hand-edited difference in case.
 fn mode_by_name(name: &str) -> Option<Mode> {
     Mode::ALL
         .into_iter()
@@ -647,7 +642,6 @@ fn float(document: &DocumentMut, table: Option<&str>, key: &str) -> Option<f32> 
         .filter(|value| value.is_finite())
 }
 
-/// Assigns `item` under `key`, or removes the key when there is no value.
 fn set(document: &mut DocumentMut, table: Option<&str>, key: &str, item: Option<Item>) {
     let Some(item) = item else {
         // An absent table stays absent: a setting with nothing to store is not
@@ -672,12 +666,10 @@ fn subtable<'a>(document: &'a DocumentMut, parent: &str, name: &str) -> Option<&
     document.get(parent)?.as_table()?.get(name)?.as_table()
 }
 
-/// Returns `parent.name` as a table, replacing anything else stored under it.
 fn subtable_mut<'a>(document: &'a mut DocumentMut, parent: &str, name: &str) -> &'a mut Table {
     child_table_mut(table_mut(document, parent), name)
 }
 
-/// Returns `name` within `parent` as a table, replacing anything else there.
 fn child_table_mut<'a>(parent: &'a mut Table, name: &str) -> &'a mut Table {
     let entry = parent.entry(name).or_insert(Item::Table(Table::new()));
     if !entry.is_table() {
@@ -686,7 +678,6 @@ fn child_table_mut<'a>(parent: &'a mut Table, name: &str) -> &'a mut Table {
     entry.as_table_mut().expect("the entry holds a table")
 }
 
-/// Returns `name` as a table, replacing anything else stored under it.
 fn table_mut<'a>(document: &'a mut DocumentMut, name: &str) -> &'a mut Table {
     let entry = document.entry(name).or_insert(Item::Table(Table::new()));
     if !entry.is_table() {

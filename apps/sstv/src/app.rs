@@ -53,7 +53,6 @@ const PLAYBACK_QUEUE_SAMPLES: usize = 48_000;
 /// How often the interface draws while it is showing something that moves.
 const LIVE_INTERVAL: Duration = Duration::from_millis(33);
 
-/// How often a composition in progress is looked for.
 const COMPOSE_POLL: Duration = Duration::from_millis(100);
 
 /// How often the interface looks at what nothing reports on its own.
@@ -120,7 +119,6 @@ impl DspFlags {
     }
 }
 
-/// The report offered before the operator has changed it.
 pub const DEFAULT_RSV: &str = "595";
 /// The report the identifier's contest number is read as.
 ///
@@ -167,7 +165,6 @@ pub struct App {
     pub vis_restart: bool,
     /// Whether a VIS detection requires the header's leader tone as well.
     pub vis_strict: bool,
-    /// Whether a transmission ends with the station identifier.
     pub send_fskid: bool,
     /// Whether the serial number is worked and sent with that identifier.
     ///
@@ -187,7 +184,6 @@ pub struct App {
     pub station: Station,
     /// The operator's own template variables, offered as `${custom.<name>}`.
     pub custom_variables: BTreeMap<String, String>,
-    /// Set while the template variable dialog is open.
     pub variables_dialog_open: bool,
     /// The rows that dialog is editing.
     ///
@@ -196,7 +192,6 @@ pub struct App {
     /// cursor would move out from under it.
     pub variables_draft: Vec<(String, String)>,
     pub library: Library,
-    /// The library scan whose result has not arrived yet, if one is running.
     library_scan: Option<mpsc::Receiver<LibraryScan>>,
     /// Receptions still being written out, joined before the interface goes.
     history_writers: Vec<thread::JoinHandle<()>>,
@@ -244,7 +239,6 @@ pub struct App {
     composition: Composition,
     /// The amplitude a running transmission reads, shared with its worker.
     tx_gain: Arc<TxGain>,
-    /// The playback device and worker of the running transmission, if one is.
     tx: TxState,
     /// When a tune tone stops itself, set for as long as one is being sent.
     ///
@@ -289,7 +283,6 @@ pub struct Station {
     pub callsign: String,
     pub qth: String,
     pub grid: String,
-    /// Set while the station dialog is open in front of the interface.
     pub open: bool,
 }
 
@@ -379,8 +372,6 @@ impl App {
         app
     }
 
-    /// Builds an interface with no host audio and no stored settings, for
-    /// tests.
     #[cfg(test)]
     pub(crate) fn headless() -> Self {
         Self::headless_on(Box::new(platform::QuietPlatform))
@@ -512,7 +503,6 @@ impl App {
             index_of(&self.library.stocks, settings.stock.as_deref()).or(self.library.stock);
     }
 
-    /// Returns the settings the interface is currently showing.
     fn settings(&self) -> Settings {
         Settings {
             locale: self.i18n.locale(),
@@ -565,7 +555,6 @@ impl App {
         self.config.error()
     }
 
-    /// Scales the whole interface, within the range the setting allows.
     pub fn set_ui_scale(&mut self, scale: f32) {
         self.ui_scale = scale.clamp(*UI_SCALE_RANGE.start(), *UI_SCALE_RANGE.end());
     }
@@ -589,7 +578,6 @@ impl App {
         self.audio.select_output(device);
     }
 
-    /// Switches to the input device with the given name, if the host has one.
     pub fn select_device_named(&mut self, name: &str) {
         if let Some(device) = self
             .audio
@@ -692,7 +680,6 @@ impl App {
         self.library.error = opened.err().map(|error| error.to_string());
     }
 
-    /// Uppercases the callsign field after an edit.
     pub fn normalize_call(&mut self) {
         if self.qso.call.chars().any(char::is_lowercase) {
             self.qso.call = self.qso.call.to_uppercase();
@@ -716,7 +703,6 @@ impl App {
         }
     }
 
-    /// Takes up what the station says about itself, the same way.
     pub fn normalize_station(&mut self) {
         let normalized = self.station.callsign.trim().to_ascii_uppercase();
         if normalized != self.station.callsign {
@@ -744,13 +730,11 @@ impl App {
         self.qso_changed();
     }
 
-    /// Takes the serial number back to the one a contest starts on.
     pub fn reset_number(&mut self) {
         self.qso.number = FIRST_QSO_NUMBER.to_owned();
         self.qso_changed();
     }
 
-    /// Puts the operator's own variables in front of them for editing.
     pub fn open_custom_variables(&mut self) {
         self.variables_draft = self
             .custom_variables
@@ -760,7 +744,6 @@ impl App {
         self.variables_dialog_open = true;
     }
 
-    /// Adds a row for a variable that has not been named yet.
     pub fn add_custom_variable(&mut self) {
         self.variables_draft.push((String::new(), String::new()));
     }
@@ -882,7 +865,6 @@ impl App {
         }
     }
 
-    /// Waits for every reception on its way to disk, for tests that read it.
     #[cfg(test)]
     fn wait_for_history_writers(&mut self) {
         for writer in self.history_writers.drain(..) {
@@ -890,7 +872,6 @@ impl App {
         }
     }
 
-    /// Blocks on a scan already started, for tests that assert on its result.
     #[cfg(test)]
     fn wait_for_library_scan(&mut self) {
         if let Some(receiver) = self.library_scan.take()
@@ -1074,7 +1055,6 @@ impl App {
         self.rig_snapshot.state == RigState::Receiving && !self.bands.is_empty()
     }
 
-    /// The band the rig is on, as the plan describes it.
     pub fn tuned_band(&self) -> Option<&BandDefinition> {
         let name = self.rig_snapshot.reading.as_ref()?.band.as_deref()?;
         self.bands.by_name(name)
@@ -1104,7 +1084,6 @@ impl App {
         band.contains(moved).then_some(moved)
     }
 
-    /// Steps the rig by that many of the band's steps.
     pub fn step_frequency(&mut self, steps: i64) {
         if !self.can_tune() {
             return;
@@ -1161,7 +1140,6 @@ impl App {
         }
     }
 
-    /// Gives back the keying a transmission asked for, if it asked for any.
     fn unkey_rig(&mut self) {
         if !self.rig_keyed {
             return;
@@ -1298,7 +1276,6 @@ impl App {
         }
     }
 
-    /// Acknowledges the fault without opening anything.
     pub fn dismiss_device_fault(&mut self) {
         self.device_fault = None;
     }
@@ -1325,13 +1302,11 @@ impl App {
         }
     }
 
-    /// What the platform was last told the application is doing.
     #[cfg(test)]
     pub(crate) const fn activity(&self) -> Activity {
         self.activity
     }
 
-    /// Fraction of the active tab's raster that is drawn as decoded.
     pub fn decoded_fraction(&self) -> f32 {
         match self.tab {
             Tab::Receive => self.audio.snapshot().display_fraction,
@@ -1568,7 +1543,6 @@ impl App {
         )
     }
 
-    /// Returns the identifier a transmission would end with, if any.
     fn station_id(&self) -> Option<Result<FskId, grayline_sstv_fskid::FskIdError>> {
         self.send_fskid
             .then(|| FskId::new(self.station.callsign.trim()))
@@ -1692,7 +1666,6 @@ impl App {
         }
     }
 
-    /// Whether a tune tone is what the rig is currently keyed for.
     pub const fn is_tuning(&self) -> bool {
         self.tune_until.is_some()
     }

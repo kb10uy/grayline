@@ -39,7 +39,6 @@ pub const PICTURES_DIRECTORY: &str = "Grayline SSTV";
 /// where a reader who finds one of these files would look next.
 pub const XMP_NAMESPACE: &str = "https://github.com/kb10uy/grayline/ns/1.0/";
 
-/// What the shared parts of the application are told about this one.
 pub const IDENTITY: grayline_shell::Identity = grayline_shell::Identity {
     app_directory: APP_DIRECTORY,
     display_name: DISPLAY_NAME,

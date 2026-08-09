@@ -337,7 +337,6 @@ impl Session {
         Some(message)
     }
 
-    /// Feeds one demodulated chunk into the raster decoder.
     fn decode(&mut self, chunk: &DemodulatedChunk, live_slant: bool) -> Result<(), AppError> {
         if let Some(mode) = chunk.detected_mode() {
             // A header during a reception is the station sending again, so the

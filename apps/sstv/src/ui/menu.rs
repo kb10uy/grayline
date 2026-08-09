@@ -27,7 +27,6 @@ pub use native::MenuHost;
 #[cfg(not(target_os = "windows"))]
 pub use in_window::MenuHost;
 
-/// What activating a menu entry asks the application to do.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
     SelectDevice(String),
@@ -223,7 +222,6 @@ fn folder_items(app: &App) -> Vec<Item> {
         .collect()
 }
 
-/// The received-image settings: whether to keep receptions, and in what.
 fn history_items(app: &App) -> Vec<Item> {
     let mut items = vec![
         Item::Check {
@@ -346,7 +344,6 @@ pub fn flatten(menus: &[Menu]) -> Vec<&Item> {
     out
 }
 
-/// Whether the menu has to be drawn inside the window.
 pub const fn is_in_window() -> bool {
     !cfg!(target_os = "windows")
 }

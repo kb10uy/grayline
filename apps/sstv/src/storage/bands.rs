@@ -17,10 +17,8 @@ use std::{
 
 use toml_edit::{DocumentMut, Item, Value};
 
-/// The file the operator's own band plan is read from.
 pub const BANDS_FILE: &str = "bands.toml";
 
-/// The plan used when no file has been written.
 pub const DEFAULT_PLAN: &str = include_str!("../../assets/bands.toml");
 
 /// A setting the operator attached to a band, as the script will read it.
@@ -45,7 +43,6 @@ impl BandValue {
         }
     }
 
-    /// The value as a count of hertz, when it is written as one.
     fn frequency(&self) -> Option<u64> {
         match self {
             Self::Integer(number) => u64::try_from(*number).ok(),
@@ -54,7 +51,6 @@ impl BandValue {
     }
 }
 
-/// One band, as `bands.toml` describes it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BandDefinition {
     pub name: String,
@@ -114,7 +110,6 @@ impl BandPlan {
         }
     }
 
-    /// The plan compiled into the application.
     pub fn built_in() -> Self {
         Self::parse(DEFAULT_PLAN).expect("the built-in band plan is well formed")
     }

@@ -56,7 +56,6 @@ pub fn image_view(ui: &mut Ui, raster: &mut Raster, decoded_fraction: f32) -> Re
     area
 }
 
-/// Centers `aspect_ratio` inside `area` without distorting it.
 fn letterbox(area: Rect, aspect_ratio: f32) -> Rect {
     if area.width() <= 0.0 || area.height() <= 0.0 || aspect_ratio <= 0.0 {
         return Rect::from_min_size(area.min, Vec2::ZERO);

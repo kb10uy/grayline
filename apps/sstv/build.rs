@@ -143,7 +143,6 @@ END
         }
     }
 
-    /// Escapes a value for a resource-script string literal.
     fn escape(value: &str) -> String {
         value.replace('\\', r"\\").replace('"', r#"\""#)
     }

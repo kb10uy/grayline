@@ -69,7 +69,6 @@ impl Frame {
     }
 }
 
-/// RxProgress of the current reception.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum RxProgress {
     /// No SSTV signal has been identified.
@@ -98,7 +97,6 @@ impl RxProgress {
         }
     }
 
-    /// Returns whether a reception is currently in progress.
     pub const fn is_active(self) -> bool {
         matches!(self, Self::Acquiring | Self::Decoding { .. })
     }
@@ -242,7 +240,6 @@ pub struct RxWorker {
 }
 
 impl RxWorker {
-    /// Starts decoding everything `reader` produces.
     pub fn spawn(
         reader: CaptureReader,
         live_slant: bool,

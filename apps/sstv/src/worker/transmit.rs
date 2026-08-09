@@ -132,7 +132,6 @@ pub struct TxSnapshot {
 pub struct TxGain(AtomicU32);
 
 impl TxGain {
-    /// Builds a gain from how far along its travel the operator's fader is.
     pub fn from_travel(travel: f32) -> Self {
         Self(AtomicU32::new(Self::amplitude(travel).to_bits()))
     }

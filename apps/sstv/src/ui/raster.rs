@@ -23,7 +23,6 @@ pub struct Raster {
     size: ImageSize,
     image: Arc<ColorImage>,
     texture: Option<TextureHandle>,
-    /// Whether the current pixels have reached the texture.
     uploaded: bool,
 }
 
@@ -61,7 +60,6 @@ impl Raster {
         true
     }
 
-    /// Replaces the pixels with a composed or generated image.
     pub fn set_image(&mut self, image: &RgbImage) {
         self.replace(
             image.size(),
@@ -137,7 +135,6 @@ impl Raster {
     }
 }
 
-/// Reads one pixel out of a decoded frame's bytes.
 fn rgba_pixel(pixel: &[u8]) -> Color32 {
     Color32::from_rgba_unmultiplied(pixel[0], pixel[1], pixel[2], pixel[3])
 }

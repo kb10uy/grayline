@@ -159,7 +159,6 @@ impl AppPaths {
         &self.config_file
     }
 
-    /// Returns the directory the configuration file lives in.
     pub fn config_dir(&self) -> &Path {
         self.config_file.parent().unwrap_or(&self.config_file)
     }

@@ -17,7 +17,6 @@ use crate::{
 };
 use grayline_rig::RigError;
 
-/// Builds an interface over real directories but no host audio.
 fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     let config = Config::load(paths.config_file());
     let mut app = App::from_parts(
@@ -401,7 +400,6 @@ fn a_keyed_rig_is_not_tunable_from_the_interface(#[case] state: RigState, #[case
     assert_eq!(app.can_tune(), expected);
 }
 
-/// A platform that records what the interface asked it for.
 #[derive(Clone, Default)]
 struct RecordingPlatform(Rc<RefCell<Vec<Activity>>>);
 

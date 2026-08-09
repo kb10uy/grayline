@@ -38,7 +38,6 @@ fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(font_definitions(&database));
 }
 
-/// Puts whichever of [`UI_FONTS`] the system has in front of egui's own.
 fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
     let mut installed = Vec::new();
@@ -72,7 +71,6 @@ fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
     definitions
 }
 
-/// Returns the bytes and face index of `family`, if the system has it.
 fn load_face(database: &fontdb::Database, family: &str) -> Option<(Vec<u8>, u32)> {
     let id = database.query(&fontdb::Query {
         families: &[fontdb::Family::Name(family)],

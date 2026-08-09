@@ -146,12 +146,10 @@ impl AudioState {
         }
     }
 
-    /// Identifies the receive session the current snapshot belongs to.
     pub const fn session(&self) -> u64 {
         self.session
     }
 
-    /// Replaces the observed snapshot without a running worker.
     #[cfg(test)]
     pub fn set_snapshot(&mut self, snapshot: RxSnapshot) {
         self.snapshot = snapshot;
@@ -242,7 +240,6 @@ impl AudioState {
         }
     }
 
-    /// Returns whether reception is currently stopped.
     pub const fn is_muted_for_transmit(&self) -> bool {
         self.muted_for_transmit
     }
@@ -278,7 +275,6 @@ impl AudioState {
         }
     }
 
-    /// Chooses whether a VIS header may start a reception over.
     pub fn set_vis_restart(&mut self, enabled: bool) {
         if self.vis_restart == enabled {
             return;
@@ -289,7 +285,6 @@ impl AudioState {
         }
     }
 
-    /// Chooses whether a VIS detection requires the leader tone as well.
     pub fn set_vis_strict(&mut self, enabled: bool) {
         if self.vis_strict == enabled {
             return;
@@ -339,7 +334,6 @@ impl AudioState {
         self.capture.as_ref().map(Capture::sample_rate_hz)
     }
 
-    /// Returns whether a device is currently delivering samples.
     pub const fn is_capturing(&self) -> bool {
         self.capture.is_some()
     }
@@ -412,23 +406,19 @@ pub struct TxState {
 }
 
 impl TxState {
-    /// Adopts the stream a transmission is about to fill.
     pub fn begin(&mut self, playback: Playback) {
         self.playback = Some(playback);
         self.started = false;
     }
 
-    /// Adopts the worker filling that stream.
     pub fn attach_worker(&mut self, worker: TxWorker) {
         self.worker = Some(worker);
     }
 
-    /// Reads the newest worker snapshot, if a worker is running.
     pub fn latest(&self) -> Option<TxSnapshot> {
         self.worker.as_ref().map(TxWorker::latest)
     }
 
-    /// Asks the device to start consuming the queue.
     pub fn start_playback(&mut self) -> Result<(), AppError> {
         self.playback
             .as_ref()
@@ -438,7 +428,6 @@ impl TxState {
         Ok(())
     }
 
-    /// Whether the device has been told to start.
     pub const fn is_started(&self) -> bool {
         self.started
     }
@@ -457,7 +446,6 @@ impl TxState {
         self.playback.as_ref().is_some_and(Playback::is_complete)
     }
 
-    /// Returns how many samples the device has actually played.
     pub fn played_samples(&self) -> u64 {
         self.playback.as_ref().map_or(0, Playback::played_samples)
     }
@@ -467,7 +455,6 @@ impl TxState {
         self.playback.as_ref().map(Playback::sample_rate_hz)
     }
 
-    /// Releases the stream and the worker, however the transmission ended.
     pub fn stop(&mut self) {
         self.playback = None;
         self.worker = None;

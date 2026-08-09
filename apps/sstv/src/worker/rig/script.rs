@@ -174,7 +174,6 @@ impl ScriptHost {
         self.invoke(entry, frequency_hz, None)
     }
 
-    /// Asks the script to tune the rig.
     pub fn set_frequency(
         &self,
         frequency_hz: Option<u64>,

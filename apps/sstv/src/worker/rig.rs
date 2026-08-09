@@ -80,7 +80,6 @@ impl RigState {
 #[derive(Clone, Debug, Default)]
 pub struct RigSnapshot {
     pub state: RigState,
-    /// What the rig was last found to be tuned to.
     pub reading: Option<Reading>,
     /// The last failure, cleared when a transmission asks to be keyed.
     pub error: Option<AppError>,
@@ -164,7 +163,6 @@ impl RigWorker {
         self.request(Request::Receive);
     }
 
-    /// Asks for the rig to be tuned.
     pub fn set_frequency(&self, target_hz: u64) {
         self.request(Request::SetFrequency(target_hz));
     }

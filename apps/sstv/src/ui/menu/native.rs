@@ -92,7 +92,6 @@ impl MenuHost {
         }
     }
 
-    /// Replaces every menu entry from `model`.
     fn build(&mut self, model: &[Menu]) -> Result<(), muda::Error> {
         while self.menu.remove_at(0).is_some() {}
         self.bar.clear();
@@ -170,7 +169,6 @@ impl MenuHost {
         self.model = model.to_vec();
     }
 
-    /// Builds the menu without attaching it to a window, for tests.
     #[cfg(test)]
     pub fn detached(model: &[Menu]) -> Self {
         let mut native = Self {
