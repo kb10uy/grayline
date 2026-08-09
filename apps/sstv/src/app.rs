@@ -384,15 +384,21 @@ impl App {
     }
 
     /// Builds a headless interface reporting activity to `platform`.
+    ///
+    /// The directories are under the suite's scratch directory rather than
+    /// empty. An empty path is relative, so anything the interface wrote
+    /// landed in the working directory, which for these tests is the package's
+    /// own source tree.
     #[cfg(test)]
     pub(crate) fn headless_on(platform: Box<dyn Platform>) -> Self {
+        let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
             AudioState::disconnected(),
             AppPaths::from_roots(
-                PathBuf::new(),
-                PathBuf::new(),
-                PathBuf::new(),
-                PathBuf::new(),
+                scratch.join("config"),
+                scratch.join("data"),
+                scratch.join("pictures"),
+                scratch.join("state"),
             ),
             Config::detached(),
             &Settings::default(),

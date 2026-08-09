@@ -350,6 +350,10 @@ fn tuned_to(app: &mut App, frequency_hz: u64) {
 
 /// Stepping out of the band is not tuning, so the edge is where it stops
 /// rather than somewhere the operator may not be licensed to be.
+///
+/// The plan is written here rather than taken from the built-in one, so the
+/// case values answer to what this test is about and not to a band plan that
+/// is free to be re-tuned.
 #[rstest]
 #[case::down(7_100_000, -1, Some(7_099_000))]
 #[case::up(7_100_000, 1, Some(7_101_000))]
@@ -364,6 +368,10 @@ fn stepping_stays_inside_the_band(
     #[case] expected: Option<u64>,
 ) {
     let mut app = App::headless();
+    app.bands = Arc::new(
+        BandPlan::parse("[[bands]]\nname = \"40m\"\nlow = 7000000\nhigh = 7300000\nstep = 1000\n")
+            .unwrap(),
+    );
     tuned_to(&mut app, frequency_hz);
 
     assert_eq!(app.stepped_frequency(steps), expected);
