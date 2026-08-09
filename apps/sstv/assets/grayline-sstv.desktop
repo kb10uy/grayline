@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Grayline SSTV
+GenericName=SSTV
+Comment=SSTV for amateur radio
+Exec=grayline-sstv
+Icon=grayline-sstv
+Terminal=false
+Categories=AudioVideo;Audio;HamRadio;
+Keywords=SSTV;amateur radio;ham radio;MMSSTV;
+StartupWMClass=grayline-sstv

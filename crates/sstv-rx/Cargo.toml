@@ -1,0 +1,15 @@
+[package]
+name = "grayline-sstv-rx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+grayline-dsp = { path = "../dsp" }
+grayline-sstv-fskid = { path = "../sstv-fskid" }
+grayline-sstv = { path = "../sstv" }
+thiserror = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+rstest.workspace = true

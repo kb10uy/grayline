@@ -51,16 +51,16 @@ jobs:
       # crate can stop being `no_std` without any workspace command noticing.
       - name: Build the no_std crates without std
         run: |
-          cargo build -p rssstv-sstv --no-default-features
-          cargo build -p rssstv-dsp --no-default-features
+          cargo build -p grayline-sstv --no-default-features
+          cargo build -p grayline-dsp --no-default-features
 
       # For the same reason, a crate that asks for no `std` feature from these
       # two is only held to it on its own: the workspace turns the feature on
       # around it and would carry a new dependency on `std` in unremarked.
       - name: Build the crates that ask for no std of their dependencies
         run: |
-          cargo build -p rssstv-modulator
-          cargo build -p rssstv-demodulator
+          cargo build -p grayline-tone-tx
+          cargo build -p grayline-sstv-rx
 
   # The browser demo is the one member whose target is not the host, and the
   # host build says nothing about it: on Linux the JavaScript bindings compile
@@ -81,12 +81,12 @@ jobs:
           tool: wasm-pack
 
       - name: Run Clippy for wasm32
-        run: cargo clippy -p rssstv-web-demo --target wasm32-unknown-unknown -- -D warnings
+        run: cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown -- -D warnings
 
       # The same command the deploy workflow publishes the result of, so a build
       # that cannot produce the page fails here rather than on a push to master.
       - name: Build the browser demo
-        run: wasm-pack build web-demo --target web --out-dir www/pkg --release
+        run: wasm-pack build apps/web-demo --target web --out-dir www/pkg --release
 
   licenses:
     name: Licenses

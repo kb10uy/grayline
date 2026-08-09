@@ -10,10 +10,10 @@ title: ファイルの場所
 
 | 内容 | Windows | macOS | Linux |
 | --- | --- | --- | --- |
-| 設定 | `%APPDATA%\RSSSTV\config.toml` | `~/Library/Application Support/RSSSTV/config.toml` | `$XDG_CONFIG_HOME/rssstv/config.toml` |
-| テンプレート | `%APPDATA%\RSSSTV\templates` | `~/Library/Application Support/RSSSTV/templates` | `$XDG_DATA_HOME/rssstv/templates` |
-| アセット | `%APPDATA%\RSSSTV\assets` | `~/Library/Application Support/RSSSTV/assets` | `$XDG_DATA_HOME/rssstv/assets` |
-| 画像 | `ピクチャ\RSSSTV` | `~/Pictures/RSSSTV` | `$XDG_PICTURES_DIR/RSSSTV` |
+| 設定 | `%APPDATA%\Grayline\sstv\config.toml` | `~/Library/Application Support/Grayline/sstv/config.toml` | `$XDG_CONFIG_HOME/grayline/sstv/config.toml` |
+| テンプレート | `%APPDATA%\Grayline\sstv\templates` | `~/Library/Application Support/Grayline/sstv/templates` | `$XDG_DATA_HOME/grayline/sstv/templates` |
+| アセット | `%APPDATA%\Grayline\sstv\assets` | `~/Library/Application Support/Grayline/sstv/assets` | `$XDG_DATA_HOME/grayline/sstv/assets` |
+| 画像 | `ピクチャ\Grayline SSTV` | `~/Pictures/Grayline SSTV` | `$XDG_PICTURES_DIR/Grayline SSTV` |
 
 画像フォルダーの下に `Stocks`(送信用の背景)、`Sent`(送信した画像)、
 `Received`(受信した画像)があります。年月などの下位フォルダーは作られません。

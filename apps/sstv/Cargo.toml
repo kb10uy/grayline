@@ -1,0 +1,96 @@
+[package]
+name = "grayline-sstv-app"
+description = "SSTV for amateur radio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# The package carries the `-app` suffix so it does not collide with the
+# `grayline-sstv` protocol library; the binary keeps the product's own name.
+[[bin]]
+name = "grayline-sstv"
+path = "src/main.rs"
+
+[dependencies]
+directories.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+fluent-bundle.workspace = true
+fontdb.workspace = true
+image.workspace = true
+image-webp.workspace = true
+jiff.workspace = true
+mlua.workspace = true
+grayline-audio = { path = "../../crates/audio" }
+grayline-sstv-rx = { path = "../../crates/sstv-rx" }
+grayline-dsp = { path = "../../crates/dsp" }
+grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
+grayline-tone-tx = { path = "../../crates/tone-tx" }
+grayline-rig = { path = "../../crates/rig" }
+grayline-shell = { path = "../../crates/shell" }
+grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
+grayline-sstv-template = { path = "../../crates/sstv-template" }
+png.workspace = true
+thiserror.workspace = true
+toml_edit.workspace = true
+unic-langid.workspace = true
+
+# muda drives the platform menu bar, which needs a native window handle it can
+# own. The other platforms use the in-window menu bar on purpose: on Linux muda
+# only attaches to gtk windows, which winit does not create, and on macOS the
+# native bar's behavior cannot be verified regularly enough to vouch for.
+[target.'cfg(target_os = "windows")'.dependencies]
+muda.workspace = true
+raw-window-handle.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Power",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Gated on the host rather than the target, which is what Cargo matches build
+# dependencies against; `build.rs` uses the same condition so the two agree.
+[target.'cfg(target_os = "windows")'.build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true
+hound.workspace = true
+rstest.workspace = true
+
+# `cargo deb -p grayline-sstv-app` builds the Debian package from this. The
+# manual under target/help has to be rendered first; package/build-deb.sh does
+# both in order. Asset sources are relative to this directory, except
+# target/release/ paths, which cargo-deb resolves against the workspace target
+# directory.
+[package.metadata.deb]
+name = "grayline-sstv"
+section = "hamradio"
+priority = "optional"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+Slow-scan television for amateur radio: receives and decodes SSTV \
+transmissions from a capture device, and composes and transmits pictures \
+from KDL templates, with optional rig control through Hamlib's rigctld. \
+The operator's manual is installed under /usr/share/doc/grayline-sstv/help."""
+# $auto covers what the binary links (glibc, ALSA, gcc-s); the graphics and
+# keyboard libraries are dlopen'd at runtime, which dpkg-shlibdeps cannot see,
+# so they are named explicitly.
+depends = ["$auto", "libxkbcommon0", "libxkbcommon-x11-0", "libegl1", "libgl1"]
+recommends = ["xdg-utils", "fonts-noto-cjk"]
+suggests = ["fonts-dejavu-core"]
+assets = [
+    ["target/release/grayline-sstv", "usr/bin/", "755"],
+    ["assets/grayline-sstv.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/512x512/apps/grayline-sstv.png", "644"],
+    ["../../target/help/*", "usr/share/doc/grayline-sstv/help/", "644"],
+]
