@@ -4,13 +4,15 @@ use std::path::PathBuf;
 
 use egui::IconData;
 
+use crate::Identity;
+
 pub const UI_FONTS: [&str; 2] = ["Hiragino Sans", "Helvetica Neue"];
 
 pub const FILE_MANAGER: Option<&str> = Some("open");
 
 /// The bundle keeps the manual under `Contents/Resources`, a sibling of the
 /// `Contents/MacOS` directory the executable runs from.
-pub fn manual_fallback() -> Option<PathBuf> {
+pub fn manual_fallback(_identity: &Identity) -> Option<PathBuf> {
     let executable = std::env::current_exe().ok()?;
     Some(
         executable
@@ -24,7 +26,7 @@ pub const FAMILY_DIRECTORY: &str = "Grayline";
 
 /// The window is themed by AppKit from the system appearance, and the menu
 /// bar is drawn inside the window, so nothing has to be arranged in advance.
-pub fn prepare_process() {}
+pub fn prepare_process(_identity: &Identity) {}
 
 pub fn prepare_window(_cc: &eframe::CreationContext<'_>) {}
 
@@ -34,10 +36,10 @@ pub type Host = super::InertPlatform;
 
 pub type Claim = super::FileLock;
 
-pub fn claim_single_instance() -> Option<Claim> {
-    super::lock_file_claim()
+pub fn claim_single_instance(identity: &Identity) -> Option<Claim> {
+    super::lock_file_claim(identity)
 }
 
-pub fn window_icon() -> Option<IconData> {
-    super::embedded_icon()
+pub fn window_icon(identity: &Identity) -> Option<IconData> {
+    super::embedded_icon(identity)
 }

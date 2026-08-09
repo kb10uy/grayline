@@ -1,135 +1,22 @@
-use std::{borrow::Cow, fmt};
+//! This application's own message catalogue.
+//!
+//! The lookup machinery is `grayline-shell`'s; the text is not. Every message
+//! here names a control this application has, so a second application in the
+//! family shares the former and none of the latter.
 
-use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
-use unic_langid::LanguageIdentifier;
+use grayline_shell::i18n::Catalog;
 
-const EN: &str = include_str!("../locales/en.ftl");
-const JA: &str = include_str!("../locales/ja.ftl");
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum Locale {
-    #[default]
-    En,
-    Ja,
-}
-
-impl Locale {
-    pub const ALL: [Self; 2] = [Self::En, Self::Ja];
-
-    const fn source(self) -> &'static str {
-        match self {
-            Self::En => EN,
-            Self::Ja => JA,
-        }
-    }
-
-    pub const fn tag(self) -> &'static str {
-        match self {
-            Self::En => "en",
-            Self::Ja => "ja",
-        }
-    }
-
-    /// Resolves a stored language tag, tolerating a hand-edited difference in
-    /// case.
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|locale| locale.tag().eq_ignore_ascii_case(tag))
-    }
-
-    fn identifier(self) -> LanguageIdentifier {
-        self.tag().parse().expect("locale tag is well formed")
-    }
-}
-
-impl fmt::Display for Locale {
-    /// Language names are endonyms and are deliberately not translated.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::En => "English",
-            Self::Ja => "日本語",
-        })
-    }
-}
-
-pub struct I18n {
-    locale: Locale,
-    bundle: FluentBundle<FluentResource>,
-}
-
-impl fmt::Debug for I18n {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("I18n")
-            .field("locale", &self.locale)
-            .finish_non_exhaustive()
-    }
-}
-
-impl I18n {
-    pub fn new(locale: Locale) -> Self {
-        let resource = FluentResource::try_new(locale.source().to_owned())
-            .expect("bundled locale resource parses");
-        let mut bundle = FluentBundle::new(vec![locale.identifier()]);
-        bundle.set_use_isolating(false);
-        bundle
-            .add_resource(resource)
-            .expect("bundled locale resource has no conflicting messages");
-        Self { locale, bundle }
-    }
-
-    pub const fn locale(&self) -> Locale {
-        self.locale
-    }
-
-    pub fn text(&self, key: &str) -> String {
-        self.format(key, None)
-    }
-
-    pub fn text_with(&self, key: &str, args: &[(&str, Value<'_>)]) -> String {
-        let mut arguments = FluentArgs::new();
-        for (name, value) in args {
-            arguments.set(*name, value.clone());
-        }
-        self.format(key, Some(&arguments))
-    }
-
-    fn format(&self, key: &str, args: Option<&FluentArgs<'_>>) -> String {
-        let Some(message) = self.bundle.get_message(key) else {
-            return key.to_owned();
-        };
-        let Some(pattern) = message.value() else {
-            return key.to_owned();
-        };
-        let mut errors = Vec::new();
-        self.bundle
-            .format_pattern(pattern, args, &mut errors)
-            .into_owned()
-    }
-}
-
-pub type Value<'a> = FluentValue<'a>;
-
-/// Passes borrowed text to a message.
-pub fn arg(value: &str) -> Value<'_> {
-    Value::String(Cow::Borrowed(value))
-}
-
-/// Passes text a message has to own, such as a formatted error.
-pub fn owned(value: String) -> Value<'static> {
-    Value::String(Cow::Owned(value))
-}
-
-/// Passes a number to a message, formatted for the locale.
-pub fn number(value: impl Into<f64>) -> Value<'static> {
-    Value::from(value.into())
-}
+/// The Fluent sources compiled into the binary.
+pub const CATALOG: Catalog = Catalog {
+    en: include_str!("../locales/en.ftl"),
+    ja: include_str!("../locales/ja.ftl"),
+};
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
+    use grayline_shell::i18n::{I18n, Locale, number};
     use rstest::rstest;
 
     use super::*;
@@ -138,14 +25,17 @@ mod tests {
     #[case(Locale::En)]
     #[case(Locale::Ja)]
     fn resources_parse_and_resolve(#[case] locale: Locale) {
-        let i18n = I18n::new(locale);
+        let i18n = I18n::new(locale, &CATALOG);
         assert_eq!(i18n.locale(), locale);
         assert_ne!(i18n.text("tab-receive"), "tab-receive");
     }
 
     fn message_keys(locale: Locale) -> BTreeSet<String> {
-        locale
-            .source()
+        let source = match locale {
+            Locale::En => CATALOG.en,
+            Locale::Ja => CATALOG.ja,
+        };
+        source
             .lines()
             .filter_map(|line| line.split_once(" ="))
             .filter(|(key, _)| !key.is_empty() && !key.starts_with([' ', '#', '.', '*', '[']))
@@ -168,14 +58,17 @@ mod tests {
 
     #[test]
     fn arguments_are_substituted_without_isolation_marks() {
-        let formatted =
-            I18n::new(Locale::En).text_with("state-receiving", &[("percent", number(94))]);
+        let formatted = I18n::new(Locale::En, &CATALOG)
+            .text_with("state-receiving", &[("percent", number(94))]);
         assert_eq!(formatted, "RECEIVING \u{b7} 94%");
     }
 
     #[test]
     fn missing_keys_fall_back_to_the_key() {
-        assert_eq!(I18n::new(Locale::En).text("no-such-key"), "no-such-key");
+        assert_eq!(
+            I18n::new(Locale::En, &CATALOG).text("no-such-key"),
+            "no-such-key"
+        );
     }
 
     /// Collects every key the application asks for by name.
@@ -190,9 +83,10 @@ mod tests {
                 if path.is_dir() {
                     walk(&path, keys);
                 } else if path.extension().is_some_and(|extension| extension == "rs")
-                    // This module defines the lookup rather than reaching it,
-                    // and scanning it would find this scanner's own strings.
-                    && path.file_name().is_some_and(|name| name != "i18n.rs")
+                    // This module defines the catalogue rather than reaching
+                    // it, and scanning it would find this scanner's own
+                    // strings.
+                    && path.file_name().is_some_and(|name| name != "locales.rs")
                 {
                     collect(
                         &std::fs::read_to_string(&path).expect("a source file"),
@@ -275,5 +169,38 @@ mod tests {
         for label in labels {
             assert!(defined.contains(label), "`{label}` is not defined");
         }
+    }
+
+    /// The carried copy has to stay decodable even where nothing reads it, so
+    /// a platform that starts needing it is not surprised at runtime.
+    ///
+    /// Windows prefers the icon in the executable's resource section, so the
+    /// check below does not reach this one there.
+    #[test]
+    fn the_carried_icon_decodes() {
+        let icon = image::load_from_memory_with_format(
+            crate::identity::IDENTITY.icon_png,
+            image::ImageFormat::Png,
+        )
+        .expect("the carried icon should decode")
+        .into_rgba8();
+        assert_eq!(icon.width(), icon.height());
+    }
+
+    /// Whichever platform this runs on has to produce a usable icon from what
+    /// this application carries.
+    #[test]
+    fn the_application_icon_loads() {
+        let icon = grayline_shell::platform::window_icon(&crate::identity::IDENTITY)
+            .expect("the application icon should be available");
+        assert!(icon.width > 0 && icon.height > 0);
+        assert_eq!(
+            icon.rgba.len(),
+            icon.width as usize * icon.height as usize * 4
+        );
+        assert!(
+            icon.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0),
+            "the icon should not be fully transparent"
+        );
     }
 }

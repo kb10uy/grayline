@@ -8,9 +8,10 @@
 //! that the native and in-window renderers both consume, so the two paths
 //! cannot drift apart.
 
+use grayline_shell::i18n::{Locale, number};
+
 use crate::{
     app::App,
-    i18n::{Locale, number},
     storage::{history::HistoryFormat, paths::Folder},
 };
 

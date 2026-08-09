@@ -1841,6 +1841,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-shell"
+version = "0.3.1"
+dependencies = [
+ "directories",
+ "eframe",
+ "egui",
+ "fluent-bundle",
+ "image",
+ "jiff",
+ "raw-window-handle",
+ "rstest",
+ "unic-langid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "grayline-sstv"
 version = "0.3.1"
 dependencies = [
@@ -1866,6 +1882,7 @@ dependencies = [
  "grayline-audio",
  "grayline-dsp",
  "grayline-rig",
+ "grayline-shell",
  "grayline-sstv",
  "grayline-sstv-fskid",
  "grayline-sstv-rx",

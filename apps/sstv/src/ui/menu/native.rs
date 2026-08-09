@@ -88,7 +88,7 @@ impl MenuHost {
 
     pub fn prepare_for_close(&self) {
         if let Some(hwnd) = self.hwnd {
-            crate::platform::hide_window(hwnd);
+            grayline_shell::platform::hide_window(hwnd);
         }
     }
 
@@ -287,7 +287,9 @@ mod tests {
         super::{flatten, model},
         *,
     };
-    use crate::{app::App, i18n::Locale};
+    use grayline_shell::i18n::Locale;
+
+    use crate::app::App;
 
     /// The labels a menu should be showing, in the order [`MenuHost::labels`]
     /// reports them.

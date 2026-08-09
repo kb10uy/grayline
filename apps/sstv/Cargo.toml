@@ -30,6 +30,7 @@ grayline-dsp = { path = "../../crates/dsp" }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-tone-tx = { path = "../../crates/tone-tx" }
 grayline-rig = { path = "../../crates/rig" }
+grayline-shell = { path = "../../crates/shell" }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
 grayline-sstv-template = { path = "../../crates/sstv-template" }
 png.workspace = true

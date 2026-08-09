@@ -35,7 +35,7 @@ static SINK: OnceLock<Mutex<File>> = OnceLock::new();
 ///
 /// Returns the error rather than reporting it, because at the point this is
 /// called there is nowhere to report it to yet.
-pub fn open(path: &Path) -> io::Result<()> {
+pub fn open(path: &Path, display_name: &str) -> io::Result<()> {
     if path.metadata().is_ok_and(|data| data.len() >= MAX_BYTES) {
         let _ = std::fs::rename(path, path.with_extension("log.1"));
     }
@@ -46,7 +46,7 @@ pub fn open(path: &Path) -> io::Result<()> {
     let _ = SINK.set(Mutex::new(file));
     note(&format!(
         "{} {} starting on {}",
-        crate::identity::DISPLAY_NAME,
+        display_name,
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS
     ));

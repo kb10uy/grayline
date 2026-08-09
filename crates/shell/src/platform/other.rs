@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 use egui::IconData;
 
+use crate::Identity;
+
 pub const UI_FONTS: [&str; 3] = ["Noto Sans CJK JP", "Noto Sans", "DejaVu Sans"];
 
 /// Only Linux has a file manager this can name. Another platform reaching
@@ -20,8 +22,13 @@ pub const FILE_MANAGER: Option<&str> = if cfg!(target_os = "linux") {
 
 /// Only Linux has distribution packages that install the manual; another
 /// platform reaching here has no package and therefore no fallback.
-pub fn manual_fallback() -> Option<PathBuf> {
-    cfg!(target_os = "linux").then(|| PathBuf::from("/usr/share/doc/grayline-sstv/help/index.html"))
+pub fn manual_fallback(identity: &Identity) -> Option<PathBuf> {
+    cfg!(target_os = "linux").then(|| {
+        PathBuf::from(format!(
+            "/usr/share/doc/{}/help/index.html",
+            identity.process_name
+        ))
+    })
 }
 
 /// Linux keeps its per-application directories lowercase, under a base
@@ -33,7 +40,7 @@ pub const FAMILY_DIRECTORY: &str = if cfg!(target_os = "linux") {
     "Grayline"
 };
 
-pub fn prepare_process() {}
+pub fn prepare_process(_identity: &Identity) {}
 
 pub fn prepare_window(_cc: &eframe::CreationContext<'_>) {}
 
@@ -43,10 +50,10 @@ pub type Host = super::InertPlatform;
 
 pub type Claim = super::FileLock;
 
-pub fn claim_single_instance() -> Option<Claim> {
-    super::lock_file_claim()
+pub fn claim_single_instance(identity: &Identity) -> Option<Claim> {
+    super::lock_file_claim(identity)
 }
 
-pub fn window_icon() -> Option<IconData> {
-    super::embedded_icon()
+pub fn window_icon(identity: &Identity) -> Option<IconData> {
+    super::embedded_icon(identity)
 }

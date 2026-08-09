@@ -263,7 +263,7 @@ impl ScriptHost {
         context.set(
             "log",
             self.lua.create_function(|_, message: String| {
-                crate::storage::log::note(&format!("rig script: {message}"));
+                grayline_shell::log::note(&format!("rig script: {message}"));
                 Ok(())
             })?,
         )?;
@@ -329,7 +329,7 @@ fn install_deadline(lua: &Lua, deadline: Rc<Cell<Option<Instant>>>) {
         },
     );
     if let Err(error) = installed {
-        crate::storage::log::note(&format!("rig script is not bounded by a deadline: {error}"));
+        grayline_shell::log::note(&format!("rig script is not bounded by a deadline: {error}"));
     }
 }
 

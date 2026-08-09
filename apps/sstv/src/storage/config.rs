@@ -15,7 +15,9 @@ use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
 use toml_edit::{DocumentMut, Item, Table, value};
 
-use crate::{i18n::Locale, storage::history::HistoryFormat};
+use grayline_shell::i18n::Locale;
+
+use crate::storage::history::HistoryFormat;
 
 /// The serial number a fresh log starts from.
 ///

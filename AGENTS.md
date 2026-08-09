@@ -15,7 +15,10 @@ The repository contains:
 - `apps/`: one directory per shipped application, plus the browser demo.
   `apps/sstv/` is the SSTV desktop application.
 - `crates/`: the libraries. Directory names carry no prefix; the packages they
-  hold are named `grayline-*`.
+  hold are named `grayline-*`. `crates/shell/` holds what every application
+  needs and no mode decides: platform integration, the localization machinery,
+  and the log. An application supplies what makes it itself through
+  `grayline_shell::Identity` and an `i18n::Catalog`.
 - `tools/`: development command-line tools that are not shipped.
 - `assets/`: data the repository ships outside any one crate, such as the
   ported MMSSTV templates under `assets/templates/`.

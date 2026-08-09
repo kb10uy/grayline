@@ -2,9 +2,9 @@
 //!
 //! Gathered in one module because the names are read by parts of the program
 //! that have nothing else in common: the window, the picture library, the
-//! single-instance claim, and the metadata written into saved images. The
-//! second application in this repository will answer with its own set, so the
-//! parts that will be shared take these as input rather than know them.
+//! single-instance claim, and the metadata written into saved images. What
+//! `grayline-shell` needs of them is handed over as [`IDENTITY`]; the rest
+//! stays here, because it answers to SSTV rather than to the platform.
 
 /// The application's own directory, under the family's.
 ///
@@ -38,3 +38,13 @@ pub const PICTURES_DIRECTORY: &str = "Grayline SSTV";
 /// to resolve. It is spelled as this repository's URL anyway, because that is
 /// where a reader who finds one of these files would look next.
 pub const XMP_NAMESPACE: &str = "https://github.com/kb10uy/grayline/ns/1.0/";
+
+/// What the shared parts of the application are told about this one.
+pub const IDENTITY: grayline_shell::Identity = grayline_shell::Identity {
+    app_directory: APP_DIRECTORY,
+    display_name: DISPLAY_NAME,
+    process_name: PROCESS_NAME,
+    pictures_directory: PICTURES_DIRECTORY,
+    app_user_model_id: "kb10uy.GraylineSSTV",
+    icon_png: include_bytes!("../assets/icon.png"),
+};

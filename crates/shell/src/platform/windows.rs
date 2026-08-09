@@ -10,7 +10,7 @@ use std::{
 
 use egui::IconData;
 
-use crate::identity;
+use crate::Identity;
 use windows_sys::Win32::{
     Foundation::{
         CloseHandle, ERROR_ALREADY_EXISTS, FreeLibrary, GetLastError, HANDLE, HWND,
@@ -51,19 +51,11 @@ pub const FILE_MANAGER: Option<&str> = Some("explorer.exe");
 
 /// The Windows archive is extracted wherever the operator keeps it, so the
 /// manual is always beside the executable or absent.
-pub fn manual_fallback() -> Option<PathBuf> {
+pub fn manual_fallback(_identity: &Identity) -> Option<PathBuf> {
     None
 }
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";
-
-/// Identifies the application to the shell.
-///
-/// Taskbar buttons, pinned shortcuts, and notifications are grouped by this
-/// string. A process that sets none is grouped by its executable path
-/// instead, so a development build and an installed copy would be treated as
-/// unrelated applications.
-const APP_USER_MODEL_ID: &str = "kb10uy.GraylineSSTV";
 
 /// Names the objects that coordinate the single-instance claim.
 ///
@@ -71,21 +63,26 @@ const APP_USER_MODEL_ID: &str = "kb10uy.GraylineSSTV";
 /// operators signed in to the same machine each get their own copy. Built from
 /// the process name rather than the package name, so the claim survives the
 /// package being renamed and two applications in this family never share one.
-fn instance_names() -> (String, String) {
+fn instance_names(identity: &Identity) -> (String, String) {
     (
-        format!(r"Local\{}-instance", identity::PROCESS_NAME),
-        format!(r"Local\{}-instance-window", identity::PROCESS_NAME),
+        format!(r"Local\{}-instance", identity.process_name),
+        format!(r"Local\{}-instance-window", identity.process_name),
     )
 }
 
-pub fn prepare_process() {
-    let _ = set_app_user_model_id();
+pub fn prepare_process(identity: &Identity) {
+    let _ = set_app_user_model_id(identity);
     allow_dark_mode_for_app();
 }
 
 /// Returns the `HRESULT` the shell answered with.
-fn set_app_user_model_id() -> i32 {
-    let id = wide(APP_USER_MODEL_ID);
+///
+/// Taskbar buttons, pinned shortcuts, and notifications are grouped by the
+/// identity's model id. A process that sets none is grouped by its executable
+/// path instead, so a development build and an installed copy would be
+/// treated as unrelated applications.
+fn set_app_user_model_id(identity: &Identity) -> i32 {
+    let id = wide(identity.app_user_model_id);
     unsafe { SetCurrentProcessExplicitAppUserModelID(id.as_ptr()) }
 }
 
@@ -131,8 +128,8 @@ pub struct Claim {
     published: *mut c_void,
 }
 
-pub fn claim_single_instance() -> Option<Claim> {
-    let (mutex, window) = instance_names();
+pub fn claim_single_instance(identity: &Identity) -> Option<Claim> {
+    let (mutex, window) = instance_names(identity);
     claim_named(&mutex, &window)
 }
 
@@ -284,8 +281,8 @@ const ICON_RESOURCE_ID: u16 = 1;
 /// requested and left to winit to scale down for each place the icon appears.
 const WANTED_ICON_SIZE: i32 = 256;
 
-pub fn window_icon() -> Option<IconData> {
-    resource_icon().or_else(super::embedded_icon)
+pub fn window_icon(identity: &Identity) -> Option<IconData> {
+    resource_icon().or_else(|| super::embedded_icon(identity))
 }
 
 fn resource_icon() -> Option<IconData> {
@@ -485,6 +482,17 @@ fn windows_build_number() -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::{claim_named, set_app_user_model_id, to_rgba};
+    use crate::Identity;
+
+    /// An identity for the checks here, which read only the field each names.
+    const TEST_IDENTITY: Identity = Identity {
+        app_directory: "test",
+        display_name: "Grayline Test",
+        process_name: "grayline-test",
+        pictures_directory: "Grayline Test",
+        app_user_model_id: "kb10uy.GraylineTest",
+        icon_png: &[],
+    };
 
     /// Names nothing else contends for, so the test does not disturb a copy
     /// the operator has open.
@@ -516,7 +524,7 @@ mod tests {
     /// identifier is set before anything else asks the shell for one.
     #[test]
     fn the_shell_accepts_the_app_user_model_id() {
-        assert_eq!(set_app_user_model_id(), 0);
+        assert_eq!(set_app_user_model_id(&TEST_IDENTITY), 0);
     }
 
     #[test]

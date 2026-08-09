@@ -8,10 +8,9 @@ use egui_kittest::{
 use rstest::rstest;
 
 use super::*;
-use crate::{
-    app::{App, FIRST_QSO_NUMBER},
-    i18n::Locale,
-};
+use grayline_shell::i18n::Locale;
+
+use crate::app::{App, FIRST_QSO_NUMBER};
 use grayline_rig::RigError;
 
 use super::panels::decibels;
@@ -41,7 +40,8 @@ fn every_tab_renders(#[case] tab: Tab) {
 }
 
 fn app_label(tab: Tab) -> String {
-    crate::i18n::I18n::new(Locale::default()).text(tab.label_key())
+    grayline_shell::i18n::I18n::new(Locale::default(), &crate::locales::CATALOG)
+        .text(tab.label_key())
 }
 
 #[rstest]
@@ -51,7 +51,8 @@ fn every_locale_renders(#[case] locale: Locale) {
     let mut app = App::headless();
     app.select_locale(locale);
     let harness = render(&mut app);
-    let receive = crate::i18n::I18n::new(locale).text("tab-receive");
+    let receive =
+        grayline_shell::i18n::I18n::new(locale, &crate::locales::CATALOG).text("tab-receive");
     harness.get_by_label(&receive);
 }
 

@@ -4,10 +4,11 @@ use egui_extras::{Column, TableBuilder};
 use grayline_audio::FaultKind;
 use grayline_sstv_template::valid_variable_name;
 
+use grayline_shell::i18n::{arg, number};
+
 use crate::{
     app::{App, Dsp, Entry, Tab},
     error::AppError,
-    i18n::{arg, number},
     storage::paths::Folder,
     ui::{canvas, colors, menu},
     worker::{

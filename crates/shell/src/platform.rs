@@ -6,9 +6,9 @@
 //! new operation has to be answered on every platform before the build passes,
 //! even if the answer is to do nothing.
 //!
-//! The menu bar is the one deliberate exception. It stays in [`crate::ui::menu`]
-//! because its platform split is between two renderers of a shared model
-//! rather than between operating systems.
+//! The menu bar is the one deliberate exception. It stays with the
+//! application, because its platform split is between two renderers of a
+//! shared model rather than between operating systems.
 
 use std::{
     io,
@@ -19,6 +19,12 @@ use std::{
 use egui::IconData;
 use image::ImageFormat;
 
+use crate::Identity;
+
+// The facade below documents every item these modules provide. Each is one
+// answer to that description rather than a description of its own, so they are
+// not made to restate it three times over.
+#[allow(missing_docs)]
 #[cfg_attr(target_os = "windows", path = "platform/windows.rs")]
 #[cfg_attr(target_os = "macos", path = "platform/macos.rs")]
 #[cfg_attr(
@@ -83,14 +89,9 @@ pub use imp::window_icon;
 #[cfg(target_os = "windows")]
 pub use imp::hide_window;
 
-/// The application icon, compiled into the binary.
-///
-/// Used by the platforms that have nowhere else to read it from.
-const ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
-
-/// Decodes the icon embedded in the binary.
-fn embedded_icon() -> Option<IconData> {
-    let image = image::load_from_memory_with_format(ICON_PNG, ImageFormat::Png)
+/// Decodes the icon the application carries.
+fn embedded_icon(identity: &Identity) -> Option<IconData> {
+    let image = image::load_from_memory_with_format(identity.icon_png, ImageFormat::Png)
         .ok()?
         .into_rgba8();
     let (width, height) = image.dimensions();
@@ -109,6 +110,7 @@ fn embedded_icon() -> Option<IconData> {
 /// the application running does not hold sleep off indefinitely.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Activity {
+    /// Nothing worth keeping the machine awake for.
     #[default]
     Idle,
     /// A picture is being decoded.
@@ -165,11 +167,13 @@ impl Platform for InertPlatform {
 /// `InertPlatform` is the real platform on the targets without their own
 /// integration, so it still opens directories for the operator. Tests want the
 /// opposite, and take this instead.
-#[cfg(test)]
+///
+/// Compiled unconditionally rather than under `#[cfg(test)]`, which would
+/// cover this crate's own tests and not the applications', which are where it
+/// is wanted.
 #[derive(Default)]
 pub struct QuietPlatform;
 
-#[cfg(test)]
 impl Platform for QuietPlatform {
     fn set_activity(&mut self, _activity: Activity) {}
 
@@ -191,8 +195,8 @@ pub struct SingleInstance(imp::Claim);
 /// Returns `None` when another copy already holds the claim, having first
 /// asked that copy to come to the front, so the launch the operator just made
 /// still puts the application in front of them.
-pub fn claim_single_instance() -> Option<SingleInstance> {
-    imp::claim_single_instance().map(SingleInstance)
+pub fn claim_single_instance(identity: &Identity) -> Option<SingleInstance> {
+    imp::claim_single_instance(identity).map(SingleInstance)
 }
 
 impl SingleInstance {
@@ -227,7 +231,7 @@ impl FileLock {
 
 /// Takes an exclusive lock on a file named after the application.
 #[cfg(not(target_os = "windows"))]
-fn lock_file_claim() -> Option<FileLock> {
+fn lock_file_claim(identity: &Identity) -> Option<FileLock> {
     use std::fs::OpenOptions;
 
     let directory = directories::BaseDirs::new()
@@ -237,7 +241,7 @@ fn lock_file_claim() -> Option<FileLock> {
         .write(true)
         .create(true)
         .truncate(false)
-        .open(directory.join(format!("{}.lock", crate::identity::PROCESS_NAME)))
+        .open(directory.join(format!("{}.lock", identity.process_name)))
         .ok()?;
     file.try_lock().ok()?;
     Some(FileLock { file })
@@ -270,32 +274,4 @@ pub fn open_path(path: &Path) -> io::Result<()> {
         let _ = child.wait();
     });
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Whichever platform this runs on has to produce a usable icon.
-    #[test]
-    fn the_platform_icon_loads() {
-        let icon = window_icon().expect("the application icon should be available");
-        assert!(icon.width > 0 && icon.height > 0);
-        assert_eq!(
-            icon.rgba.len(),
-            icon.width as usize * icon.height as usize * 4
-        );
-        assert!(
-            icon.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0),
-            "the icon should not be fully transparent"
-        );
-    }
-
-    /// The bundled copy has to stay decodable even where nothing reads it, so
-    /// a platform that starts needing it is not surprised at runtime.
-    #[test]
-    fn the_embedded_icon_decodes() {
-        let icon = embedded_icon().expect("the embedded icon should decode");
-        assert_eq!(icon.width, icon.height);
-    }
 }

@@ -36,8 +36,10 @@ running at <https://rssstv.kb10uy.dev/>.
   the behavioral reference.
 
 The libraries divide into a mode-independent core — `dsp`, `tone-tx`,
-`audio`, `rig` — and the crates implementing one mode, which carry that
-mode's name.
+`audio`, `rig`, and `shell` — and the crates implementing one mode, which
+carry that mode's name. `shell` is what an application is built out of before
+it knows which signal it carries: the window, the platform integration, the
+message lookup, and the log.
 `crates/sstv-rx` still holds the SSTV receive front end whole; the parts of it
 that are not specific to SSTV move down into the core as the second mode needs
 them.

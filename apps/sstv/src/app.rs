@@ -18,10 +18,13 @@ use jiff::{Timestamp, Zoned};
 
 use grayline_sstv_rx::SyncStart;
 
-use crate::{
-    error::AppError,
+use grayline_shell::{
     i18n::{I18n, Locale, owned},
     platform::{self, Activity, Platform},
+};
+
+use crate::{
+    error::AppError,
     storage::{
         bands::{BandDefinition, BandPlan},
         config::{Config, RigSettings, Settings, UI_SCALE_RANGE},
@@ -416,7 +419,7 @@ impl App {
         let (bands, bands_error) = BandPlan::load(paths.config_dir());
         Self {
             tab: Tab::default(),
-            i18n: I18n::new(settings.locale),
+            i18n: I18n::new(settings.locale, &crate::locales::CATALOG),
             audio,
             auto_mode: settings.auto_mode,
             rx_mode: settings.rx_mode,
@@ -574,7 +577,7 @@ impl App {
 
     pub fn select_locale(&mut self, locale: Locale) {
         if locale != self.i18n.locale() {
-            self.i18n = I18n::new(locale);
+            self.i18n = I18n::new(locale, &crate::locales::CATALOG);
         }
     }
 
@@ -870,12 +873,12 @@ impl App {
             .name("grayline-sstv-history".to_owned())
             .spawn(move || {
                 if let Err(error) = crate::storage::history::save(&directory, candidate, format) {
-                    crate::storage::log::note(&format!("failed to save receive history: {error}"));
+                    grayline_shell::log::note(&format!("failed to save receive history: {error}"));
                 }
             });
         match spawned {
             Ok(writer) => self.history_writers.push(writer),
-            Err(_) => crate::storage::log::note("failed to start the receive history writer"),
+            Err(_) => grayline_shell::log::note("failed to start the receive history writer"),
         }
     }
 
@@ -1281,7 +1284,7 @@ impl App {
         let Some(fault) = self.audio.take_capture_fault() else {
             return;
         };
-        crate::storage::log::note(&format!("capture stopped: {fault}"));
+        grayline_shell::log::note(&format!("capture stopped: {fault}"));
         self.audio.rescan();
         self.device_fault = Some(fault);
     }
@@ -1781,7 +1784,9 @@ fn manual_path() -> Option<PathBuf> {
         .ok()
         .and_then(|executable| Some(executable.parent()?.join("help").join("index.html")))
         .filter(|manual| manual.is_file());
-    beside.or_else(|| platform::manual_fallback().filter(|manual| manual.is_file()))
+    beside.or_else(|| {
+        platform::manual_fallback(&crate::identity::IDENTITY).filter(|manual| manual.is_file())
+    })
 }
 
 fn modes(support: fn(Mode) -> Support) -> Vec<Mode> {

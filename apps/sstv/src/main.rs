@@ -6,9 +6,8 @@ use egui::{FontData, FontDefinitions, FontFamily};
 
 mod app;
 mod error;
-mod i18n;
 mod identity;
-mod platform;
+mod locales;
 mod storage;
 mod ui;
 mod worker;
@@ -17,8 +16,9 @@ mod worker;
 mod test_util;
 
 use app::App;
-use platform::UI_FONTS;
-use storage::{log, paths};
+use grayline_shell::log;
+use grayline_shell::platform::{self, UI_FONTS};
+use storage::paths;
 use ui::{menu, view};
 
 /// Draws the interface with the platform's UI font.
@@ -112,18 +112,18 @@ const DEFAULT_WINDOW_SIZE: [f32; 2] = [1024.0, 768.0];
 const MONITOR_FRACTION: f32 = 0.92;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    platform::prepare_process();
+    platform::prepare_process(&identity::IDENTITY);
 
     // A second copy would fail to open the audio devices the first one holds,
     // which is harder to understand than not opening at all. The running copy
     // has already been asked to come forward by the time this returns.
-    let Some(instance) = platform::claim_single_instance() else {
+    let Some(instance) = platform::claim_single_instance(&identity::IDENTITY) else {
         return Ok(());
     };
 
     let paths = paths::AppPaths::discover()?;
     paths.initialize()?;
-    if let Err(error) = log::open(paths.log_file()) {
+    if let Err(error) = log::open(paths.log_file(), identity::DISPLAY_NAME) {
         eprintln!("could not open the log file: {error}");
     }
 
@@ -137,7 +137,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_app_id(APP_ID)
         .with_clamp_size_to_monitor_size(false)
         .with_inner_size(DEFAULT_WINDOW_SIZE);
-    match platform::window_icon() {
+    match platform::window_icon(&identity::IDENTITY) {
         Some(icon) => viewport = viewport.with_icon(icon),
         None => log::note("could not load the application icon; using the platform default"),
     }

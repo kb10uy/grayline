@@ -25,7 +25,7 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
         paths,
         config,
         settings,
-        Box::new(platform::QuietPlatform),
+        Box::new(grayline_shell::platform::QuietPlatform),
     );
     app.saved = app.settings();
     app

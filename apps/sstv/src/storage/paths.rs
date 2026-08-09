@@ -6,10 +6,9 @@ use std::{
 
 use directories::{BaseDirs, UserDirs};
 
-use crate::{
-    identity::{APP_DIRECTORY, PICTURES_DIRECTORY},
-    platform::FAMILY_DIRECTORY,
-};
+use grayline_shell::platform::FAMILY_DIRECTORY;
+
+use crate::identity::{APP_DIRECTORY, PICTURES_DIRECTORY};
 
 /// The settings file, named here because a test writes one directly.
 pub const CONFIG_FILE: &str = "config.toml";
