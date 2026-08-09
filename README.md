@@ -49,9 +49,11 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-[AGENTS.md](AGENTS.md) describes the full check set, the conventions the code
-follows, and where a new document belongs.
-
 ## License
 
 LGPL-3.0-or-later. See [LICENSE](LICENSE).
+
+## Special Thanks
+
+- [mm-open.org](http://mm-open.org)
+- *Mako* JE3HHT
