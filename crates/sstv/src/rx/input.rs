@@ -59,11 +59,7 @@ impl<'a> DemodulatedBlock<'a> {
             .zip(&self.sync_strength[offset..offset + count])
             .enumerate()
         {
-            if !frequency.is_finite()
-                || frequency < 0.0
-                || !sync.is_finite()
-                || !(0.0..=1.0).contains(&sync)
-            {
+            if !frequency.is_finite() || frequency < 0.0 || !sync.is_finite() || !(0.0..=1.0).contains(&sync) {
                 return Err(SstvError::InvalidDemodulatedSample {
                     offset: offset + relative,
                 });
@@ -155,11 +151,8 @@ impl SampleBuffer {
     }
 
     pub(super) fn append(&mut self, block: DemodulatedBlock<'_>, count: usize) {
-        self.frequency.extend(
-            block.frequency_hz[..count]
-                .iter()
-                .map(|hertz| store_frequency(*hertz)),
-        );
+        self.frequency
+            .extend(block.frequency_hz[..count].iter().map(|hertz| store_frequency(*hertz)));
         self.sync.extend(
             block.sync_strength[..count]
                 .iter()

@@ -33,14 +33,11 @@ impl TxEncoder {
     /// Validates `image` against `mode` and constructs a streaming encoder.
     pub fn new(mode: Mode, image: RgbImage) -> Result<Self, SstvError> {
         let spec = mode.spec();
-        if spec.encode_support() != Support::Supported
-            || mode.scan().is_empty()
-            || spec.raw_vis().is_none()
-        {
+        if spec.encode_support() != Support::Supported || mode.scan().is_empty() || spec.raw_vis().is_none() {
             return Err(SstvError::UnsupportedTxMode(mode));
         }
-        let expected = ImageSize::new(spec.width() as usize, spec.height() as usize)
-            .expect("mode dimensions are valid");
+        let expected =
+            ImageSize::new(spec.width() as usize, spec.height() as usize).expect("mode dimensions are valid");
         if image.size() != expected {
             return Err(SstvError::TxImageSizeMismatch {
                 expected,
@@ -65,18 +62,9 @@ impl TxEncoder {
         self.mode
     }
 
-    fn emit(
-        &mut self,
-        component: TxComponent,
-        frequency: Frequency,
-        duration_ps: u64,
-    ) -> TimedTone {
+    fn emit(&mut self, component: TxComponent, frequency: Frequency, duration_ps: u64) -> TimedTone {
         self.deadline_ps += duration_ps;
-        TimedTone::new(
-            component,
-            frequency,
-            TxInstant::from_picos(self.deadline_ps),
-        )
+        TimedTone::new(component, frequency, TxInstant::from_picos(self.deadline_ps))
     }
 
     fn next_vis(&mut self) -> Option<TimedTone> {
@@ -114,8 +102,7 @@ impl TxEncoder {
     }
 
     fn pixel_level(&self, channel: ScanChannel, row_offset: u8, x: usize) -> u8 {
-        let row =
-            self.unit * self.mode.spec().rows_per_raster_unit() as usize + row_offset as usize;
+        let row = self.unit * self.mode.spec().rows_per_raster_unit() as usize + row_offset as usize;
         let pixel = self.image.get(x, row).expect("validated image coordinates");
         match channel {
             ScanChannel::Red => pixel.r,
@@ -161,15 +148,11 @@ impl Iterator for TxEncoder {
                     self.segment_start_ps += duration_ps;
                     return Some(self.emit(segment.component(), frequency, duration_ps));
                 }
-                ScanContent::Pixels {
-                    channel,
-                    row_offset,
-                } => {
+                ScanContent::Pixels { channel, row_offset } => {
                     let width = self.image.size().width();
                     let x = self.pixel;
                     self.pixel += 1;
-                    self.deadline_ps =
-                        self.segment_start_ps + duration_ps * self.pixel as u64 / width as u64;
+                    self.deadline_ps = self.segment_start_ps + duration_ps * self.pixel as u64 / width as u64;
                     let level = self.pixel_level(channel, row_offset, x);
                     let tone = TimedTone::new(
                         segment.component(),
@@ -205,10 +188,7 @@ mod tests {
         assert_eq!(tones.len(), 13);
         assert_eq!(tones[0].frequency().as_hz(), 1900);
         assert_eq!(tones[1].until().as_picos(), 310_000_000_000);
-        let bits: Vec<_> = tones[4..12]
-            .iter()
-            .map(|tone| tone.frequency().as_hz())
-            .collect();
+        let bits: Vec<_> = tones[4..12].iter().map(|tone| tone.frequency().as_hz()).collect();
         assert_eq!(bits, [1300, 1300, 1100, 1100, 1300, 1100, 1300, 1100]);
         assert_eq!(tones[12].until().as_picos(), VIS_END_PS);
     }
@@ -287,11 +267,7 @@ mod tests {
     #[case(Mode::Pd180, 0, 754_240_000_000)]
     #[case(Mode::Pd240, 0, 1_000_000_000_000)]
     #[case(Mode::Pd290, 0, 937_280_000_000)]
-    fn first_line_has_exact_end(
-        #[case] mode: Mode,
-        #[case] initial_ps: u64,
-        #[case] period_ps: u64,
-    ) {
+    fn first_line_has_exact_end(#[case] mode: Mode, #[case] initial_ps: u64, #[case] period_ps: u64) {
         let width = mode.spec().width() as usize;
         let line_events = match mode.spec().family() {
             ModeFamily::Martin => 5 + 3 * width,
@@ -322,13 +298,12 @@ mod tests {
         );
         assert_eq!(martin[322], TxComponent::Porch);
 
-        let scottie: Vec<_> =
-            TxEncoder::new(Mode::Scottie1, image(Mode::Scottie1, Rgb8::default()))
-                .unwrap()
-                .skip(13)
-                .map(TimedTone::component)
-                .take(645)
-                .collect();
+        let scottie: Vec<_> = TxEncoder::new(Mode::Scottie1, image(Mode::Scottie1, Rgb8::default()))
+            .unwrap()
+            .skip(13)
+            .map(TimedTone::component)
+            .take(645)
+            .collect();
         assert_eq!(scottie[0], TxComponent::Sync);
         assert_eq!(scottie[1], TxComponent::Porch);
         assert_eq!(scottie[2], TxComponent::Green);
@@ -345,27 +320,15 @@ mod tests {
             .collect();
         assert_eq!(
             robot72[0..3],
-            [
-                TxComponent::Sync,
-                TxComponent::Porch,
-                TxComponent::Luminance
-            ]
+            [TxComponent::Sync, TxComponent::Porch, TxComponent::Luminance]
         );
         assert_eq!(
             robot72[322..325],
-            [
-                TxComponent::Porch,
-                TxComponent::Porch,
-                TxComponent::RedDifference
-            ]
+            [TxComponent::Porch, TxComponent::Porch, TxComponent::RedDifference]
         );
         assert_eq!(
             robot72[644..647],
-            [
-                TxComponent::Porch,
-                TxComponent::Porch,
-                TxComponent::BlueDifference
-            ]
+            [TxComponent::Porch, TxComponent::Porch, TxComponent::BlueDifference]
         );
 
         let pd: Vec<_> = TxEncoder::new(Mode::Pd50, image(Mode::Pd50, Rgb8::default()))
@@ -376,11 +339,7 @@ mod tests {
             .collect();
         assert_eq!(
             pd[0..3],
-            [
-                TxComponent::Sync,
-                TxComponent::Porch,
-                TxComponent::Luminance
-            ]
+            [TxComponent::Sync, TxComponent::Porch, TxComponent::Luminance]
         );
         assert_eq!(pd[322], TxComponent::RedDifference);
         assert_eq!(pd[642], TxComponent::BlueDifference);
@@ -399,10 +358,7 @@ mod tests {
         assert_eq!(tones[width + 2].frequency().as_hz(), 1500);
         assert_eq!(tones[width + 4].component(), TxComponent::RedDifference);
         assert_eq!(tones[line_events + width + 2].frequency().as_hz(), 2300);
-        assert_eq!(
-            tones[line_events + width + 4].component(),
-            TxComponent::BlueDifference
-        );
+        assert_eq!(tones[line_events + width + 4].component(), TxComponent::BlueDifference);
     }
 
     #[test]
@@ -470,10 +426,7 @@ mod tests {
             .skip(15)
             .take(320)
             .collect();
-        assert_eq!(
-            tones[0].until().as_picos(),
-            VIS_END_PS + 5_434_000_000 + 457_600_000
-        );
+        assert_eq!(tones[0].until().as_picos(), VIS_END_PS + 5_434_000_000 + 457_600_000);
         assert_eq!(tones[319].until().as_picos(), VIS_END_PS + 151_866_000_000);
     }
 }

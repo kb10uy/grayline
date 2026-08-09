@@ -1,6 +1,4 @@
-use grayline_audio::{
-    AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault,
-};
+use grayline_audio::{AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault};
 use grayline_sstv_rx::SyncStart;
 
 use crate::{
@@ -72,18 +70,10 @@ impl AudioState {
         };
         let device = preferred
             .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
-            .or_else(|| {
-                host.default_input_device()
-                    .filter(|device| devices.contains(device))
-            })
+            .or_else(|| host.default_input_device().filter(|device| devices.contains(device)))
             .or_else(|| devices.first().cloned());
         let output_device = preferred_output
-            .and_then(|name| {
-                output_devices
-                    .iter()
-                    .find(|device| device.name() == name)
-                    .cloned()
-            })
+            .and_then(|name| output_devices.iter().find(|device| device.name() == name).cloned())
             .or_else(|| {
                 host.default_output_device()
                     .filter(|device| output_devices.contains(device))
@@ -165,14 +155,8 @@ impl AudioState {
         self.output_device = Some(device);
     }
 
-    pub fn open_playback(
-        &self,
-        capacity_samples: usize,
-    ) -> Result<(Playback, PlaybackWriter), AppError> {
-        let device = self
-            .output_device
-            .as_ref()
-            .ok_or(AppError::NoOutputDevice)?;
+    pub fn open_playback(&self, capacity_samples: usize) -> Result<(Playback, PlaybackWriter), AppError> {
+        let device = self.output_device.as_ref().ok_or(AppError::NoOutputDevice)?;
         Ok(self.host.open_playback(device, capacity_samples)?)
     }
 
@@ -363,11 +347,7 @@ impl AudioState {
         if let Ok(devices) = self.host.output_devices() {
             self.output_devices = devices;
         }
-        if !self
-            .device
-            .as_ref()
-            .is_some_and(|device| self.devices.contains(device))
-        {
+        if !self.device.as_ref().is_some_and(|device| self.devices.contains(device)) {
             self.device = None;
         }
         if !self
@@ -420,10 +400,7 @@ impl TxState {
     }
 
     pub fn start_playback(&mut self) -> Result<(), AppError> {
-        self.playback
-            .as_ref()
-            .ok_or(AppError::PlaybackClosed)?
-            .play()?;
+        self.playback.as_ref().ok_or(AppError::PlaybackClosed)?.play()?;
         self.started = true;
         Ok(())
     }

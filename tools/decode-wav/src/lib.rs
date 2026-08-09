@@ -44,25 +44,17 @@ pub fn decode_file(input: &Path, output: &Path) -> Result<DecodeReport> {
     decode_file_with_options(input, output, DecodeOptions::default())
 }
 
-pub fn decode_file_with_options(
-    input: &Path,
-    output: &Path,
-    options: DecodeOptions,
-) -> Result<DecodeReport> {
+pub fn decode_file_with_options(input: &Path, output: &Path, options: DecodeOptions) -> Result<DecodeReport> {
     if options.pcm_packet_size == 0 {
         bail!("PCM packet size must be greater than zero");
     }
-    let mut reader = WavReader::open(input)
-        .with_context(|| format!("failed to open WAV file {}", input.display()))?;
+    let mut reader = WavReader::open(input).with_context(|| format!("failed to open WAV file {}", input.display()))?;
     let spec = reader.spec();
     if spec.channels == 0 {
         bail!("WAV file has no channels");
     }
     if spec.sample_rate < 6_000 {
-        bail!(
-            "WAV sample rate {} Hz is too low for SSTV",
-            spec.sample_rate
-        );
+        bail!("WAV sample rate {} Hz is too low for SSTV", spec.sample_rate);
     }
     let channels = spec.channels as usize;
     let max_samples = reader.duration() as usize;
@@ -134,11 +126,7 @@ fn finish_pipeline(pipeline: ReceivePipeline) -> Result<PipelineResult> {
     })
 }
 
-fn decode_samples<I>(
-    mut pipeline: ReceivePipeline,
-    samples: I,
-    packet_size: usize,
-) -> Result<PipelineResult>
+fn decode_samples<I>(mut pipeline: ReceivePipeline, samples: I, packet_size: usize) -> Result<PipelineResult>
 where
     I: Iterator<Item = Result<f32>>,
 {
@@ -163,12 +151,8 @@ where
 
 fn save_image(image: &RgbImage, path: &Path) -> Result<()> {
     let size = image.size();
-    let output = image::RgbImage::from_raw(
-        size.width() as u32,
-        size.height() as u32,
-        image.to_rgb_bytes(),
-    )
-    .context("decoded image dimensions are invalid")?;
+    let output = image::RgbImage::from_raw(size.width() as u32, size.height() as u32, image.to_rgb_bytes())
+        .context("decoded image dimensions are invalid")?;
     output
         .save(path)
         .with_context(|| format!("failed to save image {}", path.display()))
@@ -189,8 +173,7 @@ mod tests {
     #[test]
     fn packet_sizes_preserve_stereo_wav_decode() {
         let mode = Mode::Robot36;
-        let size =
-            ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+        let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
         let source = RgbImage::new(size, Rgb8::new(80, 140, 200));
         let sample_rate = 8_000_u32;
         let unique = format!("decode-wav-{}", std::process::id());
@@ -213,9 +196,7 @@ mod tests {
                 let sample = (phase.sin() * 24_000.0) as i16;
                 writer.write_sample(sample).unwrap();
                 writer.write_sample(0_i16).unwrap();
-                phase = (phase
-                    + TAU * f64::from(tone.frequency().as_hz()) / f64::from(sample_rate))
-                .rem_euclid(TAU);
+                phase = (phase + TAU * f64::from(tone.frequency().as_hz()) / f64::from(sample_rate)).rem_euclid(TAU);
                 written += 1;
             }
         }
@@ -236,14 +217,7 @@ mod tests {
             write_tone(1_900.0, 0.022);
             for symbol in [0x2a_u8, 0x2a, 0x2c, 0x11, 0x28, 0x29, 0x33, 0x01, 0x25] {
                 for bit in 0..6 {
-                    write_tone(
-                        if symbol & (1 << bit) == 0 {
-                            2_100.0
-                        } else {
-                            1_900.0
-                        },
-                        0.022,
-                    );
+                    write_tone(if symbol & (1 << bit) == 0 { 2_100.0 } else { 1_900.0 }, 0.022);
                 }
             }
             write_tone(2_100.0, 0.1);

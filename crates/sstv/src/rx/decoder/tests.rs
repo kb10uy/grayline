@@ -27,11 +27,7 @@ fn band_image(mode: Mode) -> RgbImage {
         // Two-row bands keep every chrominance pair inside one colour, so
         // subsampled modes stay exactly reproducible.
         let band = (index / width / 2) as u32;
-        *pixel = Rgb8::new(
-            (band * 7 % 251) as u8,
-            (band * 29 % 241) as u8,
-            (band * 53 % 239) as u8,
-        );
+        *pixel = Rgb8::new((band * 7 % 251) as u8, (band * 29 % 241) as u8, (band * 53 % 239) as u8);
     }
     image
 }
@@ -49,8 +45,7 @@ fn sampled_image_body(mode: Mode, image: RgbImage, padding: usize) -> (Vec<f32>,
     let mut sync = vec![0.0; padding];
     for tone in TxEncoder::new(mode, image).unwrap().skip(13) {
         let relative_end = tone.until().as_picos() - VIS_END_PS;
-        let end_sample =
-            SstvDuration::from_picos(relative_end).to_samples_ceil(SAMPLE_RATE) as usize;
+        let end_sample = SstvDuration::from_picos(relative_end).to_samples_ceil(SAMPLE_RATE) as usize;
         let end = padding + end_sample;
         frequency.resize(end, tone.frequency().as_hz() as f32);
         sync.resize(
@@ -83,8 +78,7 @@ fn mmsstv_martin2_golden(padding: usize, sample_rate_hz: u32) -> (Vec<f32>, Vec<
         for (start_ps, end_ps, value, is_sync) in SEGMENTS {
             let edge = |offset_ps| {
                 padding
-                    + SstvDuration::from_picos(unit * PERIOD_PS + offset_ps)
-                        .to_samples_ceil(sample_rate_hz) as usize
+                    + SstvDuration::from_picos(unit * PERIOD_PS + offset_ps).to_samples_ceil(sample_rate_hz) as usize
             };
             let range = edge(start_ps)..edge(end_ps);
             frequency[range.clone()].fill(value);
@@ -96,12 +90,7 @@ fn mmsstv_martin2_golden(padding: usize, sample_rate_hz: u32) -> (Vec<f32>, Vec<
     (frequency, sync)
 }
 
-fn decode(
-    mode: Mode,
-    frequency: &[f32],
-    sync: &[f32],
-    chunks: &[usize],
-) -> (RgbImage, Vec<usize>, u64) {
+fn decode(mode: Mode, frequency: &[f32], sync: &[f32], chunks: &[usize]) -> (RgbImage, Vec<usize>, u64) {
     let absolute_start = 40_000;
     let mut decoder = RxDecoder::new(mode, SAMPLE_RATE).unwrap();
     let mut offset = 0;
@@ -156,10 +145,7 @@ fn synthetic_tx_body_decodes_each_family(#[case] mode: Mode) {
     let padding = 937;
     let (frequency, sync) = sampled_body(mode, padding);
     let (image, rows, epoch) = decode(mode, &frequency, &sync, &[17, 4093, 1, 701]);
-    assert_eq!(
-        rows,
-        (0..mode.spec().active_rows() as usize).collect::<Vec<_>>()
-    );
+    assert_eq!(rows, (0..mode.spec().active_rows() as usize).collect::<Vec<_>>());
     assert_eq!(image.size().width(), mode.spec().width() as usize);
     assert_eq!(image.size().height(), mode.spec().height() as usize);
     let expected_epoch = 40_000 + padding as u64 + if mode == Mode::Scottie2 { 90 } else { 0 };
@@ -174,10 +160,7 @@ fn synthetic_tx_body_decodes_each_family(#[case] mode: Mode) {
 #[case(Mode::Robot72, true)]
 #[case(Mode::Pd50, true)]
 #[case(Mode::Robot36, true)]
-fn non_uniform_image_survives_a_transmit_receive_round_trip(
-    #[case] mode: Mode,
-    #[case] subsampled: bool,
-) {
+fn non_uniform_image_survives_a_transmit_receive_round_trip(#[case] mode: Mode, #[case] subsampled: bool) {
     let source = band_image(mode);
     let (frequency, sync) = sampled_image_body(mode, source.clone(), 512);
     let (image, _, _) = decode(mode, &frequency, &sync, &[usize::MAX]);
@@ -185,8 +168,7 @@ fn non_uniform_image_survives_a_transmit_receive_round_trip(
     for row in 0..mode.spec().active_rows() as usize {
         // Each even alternating row still uses one chrominance plane from
         // the preceding pair, exactly as in the reference decoder.
-        if mode.spec().raster_organization() == RasterOrganization::AlternatingYCrCb && row % 2 == 0
-        {
+        if mode.spec().raster_organization() == RasterOrganization::AlternatingYCrCb && row % 2 == 0 {
             continue;
         }
         // Component edges are left out because the acquired sample rate
@@ -206,10 +188,7 @@ fn non_uniform_image_survives_a_transmit_receive_round_trip(
 #[rstest]
 #[case(Mode::Martin1, 3)]
 #[case(Mode::Martin2, 2)]
-fn pixel_window_averages_the_expanded_transmitted_interval(
-    #[case] mode: Mode,
-    #[case] expected: u64,
-) {
+fn pixel_window_averages_the_expanded_transmitted_interval(#[case] mode: Mode, #[case] expected: u64) {
     let decoder = RxDecoder::new(mode, SAMPLE_RATE).unwrap();
     let clock = RasterClock::from_estimate(0.0, f64::from(SAMPLE_RATE)).unwrap();
     let segment = decoder.segment(ScanChannel::Green, 0).unwrap();
@@ -245,10 +224,7 @@ fn normal_decoding_advances_the_image_revision() {
             previous_revision = decoder.image_revision();
         }
     }
-    assert_eq!(
-        decoder.image_revision(),
-        Mode::Robot36.spec().active_rows() as u64
-    );
+    assert_eq!(decoder.image_revision(), Mode::Robot36.spec().active_rows() as u64);
 }
 
 #[test]
@@ -340,24 +316,14 @@ proptest! {
 #[case(Mode::Pd180, 183_040_000_000)]
 #[case(Mode::Pd240, 244_480_000_000)]
 #[case(Mode::Pd290, 228_800_000_000)]
-fn all_supported_profiles_construct_with_exact_component_time(
-    #[case] mode: Mode,
-    #[case] component_ps: u64,
-) {
+fn all_supported_profiles_construct_with_exact_component_time(#[case] mode: Mode, #[case] component_ps: u64) {
     let decoder = RxDecoder::new(mode, SAMPLE_RATE).unwrap();
     assert_eq!(
-        decoder
-            .profile
-            .pixels()
-            .last()
-            .map(|segment| segment.duration_ps),
+        decoder.profile.pixels().last().map(|segment| segment.duration_ps),
         Some(component_ps)
     );
     assert_eq!(decoder.image().size().width(), mode.spec().width() as usize);
-    assert_eq!(
-        decoder.image().size().height(),
-        mode.spec().height() as usize
-    );
+    assert_eq!(decoder.image().size().height(), mode.spec().height() as usize);
 }
 
 #[test]
@@ -415,9 +381,7 @@ fn unsuccessful_acquisition_window_is_consumed_without_error() {
     let frequency = vec![1500.0; count];
     let sync = vec![0.0; count];
     let mut decoder = decoder;
-    let result = decoder
-        .process(DemodulatedBlock::new(0, &frequency, &sync))
-        .unwrap();
+    let result = decoder.process(DemodulatedBlock::new(0, &frequency, &sync)).unwrap();
     assert_eq!(result.consumed(), count);
     assert_eq!(result.event(), None);
     assert_eq!(decoder.state(), RxState::Acquiring);
@@ -435,10 +399,7 @@ fn process_errors_report_the_consumed_prefix() {
         .process(DemodulatedBlock::new(0, &frequency, &sync))
         .unwrap_err();
     assert_eq!(error.consumed(), count);
-    assert_eq!(
-        error.error(),
-        SstvError::InvalidDemodulatedSample { offset: count }
-    );
+    assert_eq!(error.error(), SstvError::InvalidDemodulatedSample { offset: count });
 }
 
 #[test]
@@ -491,10 +452,7 @@ fn first_row_is_decoded_from_the_startup_buffer(#[case] mode: Mode) {
 #[case(Mode::Scottie2, 90)]
 #[case(Mode::Robot36, 0)]
 #[case(Mode::Pd50, 0)]
-fn a_header_start_decodes_before_any_sync_pulse_is_buffered(
-    #[case] mode: Mode,
-    #[case] leading: u64,
-) {
+fn a_header_start_decodes_before_any_sync_pulse_is_buffered(#[case] mode: Mode, #[case] leading: u64) {
     let (frequency, sync) = sampled_body(mode, 0);
     let absolute_start = 40_000_u64;
     let mut decoder = RxDecoder::with_config(
@@ -507,11 +465,7 @@ fn a_header_start_decodes_before_any_sync_pulse_is_buffered(
     )
     .unwrap();
     let result = decoder
-        .process(DemodulatedBlock::new(
-            absolute_start,
-            &frequency[..16],
-            &sync[..16],
-        ))
+        .process(DemodulatedBlock::new(absolute_start, &frequency[..16], &sync[..16]))
         .unwrap();
     assert_eq!(
         result.event(),
@@ -583,12 +537,7 @@ fn live_synchronization_corrects_a_late_header_start() {
     );
 }
 
-fn drive_configured(
-    mode: Mode,
-    frequency: &[f32],
-    sync: &[f32],
-    config: RxConfig,
-) -> (RxDecoder, Vec<RxEvent>) {
+fn drive_configured(mode: Mode, frequency: &[f32], sync: &[f32], config: RxConfig) -> (RxDecoder, Vec<RxEvent>) {
     let absolute_start = 70_000;
     let mut decoder = RxDecoder::with_config(mode, SAMPLE_RATE, config).unwrap();
     let mut offset = 0;
@@ -655,11 +604,7 @@ fn staging_overflow_is_typed_and_does_not_grow() {
     .unwrap();
     assert_eq!(
         decoder
-            .process(DemodulatedBlock::new(
-                0,
-                &[1900.0, 1900.0, 1900.0],
-                &[0.0, 0.0, 0.0]
-            ))
+            .process(DemodulatedBlock::new(0, &[1900.0, 1900.0, 1900.0], &[0.0, 0.0, 0.0]))
             .unwrap_err()
             .error(),
         SstvError::StagingCapacityExceeded { max_samples: 2 }
@@ -696,11 +641,7 @@ fn completed_decoder_accepts_a_contiguous_refinement_tail() {
 }
 
 /// Displaces whole sync pulses in both streams, as a timing slip does.
-fn shift_sync(
-    frequency: &[f32],
-    sync: &[f32],
-    shift_for_run: impl Fn(usize) -> Option<usize>,
-) -> (Vec<f32>, Vec<f32>) {
+fn shift_sync(frequency: &[f32], sync: &[f32], shift_for_run: impl Fn(usize) -> Option<usize>) -> (Vec<f32>, Vec<f32>) {
     let mut shifted_frequency = frequency.to_vec();
     let mut shifted_sync = vec![0.0; sync.len()];
     let mut index = 0;
@@ -717,16 +658,10 @@ fn shift_sync(
         if let Some(displacement) = shift_for_run(run) {
             let destination = start + displacement;
             let count = (index - start).min(sync.len().saturating_sub(destination));
-            shifted_sync[destination..destination + count]
-                .copy_from_slice(&sync[start..start + count]);
-            let filler = if start == 0 {
-                1900.0
-            } else {
-                frequency[start - 1]
-            };
+            shifted_sync[destination..destination + count].copy_from_slice(&sync[start..start + count]);
+            let filler = if start == 0 { 1900.0 } else { frequency[start - 1] };
             shifted_frequency[start..destination.min(frequency.len())].fill(filler);
-            shifted_frequency[destination..destination + count]
-                .copy_from_slice(&frequency[start..start + count]);
+            shifted_frequency[destination..destination + count].copy_from_slice(&frequency[start..start + count]);
         }
         run += 1;
     }
@@ -736,8 +671,7 @@ fn shift_sync(
 #[test]
 fn live_phase_correction_is_stable_and_held_off() {
     let (frequency, sync) = sampled_body(Mode::Martin2, 311);
-    let (mut frequency, mut shifted) =
-        shift_sync(&frequency, &sync, |run| Some(if run < 6 { 0 } else { 4 }));
+    let (mut frequency, mut shifted) = shift_sync(&frequency, &sync, |run| Some(if run < 6 { 0 } else { 4 }));
     frequency.resize(frequency.len() + 64, 1900.0);
     shifted.resize(frequency.len(), 0.0);
     let (decoder, events) = drive_configured(
@@ -774,8 +708,7 @@ fn live_phase_correction_is_stable_and_held_off() {
 #[test]
 fn a_backward_phase_correction_still_reaches_its_unit() {
     let (frequency, sync) = sampled_body(Mode::Scottie2, 311);
-    let (frequency, sync) =
-        shift_sync(&frequency, &sync, |run| Some(if run < 12 { 24 } else { 0 }));
+    let (frequency, sync) = shift_sync(&frequency, &sync, |run| Some(if run < 12 { 24 } else { 0 }));
     let (decoder, events) = drive_configured(
         Mode::Scottie2,
         &frequency,
@@ -1014,14 +947,8 @@ fn robot36_tcs_classification_overrides_parity_and_initial_selector() {
     input.append(block, frequency.len());
     decoder.input = Some(input);
     decoder.decode.clock = Some(RasterClock::from_estimate(0.0, SAMPLE_RATE as f64).unwrap());
-    assert_eq!(
-        decoder.robot_selector_at(0).unwrap(),
-        Some(RobotSelector::Cb)
-    );
-    assert_eq!(
-        decoder.robot_selector_at(1).unwrap(),
-        Some(RobotSelector::Cr)
-    );
+    assert_eq!(decoder.robot_selector_at(0).unwrap(), Some(RobotSelector::Cb));
+    assert_eq!(decoder.robot_selector_at(1).unwrap(), Some(RobotSelector::Cr));
     let (_, rows, _) = decode(Mode::Robot36, &frequency, &sync, &[37, 1009, 3]);
     assert_eq!(
         rows,
@@ -1051,9 +978,8 @@ fn fill_robot36_selector(frequency: &mut [f32], units: impl Iterator<Item = u64>
     let (start_ps, end_ps) = profile.selector_window_ps().unwrap();
     for unit in units {
         let unit_start_picos = profile.period_ps * unit;
-        let sample = |offset_ps: u64| {
-            SstvDuration::from_picos(unit_start_picos + offset_ps).to_samples(SAMPLE_RATE) as usize
-        };
+        let sample =
+            |offset_ps: u64| SstvDuration::from_picos(unit_start_picos + offset_ps).to_samples(SAMPLE_RATE) as usize;
         let (start, end) = (sample(start_ps), sample(end_ps));
         if end <= frequency.len() {
             frequency[start..end].fill(value);
@@ -1070,10 +996,7 @@ fn robot36_delivers_every_active_row_when_the_selector_never_alternates() {
         rows,
         (0..Mode::Robot36.spec().active_rows() as usize).collect::<Vec<_>>()
     );
-    assert_eq!(
-        image.get(0, Mode::Robot36.spec().active_rows() as usize),
-        None
-    );
+    assert_eq!(image.get(0, Mode::Robot36.spec().active_rows() as usize), None);
 }
 
 #[test]
@@ -1117,9 +1040,7 @@ fn config(live_slant: bool, samples: usize) -> RxConfig {
         live_slant,
         auto_stop: false,
         sync_detector_delay: crate::time::SstvDuration::ZERO,
-        staging: Staging::Memory {
-            max_samples: samples,
-        },
+        staging: Staging::Memory { max_samples: samples },
     }
 }
 
@@ -1142,8 +1063,7 @@ fn live_tracking_corrects_a_mistimed_raster_before_completion() {
     let expected = source_image(mode);
     let (frequency, sync) = mistimed_body(mode, expected.clone(), 4_000.0);
 
-    let (tracked, events) =
-        drive_configured(mode, &frequency, &sync, config(true, frequency.len()));
+    let (tracked, events) = drive_configured(mode, &frequency, &sync, config(true, frequency.len()));
     let (untracked, _) = drive_configured(mode, &frequency, &sync, config(false, frequency.len()));
 
     let first_adjustment = events.iter().find_map(|event| match event {
@@ -1203,8 +1123,7 @@ fn unacquirable_noise_does_not_exhaust_staging() {
 #[case(Mode::Robot36)]
 fn every_row_is_delivered_once_across_live_slant_refits(#[case] mode: Mode) {
     let (frequency, sync) = mistimed_body(mode, source_image(mode), 4_000.0);
-    let (decoder, events) =
-        drive_configured(mode, &frequency, &sync, config(true, frequency.len()));
+    let (decoder, events) = drive_configured(mode, &frequency, &sync, config(true, frequency.len()));
 
     assert!(
         events
@@ -1231,8 +1150,7 @@ fn every_row_is_delivered_once_across_live_slant_refits(#[case] mode: Mode) {
 fn a_reception_starts_on_the_configured_sample_rate() {
     let mode = Mode::Martin2;
     let (frequency, sync) = mistimed_body(mode, source_image(mode), 4_000.0);
-    let mut decoder =
-        RxDecoder::with_config(mode, SAMPLE_RATE, config(true, frequency.len())).unwrap();
+    let mut decoder = RxDecoder::with_config(mode, SAMPLE_RATE, config(true, frequency.len())).unwrap();
     let mut offset = 0;
     while decoder.effective_sample_rate_hz().is_none() {
         let result = decoder
@@ -1245,10 +1163,7 @@ fn a_reception_starts_on_the_configured_sample_rate() {
         offset += result.consumed();
         assert!(result.consumed() != 0 || result.event().is_some());
     }
-    assert_eq!(
-        decoder.effective_sample_rate_hz(),
-        Some(f64::from(SAMPLE_RATE))
-    );
+    assert_eq!(decoder.effective_sample_rate_hz(), Some(f64::from(SAMPLE_RATE)));
 }
 
 /// Tracking must not disturb a reception whose clock already matches.

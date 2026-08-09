@@ -121,17 +121,9 @@ fn acquire_inner(
         };
         let envelope_center = input.first() + relative;
         centers.push(
-            refine_center(
-                input,
-                profile,
-                envelope_center,
-                sample_rate_hz,
-                sync_detector_delay,
-            )
-            .unwrap_or_else(|| {
-                (envelope_center as f64
-                    - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay))
-                .max(0.0) as u64
+            refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay).unwrap_or_else(|| {
+                (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay)).max(0.0)
+                    as u64
             }),
         );
     }
@@ -154,11 +146,7 @@ fn acquire_inner(
                 .into_iter()
                 .flatten()
                 .filter_map(|index| remaining.get(index).copied())
-                .min_by(|left, right| {
-                    (*left as f64 - target)
-                        .abs()
-                        .total_cmp(&(*right as f64 - target).abs())
-                });
+                .min_by(|left, right| (*left as f64 - target).abs().total_cmp(&(*right as f64 - target).abs()));
             let Some(found) = found else {
                 break;
             };
@@ -184,14 +172,12 @@ fn acquire_inner(
         };
         let candidate = (sequence, slope, residual_squared);
         if best.as_ref().is_none_or(|current| {
-            candidate.0.len() > current.0.len()
-                || (candidate.0.len() == current.0.len() && candidate.2 < current.2)
+            candidate.0.len() > current.0.len() || (candidate.0.len() == current.0.len() && candidate.2 < current.2)
         }) {
             best = Some(candidate);
         }
     }
-    let (sequence, fitted_samples_per_period, residual_squared) =
-        best.ok_or(SstvError::RasterNotAcquired)?;
+    let (sequence, fitted_samples_per_period, residual_squared) = best.ok_or(SstvError::RasterNotAcquired)?;
     let samples_per_period = if options.startup {
         nominal
     } else {
@@ -216,9 +202,7 @@ fn acquire_inner(
         let mean_offset = sequence[1..]
             .iter()
             .enumerate()
-            .map(|(step, sample)| {
-                (*sample - sequence[0]) as f64 - samples_per_period * (step + 1) as f64
-            })
+            .map(|(step, sample)| (*sample - sequence[0]) as f64 - samples_per_period * (step + 1) as f64)
             .sum::<f64>()
             / steps;
         sequence[0] as f64 + mean_offset
@@ -248,9 +232,7 @@ mod tests {
         }
         let epoch = 400.0;
         for unit in 0..15 {
-            let center = epoch
-                + effective_rate * profile.sync_center_ps as f64 / 1.0e12
-                + period * unit as f64;
+            let center = epoch + effective_rate * profile.sync_center_ps as f64 / 1.0e12 + period * unit as f64;
             sync[center as usize] = 1.0;
         }
         let block = DemodulatedBlock::new(0, &frequency, &sync);
@@ -286,11 +268,7 @@ mod tests {
         let last_protocol = profile.period_ps * 255 + profile.sync_center_ps;
         let fitted = clock.position_at(last_protocol).unwrap();
         let expected = epoch + f64::from(sample_rate) * last_protocol as f64 / 1.0e12;
-        assert!(
-            (fitted - expected).abs() < 1.0,
-            "drift={}",
-            fitted - expected
-        );
+        assert!((fitted - expected).abs() < 1.0, "drift={}", fitted - expected);
     }
 
     #[test]
@@ -323,9 +301,7 @@ mod tests {
         let period = profile.period_ps as f64 * f64::from(physical_rate) / 1.0e12;
         let epoch = 400.0;
         let center = |unit: u64| {
-            epoch
-                + f64::from(physical_rate) * profile.sync_center_ps as f64 / 1.0e12
-                + period * unit as f64
+            epoch + f64::from(physical_rate) * profile.sync_center_ps as f64 / 1.0e12 + period * unit as f64
         };
         let mut sync = vec![0.0; count];
         for unit in 0..STARTUP_PERIODS {

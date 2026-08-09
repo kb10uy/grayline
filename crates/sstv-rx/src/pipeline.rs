@@ -96,20 +96,12 @@ impl ReceivePipeline {
     ///
     /// `on_event` hears every decoder event in order, for a caller that
     /// traces or counts them; one that does not passes `|_| {}`.
-    pub fn process(
-        &mut self,
-        samples: &[f32],
-        on_event: impl FnMut(&RxEvent),
-    ) -> Result<(), PipelineError> {
+    pub fn process(&mut self, samples: &[f32], on_event: impl FnMut(&RxEvent)) -> Result<(), PipelineError> {
         let chunk = self.demodulator.process(samples)?;
         self.feed(&chunk, on_event)
     }
 
-    fn feed(
-        &mut self,
-        chunk: &DemodulatedChunk,
-        mut on_event: impl FnMut(&RxEvent),
-    ) -> Result<(), PipelineError> {
+    fn feed(&mut self, chunk: &DemodulatedChunk, mut on_event: impl FnMut(&RxEvent)) -> Result<(), PipelineError> {
         self.fsk_ids.extend_from_slice(chunk.fsk_ids());
         if let Some(mode) = chunk.detected_mode() {
             self.decoder = Some(
@@ -117,9 +109,7 @@ impl ReceivePipeline {
                     mode,
                     self.demodulator.sample_rate_hz(),
                     RxConfig {
-                        raster_start: chunk
-                            .detection()
-                            .map_or(RasterStart::Acquire, Detection::raster_start),
+                        raster_start: chunk.detection().map_or(RasterStart::Acquire, Detection::raster_start),
                         live_sync: true,
                         live_slant: self.options.live_slant,
                         auto_stop: false,
@@ -135,10 +125,7 @@ impl ReceivePipeline {
         if chunk.frequency_hz().is_empty() {
             return Ok(());
         }
-        let decoder = self
-            .decoder
-            .as_mut()
-            .ok_or(PipelineError::DataBeforeDetection)?;
+        let decoder = self.decoder.as_mut().ok_or(PipelineError::DataBeforeDetection)?;
         let mut offset = 0;
         while offset < chunk.frequency_hz().len() {
             let sample = chunk.first_sample() + offset as u64;
@@ -152,12 +139,12 @@ impl ReceivePipeline {
                 RxState::Stopped { .. } => break,
                 _ => {}
             }
-            let processed = decoder.process(chunk.block_from(offset)).map_err(|error| {
-                PipelineError::Decode {
+            let processed = decoder
+                .process(chunk.block_from(offset))
+                .map_err(|error| PipelineError::Decode {
                     sample: sample + error.consumed() as u64,
                     source: error.error(),
-                }
-            })?;
+                })?;
             if let Some(event) = processed.event() {
                 on_event(&event);
             }

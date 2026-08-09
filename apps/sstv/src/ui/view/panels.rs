@@ -99,8 +99,7 @@ pub(super) fn tuning_row(ui: &mut Ui, app: &mut App) {
             });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            let line_height =
-                ui.fonts_mut(|fonts| fonts.row_height(&egui::FontId::proportional(SMALL)));
+            let line_height = ui.fonts_mut(|fonts| fonts.row_height(&egui::FontId::proportional(SMALL)));
             let height = (line_height * 2.0 + ui.spacing().item_spacing.y).ceil();
             let step = ui.spacing().interact_size.y * 1.6;
             let gaps = ui.spacing().item_spacing.x * 2.0;
@@ -111,14 +110,10 @@ pub(super) fn tuning_row(ui: &mut Ui, app: &mut App) {
             if ui.add_enabled(down.is_some(), back).clicked() {
                 stepped = -1;
             }
-            ui.allocate_ui_with_layout(
-                egui::vec2(width, height),
-                Layout::top_down(Align::Center),
-                |ui| {
-                    ui.label(RichText::new(mode).size(SMALL));
-                    ui.label(RichText::new(readout).size(SMALL));
-                },
-            );
+            ui.allocate_ui_with_layout(egui::vec2(width, height), Layout::top_down(Align::Center), |ui| {
+                ui.label(RichText::new(mode).size(SMALL));
+                ui.label(RichText::new(readout).size(SMALL));
+            });
             let forward = egui::Button::new("+").min_size([step, height].into());
             if ui.add_enabled(up.is_some(), forward).clicked() {
                 stepped = 1;
@@ -140,8 +135,7 @@ pub(super) fn frequency_readout(app: &App) -> String {
     // Formatted here rather than by the message, because the message would
     // group the digits by locale and a frequency is read as one number.
     let megahertz = format!("{:.3}", reading.frequency_hz as f64 / 1_000_000.0);
-    app.i18n
-        .text_with("radio-frequency", &[("frequency", arg(&megahertz))])
+    app.i18n.text_with("radio-frequency", &[("frequency", arg(&megahertz))])
 }
 
 /// The controls for whichever half of the application is in front.
@@ -170,8 +164,7 @@ pub(super) fn tab_controls(ui: &mut Ui, app: &mut App) {
     ui.add_space(12.0);
     let spacing = ui.spacing().item_spacing.y + ui.spacing().interact_size.y;
     let signal_controls_height =
-        (ui.fonts_mut(|fonts| fonts.row_height(&egui::FontId::proportional(LABEL))) + spacing)
-            .ceil();
+        (ui.fonts_mut(|fonts| fonts.row_height(&egui::FontId::proportional(LABEL))) + spacing).ceil();
     match app.tab {
         Tab::Receive => {
             heading(ui, &app.i18n.text("section-dsp"));
@@ -204,11 +197,7 @@ pub(super) fn section(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui)) 
 /// worked the same way on the same row for the same reason.
 pub(super) fn rx_state(ui: &mut Ui, app: &mut App) {
     let active = app.audio.snapshot().progress.is_active();
-    let fill = if active {
-        colors::RX_ACTIVE
-    } else {
-        colors::RX_IDLE
-    };
+    let fill = if active { colors::RX_ACTIVE } else { colors::RX_IDLE };
     let hint = app.i18n.text("rx-reset-hint");
     let bar = ui.add(ProgressBar::new(1.0).fill(fill));
     // A bar carries no sign that it can be clicked, so the pointer and the
@@ -230,11 +219,7 @@ pub(super) fn rx_state(ui: &mut Ui, app: &mut App) {
 /// receive indicator is: the bar says whether the radio is doing anything.
 pub(super) fn tx_level(ui: &mut Ui, app: &mut App) {
     let transmitting = app.tx_snapshot.phase.is_active();
-    let color = if transmitting {
-        colors::TX_LEVEL
-    } else {
-        Color32::WHITE
-    };
+    let color = if transmitting { colors::TX_LEVEL } else { Color32::WHITE };
     let bar = ui.add(ProgressBar::new(app.tx_volume).fill(color));
     let dragged = bar.interact(egui::Sense::click_and_drag());
     let rect = dragged.rect;
@@ -356,8 +341,7 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
         // moves with every contact.
         field_label(ui, &sent_label);
         let field_width = (fields - gap) / 2.0;
-        let report =
-            ui.add(egui::TextEdit::singleline(&mut app.qso.rsv).desired_width(field_width));
+        let report = ui.add(egui::TextEdit::singleline(&mut app.qso.rsv).desired_width(field_width));
         let serial = ui
             .add_enabled_ui(contest, |ui| {
                 ui.add(egui::TextEdit::singleline(&mut app.qso.number).desired_width(field_width))
@@ -374,16 +358,10 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
         let increment = RichText::new(app.i18n.text("qso-nr-increment")).size(SMALL);
         let reset = RichText::new(app.i18n.text("qso-nr-reset")).size(SMALL);
         ui.add_enabled_ui(contest, |ui| {
-            if ui
-                .add_sized([width, height], egui::Button::new(increment))
-                .clicked()
-            {
+            if ui.add_sized([width, height], egui::Button::new(increment)).clicked() {
                 app.increment_number();
             }
-            if ui
-                .add_sized([width, height], egui::Button::new(reset))
-                .clicked()
-            {
+            if ui.add_sized([width, height], egui::Button::new(reset)).clicked() {
                 app.reset_number();
             }
         });

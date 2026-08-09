@@ -26,9 +26,7 @@ pub(super) fn interpolate(source: &str, variables: &Variables) -> Result<String,
             continue;
         };
         let Some(end) = expression.find('}') else {
-            return Err(TemplateError::Schema(
-                "unterminated variable interpolation".into(),
-            ));
+            return Err(TemplateError::Schema("unterminated variable interpolation".into()));
         };
         let reference = Reference::parse(&expression[..end])?;
         let value = variables
@@ -89,9 +87,7 @@ impl<'a> Reference<'a> {
     fn parse(expression: &'a str) -> Result<Self, TemplateError> {
         let (name, format) = Self::split(expression);
         if !valid_variable_name(name) {
-            return Err(TemplateError::Schema(format!(
-                "invalid variable name `{name}`"
-            )));
+            return Err(TemplateError::Schema(format!("invalid variable name `{name}`")));
         }
         if format.is_some_and(str::is_empty) {
             return Err(TemplateError::VariableFormat {
@@ -117,11 +113,9 @@ impl<'a> Reference<'a> {
         match (value, self.format) {
             (VariableValue::Timestamp(zoned), format) => {
                 let format = format.unwrap_or(DEFAULT_TIMESTAMP_FORMAT);
-                let formatted = strtime::format(format, zoned).map_err(|error| {
-                    TemplateError::VariableFormat {
-                        name: self.name.to_owned(),
-                        message: error.to_string(),
-                    }
+                let formatted = strtime::format(format, zoned).map_err(|error| TemplateError::VariableFormat {
+                    name: self.name.to_owned(),
+                    message: error.to_string(),
                 })?;
                 output.push_str(&formatted);
             }

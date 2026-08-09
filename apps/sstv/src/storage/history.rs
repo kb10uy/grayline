@@ -60,11 +60,7 @@ impl HistoryFormat {
     }
 }
 
-pub fn save(
-    directory: &Path,
-    candidate: HistoryCandidate,
-    format: HistoryFormat,
-) -> Result<PathBuf, String> {
+pub fn save(directory: &Path, candidate: HistoryCandidate, format: HistoryFormat) -> Result<PathBuf, String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     let path = history_path(directory, &candidate, format);
     let xmp = xmp_packet(&candidate);
@@ -138,12 +134,10 @@ fn save_jpeg(path: &Path, candidate: HistoryCandidate, xmp: String) -> Result<()
         )
         .map_err(|error| error.to_string())?;
     let payload_len = XMP_JPEG_HEADER.len() + xmp.len();
-    let segment_len = u16::try_from(payload_len + 2)
-        .map_err(|_| "XMP packet is too large for a JPEG APP1 segment".to_owned())?;
+    let segment_len =
+        u16::try_from(payload_len + 2).map_err(|_| "XMP packet is too large for a JPEG APP1 segment".to_owned())?;
     let mut writer = BufWriter::new(File::create(path).map_err(|error| error.to_string())?);
-    writer
-        .write_all(&jpeg[..2])
-        .map_err(|error| error.to_string())?;
+    writer.write_all(&jpeg[..2]).map_err(|error| error.to_string())?;
     writer
         .write_all(&[0xff, 0xe1])
         .and_then(|()| writer.write_all(&segment_len.to_be_bytes()))
@@ -244,12 +238,7 @@ mod tests {
         assert_eq!(path.extension().unwrap(), extension);
         assert_eq!(image::open(&path).unwrap().width(), 2);
         if format == HistoryFormat::Webp {
-            assert!(
-                fs::read(&path)
-                    .unwrap()
-                    .windows(4)
-                    .any(|chunk| chunk == b"VP8L")
-            );
+            assert!(fs::read(&path).unwrap().windows(4).any(|chunk| chunk == b"VP8L"));
         }
         let xmp = String::from_utf8(read_xmp(&path, format)).unwrap();
         assert!(xmp.contains("xmp:CreateDate=\"2026-08-04T12:34:56+09:00\""));
@@ -273,10 +262,7 @@ mod tests {
     #[case("jpg", Some(HistoryFormat::Jpeg))]
     #[case("jpeg", Some(HistoryFormat::Jpeg))]
     #[case("gif", None)]
-    fn configuration_names_are_tolerant(
-        #[case] name: &str,
-        #[case] expected: Option<HistoryFormat>,
-    ) {
+    fn configuration_names_are_tolerant(#[case] name: &str, #[case] expected: Option<HistoryFormat>) {
         assert_eq!(HistoryFormat::from_config(name), expected);
     }
 }

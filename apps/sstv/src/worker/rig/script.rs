@@ -128,11 +128,9 @@ impl ScriptHost {
 
         let table = lua.create_table().map_err(load_error)?;
         for (name, settings) in ports {
-            let rig = Rigctld::connect(&settings.address, timeout).map_err(|error| {
-                ScriptError::Port {
-                    name: name.clone(),
-                    error,
-                }
+            let rig = Rigctld::connect(&settings.address, timeout).map_err(|error| ScriptError::Port {
+                name: name.clone(),
+                error,
             })?;
             let port = RigctldPort {
                 rig,
@@ -174,25 +172,15 @@ impl ScriptHost {
         self.invoke(entry, frequency_hz, None)
     }
 
-    pub fn set_frequency(
-        &self,
-        frequency_hz: Option<u64>,
-        target_hz: u64,
-    ) -> Result<(), ScriptError> {
+    pub fn set_frequency(&self, frequency_hz: Option<u64>, target_hz: u64) -> Result<(), ScriptError> {
         let target = Value::Integer(i64::try_from(target_hz).unwrap_or(i64::MAX));
         self.invoke(Entry::SetFrequency, frequency_hz, Some(target))
     }
 
     /// Asks the script to move the rig to `band`, which it is handed whole.
-    pub fn change_band(
-        &self,
-        frequency_hz: Option<u64>,
-        band: &BandDefinition,
-    ) -> Result<(), ScriptError> {
+    pub fn change_band(&self, frequency_hz: Option<u64>, band: &BandDefinition) -> Result<(), ScriptError> {
         let entry = Entry::ChangeBand;
-        let table = self
-            .band_table(band)
-            .map_err(|error| call_error(entry, &error))?;
+        let table = self.band_table(band).map_err(|error| call_error(entry, &error))?;
         self.invoke(entry, frequency_hz, Some(Value::Table(table)))
     }
 
@@ -200,25 +188,18 @@ impl ScriptHost {
     ///
     /// A script that reports nothing is one that could not read the tuning,
     /// which is a state rather than a failure: keying does not depend on it.
-    pub fn poll_frequency(
-        &self,
-        frequency_hz: Option<u64>,
-    ) -> Result<Option<(u64, String)>, ScriptError> {
+    pub fn poll_frequency(&self, frequency_hz: Option<u64>) -> Result<Option<(u64, String)>, ScriptError> {
         let entry = Entry::PollFrequency;
         let Some(function) = self.function(entry) else {
             return Ok(None);
         };
-        let context = self
-            .context(frequency_hz)
-            .map_err(|error| call_error(entry, &error))?;
+        let context = self.context(frequency_hz).map_err(|error| call_error(entry, &error))?;
         let (frequency_hz, mode) = self
             .guarded(|| function.call::<(Option<u64>, Option<String>)>(context))
             .map_err(|error| call_error(entry, &error))?;
         match (frequency_hz, mode) {
             (None, None) => Ok(None),
-            (Some(frequency_hz), Some(mode)) if !mode.trim().is_empty() => {
-                Ok(Some((frequency_hz, mode)))
-            }
+            (Some(frequency_hz), Some(mode)) if !mode.trim().is_empty() => Ok(Some((frequency_hz, mode))),
             _ => Err(ScriptError::Call {
                 entry: entry.name(),
                 detail: "must return both frequency and mode, or neither".to_owned(),
@@ -226,18 +207,11 @@ impl ScriptHost {
         }
     }
 
-    fn invoke(
-        &self,
-        entry: Entry,
-        frequency_hz: Option<u64>,
-        argument: Option<Value>,
-    ) -> Result<(), ScriptError> {
+    fn invoke(&self, entry: Entry, frequency_hz: Option<u64>, argument: Option<Value>) -> Result<(), ScriptError> {
         let Some(function) = self.function(entry) else {
             return Ok(());
         };
-        let context = self
-            .context(frequency_hz)
-            .map_err(|error| call_error(entry, &error))?;
+        let context = self.context(frequency_hz).map_err(|error| call_error(entry, &error))?;
         self.guarded(|| match argument {
             Some(argument) => function.call::<()>((context, argument)),
             None => function.call::<()>(context),
@@ -321,9 +295,7 @@ fn install_deadline(lua: &Lua, deadline: Rc<Cell<Option<Instant>>>) {
     let installed = lua.set_hook(
         HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
         move |_, _| match deadline.get() {
-            Some(deadline) if Instant::now() > deadline => {
-                Err(mlua::Error::runtime("the script ran for too long"))
-            }
+            Some(deadline) if Instant::now() > deadline => Err(mlua::Error::runtime("the script ran for too long")),
             _ => Ok(VmState::Continue),
         },
     );
@@ -361,11 +333,9 @@ impl RigctldPort {
 
 impl UserData for RigctldPort {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("send", |lua, this, command: String| {
-            match this.rig.run(&command) {
-                Ok(response) => lua.create_sequence_from(response.lines().to_vec()),
-                Err(error) => Err(this.fail(error)),
-            }
+        methods.add_method_mut("send", |lua, this, command: String| match this.rig.run(&command) {
+            Ok(response) => lua.create_sequence_from(response.lines().to_vec()),
+            Err(error) => Err(this.fail(error)),
         });
         methods.add_method_mut("frequency", |_, this, ()| match this.rig.frequency_hz() {
             Ok(frequency_hz) => Ok(frequency_hz),

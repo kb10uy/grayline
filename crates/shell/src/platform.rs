@@ -27,10 +27,7 @@ use crate::Identity;
 #[allow(missing_docs)]
 #[cfg_attr(target_os = "windows", path = "platform/windows.rs")]
 #[cfg_attr(target_os = "macos", path = "platform/macos.rs")]
-#[cfg_attr(
-    not(any(target_os = "windows", target_os = "macos")),
-    path = "platform/other.rs"
-)]
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), path = "platform/other.rs")]
 mod imp;
 
 /// Font families the interface is drawn with, in priority order.

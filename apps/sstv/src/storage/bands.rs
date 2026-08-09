@@ -95,18 +95,12 @@ impl BandPlan {
             Ok(source) => source,
             Err(error) if error.kind() == io::ErrorKind::NotFound => DEFAULT_PLAN.to_owned(),
             Err(error) => {
-                return (
-                    Self::built_in(),
-                    Some(format!("{}: {error}", path.display())),
-                );
+                return (Self::built_in(), Some(format!("{}: {error}", path.display())));
             }
         };
         match Self::parse(&source) {
             Ok(plan) => (plan, None),
-            Err(error) => (
-                Self::built_in(),
-                Some(format!("{}: {error}", path.display())),
-            ),
+            Err(error) => (Self::built_in(), Some(format!("{}: {error}", path.display()))),
         }
     }
 
@@ -133,9 +127,7 @@ impl BandPlan {
                 let settings = table
                     .iter()
                     .filter(|(key, _)| !matches!(*key, "name" | "low" | "high"))
-                    .filter_map(|(key, item)| {
-                        Some((key.to_owned(), BandValue::of(item.as_value()?)?))
-                    })
+                    .filter_map(|(key, item)| Some((key.to_owned(), BandValue::of(item.as_value()?)?)))
                     .collect();
                 Some(BandDefinition {
                     name: name.to_owned(),
@@ -216,14 +208,10 @@ mod tests {
     // Between the bands, which is where a rig tuned to a broadcast sits.
     #[case(6_000_000, None)]
     #[case(0, None)]
-    fn a_frequency_names_the_band_it_sits_in(
-        #[case] frequency_hz: u64,
-        #[case] expected: Option<&str>,
-    ) {
+    fn a_frequency_names_the_band_it_sits_in(#[case] frequency_hz: u64, #[case] expected: Option<&str>) {
         let plan = BandPlan::built_in();
         assert_eq!(
-            plan.for_frequency(frequency_hz)
-                .map(|band| band.name.as_str()),
+            plan.for_frequency(frequency_hz).map(|band| band.name.as_str()),
             expected
         );
     }
@@ -247,18 +235,12 @@ mod tests {
         let band = plan.by_name("40m").unwrap();
         assert_eq!(band.low_hz, 7_000_000);
         assert_eq!(band.high_hz, 7_300_000);
-        assert_eq!(
-            band.settings.get("target"),
-            Some(&BandValue::Integer(7_171_000))
-        );
+        assert_eq!(band.settings.get("target"), Some(&BandValue::Integer(7_171_000)));
         assert_eq!(
             band.settings.get("receive-mode"),
             Some(&BandValue::Text("LSB".to_owned()))
         );
-        assert_eq!(
-            band.settings.get("monitor-gain"),
-            Some(&BandValue::Decimal(0.15))
-        );
+        assert_eq!(band.settings.get("monitor-gain"), Some(&BandValue::Decimal(0.15)));
         assert_eq!(band.settings.get("amplifier"), Some(&BandValue::Flag(true)));
         // The range is the application's and is not repeated as a setting.
         assert!(!band.settings.contains_key("low"));

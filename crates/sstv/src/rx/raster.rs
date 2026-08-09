@@ -69,10 +69,7 @@ impl RasterProfile {
             let start_ps = offset.as_picos();
             let duration_ps = segment.duration().as_picos();
             match segment.content() {
-                ScanContent::Pixels {
-                    channel,
-                    row_offset,
-                } => {
+                ScanContent::Pixels { channel, row_offset } => {
                     if !pixels.push(PixelSegment {
                         channel,
                         row_offset,
@@ -99,11 +96,7 @@ impl RasterProfile {
             period_ps: mode.spec().period().as_picos(),
             sync_center_ps: scan.sync_center(0)?.as_picos(),
             sync_duration_ps,
-            leading_ps: scan
-                .leading()
-                .iter()
-                .map(|segment| segment.duration().as_picos())
-                .sum(),
+            leading_ps: scan.leading().iter().map(|segment| segment.duration().as_picos()).sum(),
             pixels,
             selector_ps,
         })

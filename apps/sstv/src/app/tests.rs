@@ -166,10 +166,7 @@ fn a_reception_without_a_candidate_leaves_the_received_image_alone() {
     app.audio.set_snapshot(decoding(10, 100));
     app.poll_workers();
 
-    assert_eq!(
-        *app.composition.received_image,
-        test_pattern_image(app.rx_mode)
-    );
+    assert_eq!(*app.composition.received_image, test_pattern_image(app.rx_mode));
 }
 
 #[test]
@@ -340,10 +337,7 @@ fn tuned_to(app: &mut App, frequency_hz: u64) {
     app.rig_snapshot.reading = Some(Reading {
         frequency_hz,
         mode: "USB".to_owned(),
-        band: app
-            .bands
-            .for_frequency(frequency_hz)
-            .map(|band| band.name.clone()),
+        band: app.bands.for_frequency(frequency_hz).map(|band| band.name.clone()),
     });
 }
 
@@ -361,16 +355,10 @@ fn tuned_to(app: &mut App, frequency_hz: u64) {
 #[case::at_the_top_edge(7_300_000, 1, None)]
 // Between the bands there is no plan entry, and so no step to take.
 #[case::off_band(6_000_000, 1, None)]
-fn stepping_stays_inside_the_band(
-    #[case] frequency_hz: u64,
-    #[case] steps: i64,
-    #[case] expected: Option<u64>,
-) {
+fn stepping_stays_inside_the_band(#[case] frequency_hz: u64, #[case] steps: i64, #[case] expected: Option<u64>) {
     let mut app = App::headless();
-    app.bands = Arc::new(
-        BandPlan::parse("[[bands]]\nname = \"40m\"\nlow = 7000000\nhigh = 7300000\nstep = 1000\n")
-            .unwrap(),
-    );
+    app.bands =
+        Arc::new(BandPlan::parse("[[bands]]\nname = \"40m\"\nlow = 7000000\nhigh = 7300000\nstep = 1000\n").unwrap());
     tuned_to(&mut app, frequency_hz);
 
     assert_eq!(app.stepped_frequency(steps), expected);
@@ -379,9 +367,7 @@ fn stepping_stays_inside_the_band(
 #[test]
 fn a_band_with_no_step_has_nothing_to_move_by() {
     let mut app = App::headless();
-    app.bands = Arc::new(
-        BandPlan::parse("[[bands]]\nname = \"40m\"\nlow = 7000000\nhigh = 7300000\n").unwrap(),
-    );
+    app.bands = Arc::new(BandPlan::parse("[[bands]]\nname = \"40m\"\nlow = 7000000\nhigh = 7300000\n").unwrap());
     tuned_to(&mut app, 7_100_000);
 
     assert_eq!(app.stepped_frequency(1), None);
@@ -480,10 +466,7 @@ fn a_transmission_outranks_a_reception(#[case] phase: TxPhase, #[case] expected:
 #[case(TxPhase::Complete, false)]
 #[case(TxPhase::Cancelled, false)]
 #[case(TxPhase::Failed, false)]
-fn reception_is_muted_for_as_long_as_a_transmission_runs(
-    #[case] phase: TxPhase,
-    #[case] expected: bool,
-) {
+fn reception_is_muted_for_as_long_as_a_transmission_runs(#[case] phase: TxPhase, #[case] expected: bool) {
     let mut app = App::headless();
     app.tx_snapshot = TxSnapshot {
         phase,
@@ -540,10 +523,7 @@ fn a_tune_tone_needs_only_an_output_device() {
     app.station.callsign = String::new();
     assert!(app.composition.frame.is_none());
 
-    assert_eq!(
-        app.tune_problem(),
-        Some(app.i18n.text("error-no-output-device"))
-    );
+    assert_eq!(app.tune_problem(), Some(app.i18n.text("error-no-output-device")));
 
     app.start_tune();
 
@@ -557,17 +537,11 @@ fn a_tone_and_a_picture_refuse_each_other() {
     let mut app = App::headless();
     app.tx_snapshot.phase = TxPhase::Producing;
 
-    assert_eq!(
-        app.tune_problem(),
-        Some(app.i18n.text("error-transmit-active"))
-    );
+    assert_eq!(app.tune_problem(), Some(app.i18n.text("error-transmit-active")));
 
     app.tune_for_test();
 
-    assert_eq!(
-        app.transmit_problem(),
-        Some(app.i18n.text("error-tone-active"))
-    );
+    assert_eq!(app.transmit_problem(), Some(app.i18n.text("error-tone-active")));
     assert!(!app.can_transmit());
 }
 
@@ -624,14 +598,8 @@ fn selecting_a_mode_replaces_the_raster() {
     let mut app = App::headless();
     app.select_rx_mode(Mode::Robot36);
     assert_eq!(app.rx_mode, Mode::Robot36);
-    assert_eq!(
-        app.rx_raster.size().width(),
-        Mode::Robot36.spec().width() as usize
-    );
-    assert_eq!(
-        app.rx_raster.size().height(),
-        Mode::Robot36.spec().height() as usize
-    );
+    assert_eq!(app.rx_raster.size().width(), Mode::Robot36.spec().width() as usize);
+    assert_eq!(app.rx_raster.size().height(), Mode::Robot36.spec().height() as usize);
 }
 
 #[rstest]
@@ -736,10 +704,7 @@ fn the_identifier_setting_decides_only_whether_the_callsign_is_sent() {
 
     app.station.callsign = "JA1ABC".to_owned();
 
-    assert_eq!(
-        app.transmit_problem(),
-        Some(app.i18n.text("error-no-transmit-frame"))
-    );
+    assert_eq!(app.transmit_problem(), Some(app.i18n.text("error-no-transmit-frame")));
 }
 
 /// The station dialog writes the same fields the composition reads, and a
@@ -787,10 +752,7 @@ fn custom_variables_are_kept_exactly_as_they_were_entered() {
 
     app.commit_custom_variables();
 
-    assert_eq!(
-        app.custom_variables.get("club").map(String::as_str),
-        Some("  JARL  ")
-    );
+    assert_eq!(app.custom_variables.get("club").map(String::as_str), Some("  JARL  "));
 }
 
 #[test]
@@ -848,20 +810,14 @@ fn the_serial_number_is_reset_and_kept() {
 #[case("100-2", Some("1002"))]
 #[case("", None)]
 #[case("123456789", None)]
-fn the_contest_number_is_sent_as_the_record_can_hold_it(
-    #[case] typed: &str,
-    #[case] expected: Option<&str>,
-) {
+fn the_contest_number_is_sent_as_the_record_can_hold_it(#[case] typed: &str, #[case] expected: Option<&str>) {
     let mut app = App::headless();
     app.contest_mode = true;
     app.qso.number = typed.to_owned();
 
     let number = app.contest_number();
 
-    assert_eq!(
-        number.map(|number| number.as_str().to_owned()).as_deref(),
-        expected
-    );
+    assert_eq!(number.map(|number| number.as_str().to_owned()).as_deref(), expected);
 }
 
 /// A station that is not in a contest gives out no number, whatever is left
@@ -958,19 +914,10 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
     assert!(next.dsp.lms_filter);
     assert!(!next.auto_mode);
     assert!(!next.auto_history);
-    assert_eq!(
-        next.history_format,
-        crate::storage::history::HistoryFormat::Jpeg
-    );
+    assert_eq!(next.history_format, crate::storage::history::HistoryFormat::Jpeg);
     assert_eq!(next.station.callsign, "JA1ABC");
-    assert_eq!(
-        next.library.templates[next.library.template.unwrap()].name,
-        "beta.kdl"
-    );
-    assert_eq!(
-        next.library.stocks[next.library.stock.unwrap()].name,
-        "second.png"
-    );
+    assert_eq!(next.library.templates[next.library.template.unwrap()].name, "beta.kdl");
+    assert_eq!(next.library.stocks[next.library.stock.unwrap()].name, "second.png");
 }
 
 #[test]
@@ -986,10 +933,7 @@ fn a_stored_selection_that_disappeared_falls_back_to_the_first_entry() {
     app.refresh_library();
     app.restore_selection(&settings);
 
-    assert_eq!(
-        app.library.templates[app.library.template.unwrap()].name,
-        "alpha.kdl"
-    );
+    assert_eq!(app.library.templates[app.library.template.unwrap()].name, "alpha.kdl");
 }
 
 #[test]
@@ -1018,21 +962,12 @@ fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
     app.saved = app.settings();
     app.select_locale(Locale::Ja);
     app.persist();
-    let written = fs::metadata(paths.config_file())
-        .unwrap()
-        .modified()
-        .unwrap();
+    let written = fs::metadata(paths.config_file()).unwrap().modified().unwrap();
 
     app.persist();
     app.persist();
 
-    assert_eq!(
-        fs::metadata(paths.config_file())
-            .unwrap()
-            .modified()
-            .unwrap(),
-        written
-    );
+    assert_eq!(fs::metadata(paths.config_file()).unwrap().modified().unwrap(), written);
 }
 
 #[test]
@@ -1094,17 +1029,11 @@ fn qso_changes_do_not_invalidate_template_or_stock_files() {
     assert_eq!(app.composition.stock_generation, stock_generation);
 
     app.template_changed();
-    assert_eq!(
-        app.composition.template_generation,
-        template_generation.wrapping_add(1)
-    );
+    assert_eq!(app.composition.template_generation, template_generation.wrapping_add(1));
     assert_eq!(app.composition.stock_generation, stock_generation);
 
     app.stock_changed();
-    assert_eq!(
-        app.composition.stock_generation,
-        stock_generation.wrapping_add(1)
-    );
+    assert_eq!(app.composition.stock_generation, stock_generation.wrapping_add(1));
 }
 
 /// Polls until the composition worker has delivered the transmit image.
@@ -1150,14 +1079,8 @@ size width=(fw)100 height=(fh)100 fit="stretch"
 
     composed(&mut app);
 
-    assert_eq!(
-        app.tx_raster.size().width(),
-        app.tx_mode.spec().width() as usize
-    );
-    assert_eq!(
-        app.tx_raster.size().height(),
-        app.tx_mode.spec().height() as usize
-    );
+    assert_eq!(app.tx_raster.size().width(), app.tx_mode.spec().width() as usize);
+    assert_eq!(app.tx_raster.size().height(), app.tx_mode.spec().height() as usize);
     assert!(app.transmit_problem().is_none() || app.audio.output_device.is_none());
 }
 

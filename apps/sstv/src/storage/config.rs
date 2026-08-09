@@ -235,9 +235,7 @@ impl Config {
                 Ok(document) => (document, false, None),
                 Err(error) => (DocumentMut::new(), true, Some(error.to_string())),
             },
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                (DocumentMut::new(), false, None)
-            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (DocumentMut::new(), false, None),
             Err(error) => (DocumentMut::new(), true, Some(error.to_string())),
         };
         Self {
@@ -272,8 +270,7 @@ impl Config {
                 .unwrap_or(defaults.locale),
             input_device: owned(&self.document, Some("audio"), "input-device"),
             output_device: owned(&self.document, Some("audio"), "output-device"),
-            station_callsign: owned(&self.document, Some("station"), "callsign")
-                .unwrap_or_default(),
+            station_callsign: owned(&self.document, Some("station"), "callsign").unwrap_or_default(),
             station_qth: owned(&self.document, Some("station"), "qth").unwrap_or_default(),
             station_grid: owned(&self.document, Some("station"), "grid").unwrap_or_default(),
             qso_number: owned(&self.document, Some("qso"), "number").unwrap_or(defaults.qso_number),
@@ -286,28 +283,20 @@ impl Config {
             tx_mode: string(&self.document, Some("transmit"), "mode")
                 .and_then(mode_by_name)
                 .unwrap_or(defaults.tx_mode),
-            auto_mode: boolean(&self.document, Some("receive"), "auto-vis")
-                .unwrap_or(defaults.auto_mode),
+            auto_mode: boolean(&self.document, Some("receive"), "auto-vis").unwrap_or(defaults.auto_mode),
             dsp: DspFlags {
                 afc: boolean(&self.document, Some("receive"), "afc").unwrap_or(defaults.dsp.afc),
-                lms_filter: boolean(&self.document, Some("receive"), "lms")
-                    .unwrap_or(defaults.dsp.lms_filter),
-                live_slant: boolean(&self.document, Some("receive"), "slant")
-                    .unwrap_or(defaults.dsp.live_slant),
+                lms_filter: boolean(&self.document, Some("receive"), "lms").unwrap_or(defaults.dsp.lms_filter),
+                live_slant: boolean(&self.document, Some("receive"), "slant").unwrap_or(defaults.dsp.live_slant),
             },
-            vis_restart: boolean(&self.document, Some("receive"), "vis-restart")
-                .unwrap_or(defaults.vis_restart),
-            vis_strict: boolean(&self.document, Some("receive"), "vis-strict")
-                .unwrap_or(defaults.vis_strict),
-            send_fskid: boolean(&self.document, Some("transmit"), "fskid")
-                .unwrap_or(defaults.send_fskid),
-            contest_mode: boolean(&self.document, Some("transmit"), "contest")
-                .unwrap_or(defaults.contest_mode),
+            vis_restart: boolean(&self.document, Some("receive"), "vis-restart").unwrap_or(defaults.vis_restart),
+            vis_strict: boolean(&self.document, Some("receive"), "vis-strict").unwrap_or(defaults.vis_strict),
+            send_fskid: boolean(&self.document, Some("transmit"), "fskid").unwrap_or(defaults.send_fskid),
+            contest_mode: boolean(&self.document, Some("transmit"), "contest").unwrap_or(defaults.contest_mode),
             tx_volume: float(&self.document, Some("transmit"), "volume")
                 .map(|volume| volume.clamp(0.0, 1.0))
                 .unwrap_or(defaults.tx_volume),
-            auto_history: boolean(&self.document, Some("receive"), "auto-history")
-                .unwrap_or(defaults.auto_history),
+            auto_history: boolean(&self.document, Some("receive"), "auto-history").unwrap_or(defaults.auto_history),
             history_format: string(&self.document, Some("receive"), "history-format")
                 .and_then(HistoryFormat::from_config)
                 .unwrap_or(defaults.history_format),
@@ -324,21 +313,14 @@ impl Config {
             return;
         }
         let document = &mut self.document;
-        set(
-            document,
-            None,
-            "language",
-            Some(value(settings.locale.tag())),
-        );
+        set(document, None, "language", Some(value(settings.locale.tag())));
         // Rounded on the way out: widening the f32 directly writes the likes
         // of 1.2999999523162842 into a file meant to be readable by hand.
         set(
             document,
             None,
             "ui-scale",
-            Some(value(
-                (f64::from(settings.ui_scale) * 100.0).round() / 100.0,
-            )),
+            Some(value((f64::from(settings.ui_scale) * 100.0).round() / 100.0)),
         );
         set(
             document,
@@ -357,12 +339,7 @@ impl Config {
             ("qth", &settings.station_qth),
             ("grid", &settings.station_grid),
         ] {
-            set(
-                document,
-                Some("station"),
-                key,
-                (!text.is_empty()).then(|| value(text)),
-            );
+            set(document, Some("station"), key, (!text.is_empty()).then(|| value(text)));
         }
         set(
             document,
@@ -377,42 +354,17 @@ impl Config {
             "template",
             settings.template.as_deref().map(value),
         );
-        set(
-            document,
-            Some("library"),
-            "stock",
-            settings.stock.as_deref().map(value),
-        );
+        set(document, Some("library"), "stock", settings.stock.as_deref().map(value));
         set(
             document,
             Some("receive"),
             "mode",
             Some(value(settings.rx_mode.spec().name())),
         );
-        set(
-            document,
-            Some("receive"),
-            "auto-vis",
-            Some(value(settings.auto_mode)),
-        );
-        set(
-            document,
-            Some("receive"),
-            "afc",
-            Some(value(settings.dsp.afc)),
-        );
-        set(
-            document,
-            Some("receive"),
-            "lms",
-            Some(value(settings.dsp.lms_filter)),
-        );
-        set(
-            document,
-            Some("receive"),
-            "slant",
-            Some(value(settings.dsp.live_slant)),
-        );
+        set(document, Some("receive"), "auto-vis", Some(value(settings.auto_mode)));
+        set(document, Some("receive"), "afc", Some(value(settings.dsp.afc)));
+        set(document, Some("receive"), "lms", Some(value(settings.dsp.lms_filter)));
+        set(document, Some("receive"), "slant", Some(value(settings.dsp.live_slant)));
         set(
             document,
             Some("receive"),
@@ -425,12 +377,7 @@ impl Config {
             "vis-strict",
             Some(value(settings.vis_strict)),
         );
-        set(
-            document,
-            Some("transmit"),
-            "fskid",
-            Some(value(settings.send_fskid)),
-        );
+        set(document, Some("transmit"), "fskid", Some(value(settings.send_fskid)));
         set(
             document,
             Some("transmit"),
@@ -441,9 +388,7 @@ impl Config {
             document,
             Some("transmit"),
             "volume",
-            Some(value(
-                (f64::from(settings.tx_volume) * 100.0).round() / 100.0,
-            )),
+            Some(value((f64::from(settings.tx_volume) * 100.0).round() / 100.0)),
         );
         set(
             document,
@@ -512,33 +457,13 @@ fn rig_settings(document: &DocumentMut) -> RigSettings {
     RigSettings {
         enabled: boolean(document, Some("rig"), "enabled").unwrap_or(defaults.enabled),
         ports: rig_ports(document).unwrap_or(defaults.ports),
-        poll_seconds: seconds(
-            document,
-            "poll-interval",
-            &POLL_SECONDS_RANGE,
-            defaults.poll_seconds,
-        ),
-        lead_in_seconds: seconds(
-            document,
-            "lead-in",
-            &KEYING_SECONDS_RANGE,
-            defaults.lead_in_seconds,
-        ),
-        tail_seconds: seconds(
-            document,
-            "tail",
-            &KEYING_SECONDS_RANGE,
-            defaults.tail_seconds,
-        ),
+        poll_seconds: seconds(document, "poll-interval", &POLL_SECONDS_RANGE, defaults.poll_seconds),
+        lead_in_seconds: seconds(document, "lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
+        tail_seconds: seconds(document, "tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
     }
 }
 
-fn seconds(
-    document: &DocumentMut,
-    key: &str,
-    range: &core::ops::RangeInclusive<f32>,
-    default: f32,
-) -> f32 {
+fn seconds(document: &DocumentMut, key: &str, range: &core::ops::RangeInclusive<f32>, default: f32) -> f32 {
     float(document, Some("rig"), key)
         .map(|seconds| seconds.clamp(*range.start(), *range.end()))
         .unwrap_or(default)
@@ -816,10 +741,7 @@ mod tests {
         let stored = fs::read_to_string(config_path(&root)).unwrap();
         assert!(!stored.contains("input-device"));
         assert!(!stored.contains("template"));
-        assert_eq!(
-            Config::load(&config_path(&root)).settings(),
-            Settings::default()
-        );
+        assert_eq!(Config::load(&config_path(&root)).settings(), Settings::default());
     }
 
     #[test]
@@ -832,10 +754,7 @@ mod tests {
         assert_eq!(config.settings(), Settings::default());
 
         config.store(&populated());
-        assert_eq!(
-            fs::read_to_string(config_path(&root)).unwrap(),
-            "language = \n"
-        );
+        assert_eq!(fs::read_to_string(config_path(&root)).unwrap(), "language = \n");
     }
 
     #[test]
@@ -871,10 +790,7 @@ mod tests {
     fn the_ui_scale_is_read_within_range(#[case] stored: &str, #[case] expected: f32) {
         let root = TempDir::new();
         fs::write(config_path(&root), stored).unwrap();
-        assert_eq!(
-            Config::load(&config_path(&root)).settings().ui_scale,
-            expected
-        );
+        assert_eq!(Config::load(&config_path(&root)).settings().ui_scale, expected);
     }
 
     #[test]
@@ -887,10 +803,7 @@ mod tests {
         });
 
         let stored = fs::read_to_string(config_path(&root)).unwrap();
-        assert!(
-            stored.contains("ui-scale = 1.3"),
-            "the scale was written as {stored}"
-        );
+        assert!(stored.contains("ui-scale = 1.3"), "the scale was written as {stored}");
     }
 
     /// The ports are what the operator edits, so they have to be in the file
@@ -949,13 +862,7 @@ mod tests {
         let root = TempDir::new();
         fs::write(config_path(&root), "[rig.ports]\nrig = 3\n").unwrap();
 
-        assert!(
-            Config::load(&config_path(&root))
-                .settings()
-                .rig
-                .ports
-                .is_empty()
-        );
+        assert!(Config::load(&config_path(&root)).settings().rig.ports.is_empty());
     }
 
     /// A key the file does not define is left where the operator put it, so a

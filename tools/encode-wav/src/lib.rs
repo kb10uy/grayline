@@ -8,8 +8,7 @@ use grayline_sstv::{
 };
 use grayline_sstv_fskid::FskId;
 use grayline_sstv_template::{
-    FileAssetProvider, RenderContext, RenderSize, Renderer, Template, VariableValue, Variables,
-    composite,
+    FileAssetProvider, RenderContext, RenderSize, Renderer, Template, VariableValue, Variables, composite,
 };
 use grayline_tone_tx::Modulator;
 use hound::{SampleFormat, WavSpec, WavWriter};
@@ -58,10 +57,7 @@ pub fn encode_file(
     callsign: &str,
 ) -> Result<EncodeReport> {
     if mode.spec().encode_support() != Support::Supported {
-        bail!(
-            "transmit encoding is not implemented for {}",
-            mode.spec().name()
-        );
+        bail!("transmit encoding is not implemented for {}", mode.spec().name());
     }
     let callsign = callsign.trim().to_ascii_uppercase();
     let station_id = FskId::new(&callsign).context("invalid callsign")?;
@@ -129,50 +125,33 @@ fn load_background(path: &Path, mode: Mode) -> Result<RgbImage> {
     Ok(RgbImage::from_rgb_bytes(size, prepared.as_raw())?)
 }
 
-fn cover_image(
-    source: &image::RgbImage,
-    target_width: u32,
-    target_height: u32,
-) -> Result<image::RgbImage> {
+fn cover_image(source: &image::RgbImage, target_width: u32, target_height: u32) -> Result<image::RgbImage> {
     let source_width = source.width();
     let source_height = source.height();
     if source_width == 0 || source_height == 0 {
         bail!("the image has no pixels");
     }
-    let (resized_width, resized_height) = if u64::from(target_width) * u64::from(source_height)
-        >= u64::from(target_height) * u64::from(source_width)
-    {
-        (
-            target_width,
-            u32::try_from(
-                (u64::from(source_height) * u64::from(target_width))
-                    .div_ceil(u64::from(source_width)),
+    let (resized_width, resized_height) =
+        if u64::from(target_width) * u64::from(source_height) >= u64::from(target_height) * u64::from(source_width) {
+            (
+                target_width,
+                u32::try_from((u64::from(source_height) * u64::from(target_width)).div_ceil(u64::from(source_width)))
+                    .context("the image is too tall to cover the picture")?,
             )
-            .context("the image is too tall to cover the picture")?,
-        )
-    } else {
-        (
-            u32::try_from(
-                (u64::from(source_width) * u64::from(target_height))
-                    .div_ceil(u64::from(source_height)),
+        } else {
+            (
+                u32::try_from((u64::from(source_width) * u64::from(target_height)).div_ceil(u64::from(source_height)))
+                    .context("the image is too wide to cover the picture")?,
+                target_height,
             )
-            .context("the image is too wide to cover the picture")?,
-            target_height,
-        )
-    };
-    let resized =
-        image::imageops::resize(source, resized_width, resized_height, FilterType::Lanczos3);
+        };
+    let resized = image::imageops::resize(source, resized_width, resized_height, FilterType::Lanczos3);
     let left = (resized_width - target_width) / 2;
     let top = (resized_height - target_height) / 2;
     Ok(image::imageops::crop_imm(&resized, left, top, target_width, target_height).to_image())
 }
 
-fn render_frame(
-    template: &Template,
-    template_path: &Path,
-    background: &RgbImage,
-    callsign: &str,
-) -> Result<RgbImage> {
+fn render_frame(template: &Template, template_path: &Path, background: &RgbImage, callsign: &str) -> Result<RgbImage> {
     let size = RenderSize::new(
         u32::try_from(background.size().width())?,
         u32::try_from(background.size().height())?,
@@ -286,12 +265,7 @@ mod tests {
         let decoded_report = decode_file(&wav, &decoded).unwrap();
         assert_eq!(decoded_report.mode, Mode::Robot36);
         assert_eq!(decoded_report.status, DecodeStatus::Complete);
-        assert!(
-            decoded_report
-                .fsk_ids
-                .iter()
-                .any(|id| id.as_str() == "N0CALL")
-        );
+        assert!(decoded_report.fsk_ids.iter().any(|id| id.as_str() == "N0CALL"));
         fs::remove_dir_all(directory).unwrap();
     }
 }

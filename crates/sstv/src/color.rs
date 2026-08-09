@@ -119,20 +119,13 @@ mod tests {
     #[case(LevelFrequencyBand::Narrow, 0, 2044)]
     #[case(LevelFrequencyBand::Narrow, 128, 2172)]
     #[case(LevelFrequencyBand::Narrow, 255, 2299)]
-    fn source_frequency_endpoints(
-        #[case] band: LevelFrequencyBand,
-        #[case] level: u8,
-        #[case] hz: u32,
-    ) {
+    fn source_frequency_endpoints(#[case] band: LevelFrequencyBand, #[case] level: u8, #[case] hz: u32) {
         assert_eq!(band.level_to_frequency(level), Frequency::from_hz(hz));
     }
 
     #[test]
     fn inverse_frequency_conversion_clamps() {
-        assert_eq!(
-            LevelFrequencyBand::Wide.frequency_to_level(Frequency::from_hz(1000)),
-            0
-        );
+        assert_eq!(LevelFrequencyBand::Wide.frequency_to_level(Frequency::from_hz(1000)), 0);
         assert_eq!(
             LevelFrequencyBand::Wide.frequency_to_level(Frequency::from_hz(2300)),
             255
@@ -148,10 +141,7 @@ mod tests {
     #[case(LevelFrequencyBand::Narrow)]
     fn every_transmitted_level_roundtrips(#[case] band: LevelFrequencyBand) {
         for level in 0..=u8::MAX {
-            assert_eq!(
-                band.frequency_to_level(band.level_to_frequency(level)),
-                level
-            );
+            assert_eq!(band.frequency_to_level(band.level_to_frequency(level)), level);
         }
     }
 }

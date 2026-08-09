@@ -137,11 +137,7 @@ pub struct PlaybackWriter {
 }
 
 impl PlaybackWriter {
-    pub(crate) const fn new(
-        producer: HeapProd<f32>,
-        state: Arc<PlaybackState>,
-        sample_rate_hz: u32,
-    ) -> Self {
+    pub(crate) const fn new(producer: HeapProd<f32>, state: Arc<PlaybackState>, sample_rate_hz: u32) -> Self {
         Self {
             producer,
             state,
@@ -160,9 +156,7 @@ impl PlaybackWriter {
             return 0;
         }
         let written = self.producer.push_slice(samples);
-        self.state
-            .written
-            .fetch_add(written as u64, Ordering::Release);
+        self.state.written.fetch_add(written as u64, Ordering::Release);
         written
     }
 
@@ -229,8 +223,7 @@ impl PlaybackReader {
     /// Returns whether the producer finished and this reader consumed its queue.
     pub fn is_complete(&self) -> bool {
         self.state.finished.load(Ordering::Acquire)
-            && self.state.written.load(Ordering::Acquire)
-                <= self.state.played.load(Ordering::Acquire)
+            && self.state.written.load(Ordering::Acquire) <= self.state.played.load(Ordering::Acquire)
     }
 }
 
@@ -276,9 +269,7 @@ fn validate(sample_rate_hz: u32, capacity_samples: usize) -> Result<(), AudioErr
         return Err(AudioError::EmptyCapacity);
     }
     if sample_rate_hz < crate::MINIMUM_SAMPLE_RATE_HZ {
-        return Err(AudioError::UnsupportedConfiguration(format!(
-            "{sample_rate_hz} Hz"
-        )));
+        return Err(AudioError::UnsupportedConfiguration(format!("{sample_rate_hz} Hz")));
     }
     Ok(())
 }
@@ -308,9 +299,7 @@ where
                 sample
             }
             None => {
-                if !state.finished.load(Ordering::Acquire)
-                    && !state.cancelled.load(Ordering::Acquire)
-                {
+                if !state.finished.load(Ordering::Acquire) && !state.cancelled.load(Ordering::Acquire) {
                     state.underrun.fetch_add(1, Ordering::Relaxed);
                 }
                 0.0

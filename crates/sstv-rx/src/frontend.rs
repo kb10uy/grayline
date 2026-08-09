@@ -83,9 +83,7 @@ pub(crate) struct FrontEnd {
 
 impl FrontEnd {
     pub(crate) fn new(sample_rate: u32) -> Result<Self, DemodulatorError> {
-        let fsk = FskDecoder::new(
-            NonZeroU32::new(sample_rate).ok_or(DemodulatorError::SampleRateTooLow(sample_rate))?,
-        );
+        let fsk = FskDecoder::new(NonZeroU32::new(sample_rate).ok_or(DemodulatorError::SampleRateTooLow(sample_rate))?);
         let sample_rate_hz = f64::from(sample_rate);
         let mut order = (24.0 * sample_rate_hz / 11_025.0).round() as usize;
         order = order.max(12);
@@ -209,11 +207,7 @@ struct ToneDetector {
 }
 
 impl ToneDetector {
-    fn new(
-        frequency_hz: f64,
-        bandwidth_hz: f64,
-        sample_rate_hz: f64,
-    ) -> Result<Self, grayline_dsp::DspError> {
+    fn new(frequency_hz: f64, bandwidth_hz: f64, sample_rate_hz: f64) -> Result<Self, grayline_dsp::DspError> {
         Ok(Self {
             resonator: Resonator::new(sample_rate_hz, frequency_hz, bandwidth_hz)?,
             envelope: Iir::from_low_pass(IirLowPassDesign {

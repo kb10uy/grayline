@@ -101,10 +101,7 @@ impl AssetProvider for FileAssetProvider {
         match fs::read(&path) {
             Ok(bytes) => Ok(Some(EncodedAsset::new(bytes))),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(AssetError::new(format!(
-                "failed to read {}: {error}",
-                path.display()
-            ))),
+            Err(error) => Err(AssetError::new(format!("failed to read {}: {error}", path.display()))),
         }
     }
 }
@@ -156,9 +153,7 @@ impl Renderer {
         let previous = database.len();
         database.load_font_data(data);
         if database.len() == previous {
-            return Err(TemplateError::Schema(
-                "font data contains no supported faces".into(),
-            ));
+            return Err(TemplateError::Schema("font data contains no supported faces".into()));
         }
         Ok(())
     }
@@ -186,20 +181,16 @@ impl Renderer {
         };
         options.resources_dir = None;
         options.image_href_resolver.resolve_string = Box::new(move |href, _| {
-            resources
-                .get(href)
-                .cloned()
-                .map(|resource| match resource.format {
-                    AssetFormat::Png => ImageKind::PNG(resource.data),
-                    AssetFormat::Jpeg => ImageKind::JPEG(resource.data),
-                    AssetFormat::WebP => ImageKind::WEBP(resource.data),
-                })
+            resources.get(href).cloned().map(|resource| match resource.format {
+                AssetFormat::Png => ImageKind::PNG(resource.data),
+                AssetFormat::Jpeg => ImageKind::JPEG(resource.data),
+                AssetFormat::WebP => ImageKind::WEBP(resource.data),
+            })
         });
 
         let tree = usvg::Tree::from_str(&svg, &options)?;
-        let mut pixmap = Pixmap::new(size.width(), size.height()).ok_or_else(|| {
-            TemplateError::InvalidDimensions("resvg rejected the render dimensions".into())
-        })?;
+        let mut pixmap = Pixmap::new(size.width(), size.height())
+            .ok_or_else(|| TemplateError::InvalidDimensions("resvg rejected the render dimensions".into()))?;
         let mut target = pixmap.as_mut();
         resvg::render(&tree, Transform::identity(), &mut target);
         let bytes = pixmap.take_demultiplied();
@@ -268,9 +259,7 @@ text "CQ SSTV" {
         let mut generator = SvgGenerator::new(RenderSize::new(320, 256).unwrap(), &context);
         let svg = generator.generate(template.layers()).unwrap();
 
-        assert!(svg.contains(
-            "<defs><linearGradient id=\"gradient0\" x1=\"0.5\" y1=\"0\" x2=\"0.5\" y2=\"1\">"
-        ));
+        assert!(svg.contains("<defs><linearGradient id=\"gradient0\" x1=\"0.5\" y1=\"0\" x2=\"0.5\" y2=\"1\">"));
         assert!(svg.contains("<stop offset=\"0\" stop-color=\"#00ffff\"/>"));
         assert!(svg.contains("stop-color=\"#00ff00\" stop-opacity=\""));
         assert!(svg.contains("fill=\"url(#gradient0)\""));
@@ -395,18 +384,8 @@ group {
         assert_eq!(image.size(), RenderSize::new(100, 80).unwrap());
         assert_eq!(image.pixels()[70 * 100 + 10], Rgba8::default());
         assert!(image.pixels().iter().any(|pixel| pixel.a == 128));
-        assert!(
-            image
-                .pixels()
-                .iter()
-                .any(|pixel| pixel.g == 255 && pixel.a == 255)
-        );
-        assert!(
-            image
-                .pixels()
-                .iter()
-                .any(|pixel| pixel.b == 255 && pixel.a > 0)
-        );
+        assert!(image.pixels().iter().any(|pixel| pixel.g == 255 && pixel.a == 255));
+        assert!(image.pixels().iter().any(|pixel| pixel.b == 255 && pixel.a > 0));
         assert_eq!(image.pixels()[99], Rgba8::new(255, 255, 255, 255));
     }
 
@@ -537,10 +516,7 @@ rect {
             .unwrap();
 
         assert!(image.pixels().iter().all(|pixel| {
-            pixel.r.abs_diff(100) <= 8
-                && pixel.g.abs_diff(150) <= 8
-                && pixel.b.abs_diff(200) <= 8
-                && pixel.a == 255
+            pixel.r.abs_diff(100) <= 8 && pixel.g.abs_diff(150) <= 8 && pixel.b.abs_diff(200) <= 8 && pixel.a == 255
         }));
     }
 
@@ -606,10 +582,9 @@ rect {
 
     #[test]
     fn renders_caller_provided_received_image() {
-        let template = Template::parse(
-            "rximage { position x=(fw)0 y=(fh)0; size width=(fw)100 height=(fh)100 fit=\"stretch\"; }",
-        )
-        .unwrap();
+        let template =
+            Template::parse("rximage { position x=(fw)0 y=(fh)0; size width=(fw)100 height=(fh)100 fit=\"stretch\"; }")
+                .unwrap();
         let received = RgbImage::new(ImageSize::new(2, 1).unwrap(), Rgb8::new(12, 34, 56));
         let variables = Variables::new();
         let mut context = RenderContext::new(&variables, &EmptyAssetProvider);
@@ -617,22 +592,14 @@ rect {
         let image = Renderer::new()
             .render(&template, RenderSize::new(4, 2).unwrap(), &context)
             .unwrap();
-        assert!(
-            image
-                .pixels()
-                .iter()
-                .all(|pixel| *pixel == Rgba8::new(12, 34, 56, 255))
-        );
+        assert!(image.pixels().iter().all(|pixel| *pixel == Rgba8::new(12, 34, 56, 255)));
     }
 
     #[test]
     fn requires_received_image_and_registered_fonts() {
         let variables = Variables::new();
         let context = RenderContext::new(&variables, &EmptyAssetProvider);
-        let rx = Template::parse(
-            "rximage { position x=(fw)0 y=(fh)0; size width=(fw)100 height=(fh)100; }",
-        )
-        .unwrap();
+        let rx = Template::parse("rximage { position x=(fw)0 y=(fh)0; size width=(fw)100 height=(fh)100; }").unwrap();
         assert!(matches!(
             Renderer::new().render(&rx, RenderSize::new(2, 2).unwrap(), &context),
             Err(TemplateError::MissingReceivedImage)

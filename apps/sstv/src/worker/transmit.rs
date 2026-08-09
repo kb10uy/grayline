@@ -105,9 +105,7 @@ impl TxProgress {
     pub fn fraction(self) -> f32 {
         match self {
             Self::Idle | Self::Leader => 0.0,
-            Self::Scanning { rows, total } if total > 0 => {
-                (rows as f32 / total as f32).clamp(0.0, 1.0)
-            }
+            Self::Scanning { rows, total } if total > 0 => (rows as f32 / total as f32).clamp(0.0, 1.0),
             Self::Scanning { .. } => 0.0,
             Self::Identifying | Self::Complete => 1.0,
         }
@@ -138,8 +136,7 @@ impl TxGain {
 
     /// Moves the fader, which a running transmission picks up per block.
     pub fn set_travel(&self, travel: f32) {
-        self.0
-            .store(Self::amplitude(travel).to_bits(), Ordering::Relaxed);
+        self.0.store(Self::amplitude(travel).to_bits(), Ordering::Relaxed);
     }
 
     /// Returns the amplitude a fader position stands for.
@@ -201,10 +198,7 @@ impl TxWorker {
         })
     }
 
-    fn start(
-        name: &str,
-        body: impl FnOnce(Arc<Mutex<TxSnapshot>>, Arc<AtomicBool>) + Send + 'static,
-    ) -> Self {
+    fn start(name: &str, body: impl FnOnce(Arc<Mutex<TxSnapshot>>, Arc<AtomicBool>) + Send + 'static) -> Self {
         let snapshot = Arc::new(Mutex::new(TxSnapshot {
             phase: TxPhase::Priming,
             ..TxSnapshot::default()
@@ -290,9 +284,7 @@ fn transmit_loop(
     let total_samples = transmission.duration().to_samples_ceil(sample_rate_hz);
     let raster = RasterTiming {
         start_samples: transmission.raster_start().to_samples_ceil(sample_rate_hz),
-        samples: transmission
-            .raster_duration()
-            .to_samples_ceil(sample_rate_hz),
+        samples: transmission.raster_duration().to_samples_ceil(sample_rate_hz),
         rows: usize::from(mode.spec().active_rows()),
     };
     update(&snapshot, |state| {
@@ -429,10 +421,7 @@ mod tests {
     #[case(119, TxProgress::Scanning { rows: 38, total: 40 })]
     #[case(120, TxProgress::Identifying)]
     #[case(400, TxProgress::Identifying)]
-    fn played_samples_map_onto_the_row_being_transmitted(
-        #[case] played_samples: u64,
-        #[case] expected: TxProgress,
-    ) {
+    fn played_samples_map_onto_the_row_being_transmitted(#[case] played_samples: u64, #[case] expected: TxProgress) {
         let raster = RasterTiming {
             start_samples: 100,
             samples: 20,
@@ -443,10 +432,7 @@ mod tests {
 
     #[test]
     fn an_unknown_raster_window_reports_the_leader_rather_than_a_row() {
-        assert_eq!(
-            RasterTiming::default().progress_at(1_000),
-            TxProgress::Leader
-        );
+        assert_eq!(RasterTiming::default().progress_at(1_000), TxProgress::Leader);
     }
 
     #[rstest]
@@ -455,10 +441,7 @@ mod tests {
     #[case(TxProgress::Scanning { rows: 0, total: 0 }, 0.0)]
     #[case(TxProgress::Identifying, 1.0)]
     #[case(TxProgress::Complete, 1.0)]
-    fn progress_maps_to_a_transmitted_fraction(
-        #[case] progress: TxProgress,
-        #[case] expected: f32,
-    ) {
+    fn progress_maps_to_a_transmitted_fraction(#[case] progress: TxProgress, #[case] expected: f32) {
         assert_eq!(progress.fraction(), expected);
     }
 
@@ -539,10 +522,7 @@ mod tests {
             .windows(2)
             .filter(|pair| pair[0] < 0.0 && pair[1] >= 0.0)
             .count();
-        assert!(
-            (crossings as i64 - 1_000).abs() <= 1,
-            "{crossings} crossings"
-        );
+        assert!((crossings as i64 - 1_000).abs() <= 1, "{crossings} crossings");
         assert_eq!(worker.latest().phase, TxPhase::Producing);
     }
 

@@ -7,10 +7,7 @@ pub(super) struct RasterClock {
 }
 
 impl RasterClock {
-    pub(super) fn from_estimate(
-        source_epoch: f64,
-        effective_sample_rate_hz: f64,
-    ) -> Result<Self, SstvError> {
+    pub(super) fn from_estimate(source_epoch: f64, effective_sample_rate_hz: f64) -> Result<Self, SstvError> {
         if !source_epoch.is_finite()
             || source_epoch < 0.0
             || !effective_sample_rate_hz.is_finite()
@@ -26,8 +23,7 @@ impl RasterClock {
 
     /// Returns the fractional sample position of a protocol instant.
     pub(super) fn position_at(&self, protocol_ps: u64) -> Result<f64, SstvError> {
-        let position =
-            self.source_epoch + self.effective_sample_rate_hz * protocol_ps as f64 / 1.0e12;
+        let position = self.source_epoch + self.effective_sample_rate_hz * protocol_ps as f64 / 1.0e12;
         if !position.is_finite() || position < 0.0 || position > u64::MAX as f64 {
             return Err(SstvError::SamplePositionOverflow);
         }

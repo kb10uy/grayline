@@ -13,10 +13,7 @@ pub(crate) const PS_PER_MS: u64 = 1_000_000_000;
 pub(crate) const VIS_END_PS: u64 = 910 * PS_PER_MS;
 
 #[cfg(test)]
-pub(crate) fn test_image(
-    mode: crate::mode::Mode,
-    fill: crate::image::Rgb8,
-) -> crate::image::RgbImage {
+pub(crate) fn test_image(mode: crate::mode::Mode, fill: crate::image::Rgb8) -> crate::image::RgbImage {
     let spec = mode.spec();
     crate::image::RgbImage::new(
         crate::image::ImageSize::new(spec.width() as usize, spec.height() as usize).unwrap(),

@@ -14,8 +14,8 @@ use grayline_sstv::{
     mode::Mode,
 };
 use grayline_sstv_template::{
-    AssetError, AssetProvider, EncodedAsset, RenderContext, RenderSize, Renderer, Template,
-    VariableValue, Variables, composite,
+    AssetError, AssetProvider, EncodedAsset, RenderContext, RenderSize, Renderer, Template, VariableValue, Variables,
+    composite,
 };
 use image::imageops::FilterType;
 use jiff::{Zoned, tz::TimeZone};
@@ -108,11 +108,7 @@ impl Composer {
             });
             return;
         }
-        let mut pending = self
-            .control
-            .request
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut pending = self.control.request.lock().unwrap_or_else(PoisonError::into_inner);
         *pending = Some(request);
         self.control.wake.notify_one();
     }
@@ -123,10 +119,7 @@ impl Composer {
     /// interface that stopped hearing results would show its waiting spinner
     /// forever.
     pub fn latest(&self) -> Option<ComposeResult> {
-        self.result
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
+        self.result.lock().unwrap_or_else(PoisonError::into_inner).take()
     }
 }
 
@@ -172,16 +165,8 @@ fn compose_loop(control: Arc<ComposeControl>, result: Arc<Mutex<Option<ComposeRe
             continue;
         };
         let generation = request.generation;
-        let composed = compose_frame(
-            &request,
-            &mut renderer,
-            &mut templates,
-            &mut backgrounds,
-            &assets,
-        );
-        let watched = composed
-            .as_ref()
-            .map_or(Watched::default(), |(_, watched)| *watched);
+        let composed = compose_frame(&request, &mut renderer, &mut templates, &mut backgrounds, &assets);
+        let watched = composed.as_ref().map_or(Watched::default(), |(_, watched)| *watched);
         let frame = composed.map(|(frame, _)| Arc::new(frame));
         if let Ok(mut output) = result.lock() {
             *output = Some(ComposeResult {
@@ -216,11 +201,7 @@ fn compose_frame(
         .select_generation(request.template_generation)
         .map_err(|error| error.to_string())?;
     let template = templates.prepare(&request.template_path, request.template_generation)?;
-    let background = backgrounds.prepare(
-        &request.background_path,
-        request.mode,
-        request.stock_generation,
-    )?;
+    let background = backgrounds.prepare(&request.background_path, request.mode, request.stock_generation)?;
     let size = RenderSize::new(
         u32::try_from(background.size().width()).map_err(|error| error.to_string())?,
         u32::try_from(background.size().height()).map_err(|error| error.to_string())?,
@@ -260,20 +241,13 @@ impl TemplateCache {
         let reusable = self
             .parsed
             .as_ref()
-            .is_some_and(|(parsed, parsed_generation, _)| {
-                parsed == path && *parsed_generation == generation
-            });
+            .is_some_and(|(parsed, parsed_generation, _)| parsed == path && *parsed_generation == generation);
         if !reusable {
-            let source =
-                fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+            let source = fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
             let template = Template::parse(&source).map_err(|error| error.to_string())?;
             self.parsed = Some((path.to_owned(), generation, template));
         }
-        Ok(&self
-            .parsed
-            .as_ref()
-            .expect("the template was just parsed")
-            .2)
+        Ok(&self.parsed.as_ref().expect("the template was just parsed").2)
     }
 }
 
@@ -295,9 +269,7 @@ impl BackgroundCache {
         let source_reusable = self
             .source
             .as_ref()
-            .is_some_and(|(loaded, loaded_generation, _)| {
-                loaded == path && *loaded_generation == generation
-            });
+            .is_some_and(|(loaded, loaded_generation, _)| loaded == path && *loaded_generation == generation);
         if !source_reusable {
             let decoded = image::open(path)
                 .map_err(|error| format!("{}: {error}", path.display()))?
@@ -310,29 +282,17 @@ impl BackgroundCache {
             .as_ref()
             .is_some_and(|(prepared_mode, _)| *prepared_mode == mode)
         {
-            let source = &self
-                .source
-                .as_ref()
-                .expect("the background source was just loaded")
-                .2;
+            let source = &self.source.as_ref().expect("the background source was just loaded").2;
             self.prepared = Some((mode, prepare_background(source, mode)?));
         }
-        Ok(&self
-            .prepared
-            .as_ref()
-            .expect("the background was just prepared")
-            .1)
+        Ok(&self.prepared.as_ref().expect("the background was just prepared").1)
     }
 }
 
 fn prepare_background(decoded: &image::RgbImage, mode: Mode) -> Result<RgbImage, String> {
-    let prepared = cover_image(
-        decoded,
-        u32::from(mode.spec().width()),
-        u32::from(mode.spec().height()),
-    );
-    let size = ImageSize::new(prepared.width() as usize, prepared.height() as usize)
-        .map_err(|error| error.to_string())?;
+    let prepared = cover_image(decoded, u32::from(mode.spec().width()), u32::from(mode.spec().height()));
+    let size =
+        ImageSize::new(prepared.width() as usize, prepared.height() as usize).map_err(|error| error.to_string())?;
     let pixels = prepared
         .pixels()
         .map(|pixel| Rgb8::new(pixel[0], pixel[1], pixel[2]))
@@ -343,27 +303,21 @@ fn prepare_background(decoded: &image::RgbImage, mode: Mode) -> Result<RgbImage,
 fn cover_image(source: &image::RgbImage, width: u32, height: u32) -> image::RgbImage {
     let source_width = source.width();
     let source_height = source.height();
-    let (resized_width, resized_height) = if u64::from(width) * u64::from(source_height)
-        >= u64::from(height) * u64::from(source_width)
-    {
-        (
-            width,
-            u32::try_from(
-                (u64::from(source_height) * u64::from(width)).div_ceil(u64::from(source_width)),
+    let (resized_width, resized_height) =
+        if u64::from(width) * u64::from(source_height) >= u64::from(height) * u64::from(source_width) {
+            (
+                width,
+                u32::try_from((u64::from(source_height) * u64::from(width)).div_ceil(u64::from(source_width)))
+                    .expect("resized height fits u32"),
             )
-            .expect("resized height fits u32"),
-        )
-    } else {
-        (
-            u32::try_from(
-                (u64::from(source_width) * u64::from(height)).div_ceil(u64::from(source_height)),
+        } else {
+            (
+                u32::try_from((u64::from(source_width) * u64::from(height)).div_ceil(u64::from(source_height)))
+                    .expect("resized width fits u32"),
+                height,
             )
-            .expect("resized width fits u32"),
-            height,
-        )
-    };
-    let resized =
-        image::imageops::resize(source, resized_width, resized_height, FilterType::Lanczos3);
+        };
+    let resized = image::imageops::resize(source, resized_width, resized_height, FilterType::Lanczos3);
     image::imageops::crop_imm(
         &resized,
         (resized_width - width) / 2,
@@ -447,10 +401,7 @@ fn variables(request: &ComposeRequest) -> Variables {
 /// Offers one instant in both the zone the operator reads and the zone the
 /// band works in, so a template chooses rather than converts.
 fn insert_timestamp(variables: &mut Variables, name: &str, instant: &Zoned) {
-    variables.insert(
-        format!("{name}.local"),
-        VariableValue::Timestamp(instant.clone()),
-    );
+    variables.insert(format!("{name}.local"), VariableValue::Timestamp(instant.clone()));
     variables.insert(
         format!("{name}.utc"),
         VariableValue::Timestamp(instant.with_time_zone(TimeZone::UTC)),
@@ -511,10 +462,9 @@ struct FileAssets<'a> {
 impl AssetProvider for FileAssets<'_> {
     fn load(&self, reference: &str) -> Result<Option<EncodedAsset>, AssetError> {
         let local = self.template_dir.join(reference);
-        let shared = Path::new(reference).strip_prefix("assets").map_or_else(
-            |_| self.assets_dir.join(reference),
-            |path| self.assets_dir.join(path),
-        );
+        let shared = Path::new(reference)
+            .strip_prefix("assets")
+            .map_or_else(|_| self.assets_dir.join(reference), |path| self.assets_dir.join(path));
         for path in [local, shared] {
             if let Some(asset) = self.cache.load(&path, self.generation)? {
                 return Ok(Some(asset));
@@ -548,14 +498,8 @@ mod tests {
             background_path: PathBuf::new(),
             assets_dir: PathBuf::new(),
             mode: Mode::Robot36,
-            received_image: Arc::new(RgbImage::new(
-                ImageSize::new(1, 1).unwrap(),
-                Rgb8::default(),
-            )),
-            received_at: date(2026, 8, 4)
-                .at(18, 5, 0, 0)
-                .in_tz("Asia/Tokyo")
-                .unwrap(),
+            received_image: Arc::new(RgbImage::new(ImageSize::new(1, 1).unwrap(), Rgb8::default())),
+            received_at: date(2026, 8, 4).at(18, 5, 0, 0).in_tz("Asia/Tokyo").unwrap(),
             station_callsign: "JA1ABC".to_owned(),
             station_qth: "Chiyoda, Tokyo".to_owned(),
             station_grid: "PM95uq".to_owned(),
@@ -651,10 +595,7 @@ mod tests {
             ..request()
         });
 
-        assert_eq!(
-            variables.get("radio.frequency"),
-            Some(&VariableValue::Decimal(14.23))
-        );
+        assert_eq!(variables.get("radio.frequency"), Some(&VariableValue::Decimal(14.23)));
         assert_eq!(
             variables.get("radio.band"),
             Some(&VariableValue::Text("20m".to_owned()))
@@ -674,14 +615,8 @@ mod tests {
             ..request()
         });
 
-        assert_eq!(
-            variables.get("radio.frequency"),
-            Some(&VariableValue::Decimal(6.0))
-        );
-        assert_eq!(
-            variables.get("radio.band"),
-            Some(&VariableValue::Text(String::new()))
-        );
+        assert_eq!(variables.get("radio.frequency"), Some(&VariableValue::Decimal(6.0)));
+        assert_eq!(variables.get("radio.band"), Some(&VariableValue::Text(String::new())));
     }
 
     /// A reception is timed once, and a template chooses the zone it prints
@@ -713,16 +648,8 @@ mod tests {
             .unwrap();
         let mut cache = BackgroundCache::default();
 
-        let first = cache
-            .prepare(&path, Mode::Robot36, 0)
-            .unwrap()
-            .pixels()
-            .as_ptr();
-        let second = cache
-            .prepare(&path, Mode::Robot36, 0)
-            .unwrap()
-            .pixels()
-            .as_ptr();
+        let first = cache.prepare(&path, Mode::Robot36, 0).unwrap().pixels().as_ptr();
+        let second = cache.prepare(&path, Mode::Robot36, 0).unwrap().pixels().as_ptr();
 
         assert_eq!(first, second);
     }

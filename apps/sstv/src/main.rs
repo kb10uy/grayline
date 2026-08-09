@@ -193,11 +193,7 @@ fn fit_to_monitor(ctx: &egui::Context) -> bool {
 }
 
 impl Interface {
-    fn new(
-        cc: &eframe::CreationContext<'_>,
-        paths: paths::AppPaths,
-        instance: platform::SingleInstance,
-    ) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, paths: paths::AppPaths, instance: platform::SingleInstance) -> Self {
         install_fonts(&cc.egui_ctx);
         platform::prepare_window(cc);
         instance.publish_window(cc);
@@ -261,8 +257,7 @@ impl eframe::App for Interface {
 
         let title = self.app.title();
         if title != self.title {
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
         }
 
@@ -300,10 +295,7 @@ mod tests {
     fn a_matched_family_is_installed_ahead_of_the_bundled_fonts() {
         let mut database = fontdb::Database::new();
         database.load_system_fonts();
-        let Some(wanted) = UI_FONTS
-            .iter()
-            .find(|family| load_face(&database, family).is_some())
-        else {
+        let Some(wanted) = UI_FONTS.iter().find(|family| load_face(&database, family).is_some()) else {
             return; // No system font to check against on this machine.
         };
 

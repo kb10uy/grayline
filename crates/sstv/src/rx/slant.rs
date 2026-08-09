@@ -77,9 +77,7 @@ impl SlantEstimator {
             for right in &accepted[index + 1..] {
                 let units = right.unit as i64 - left.unit as i64;
                 if units != 0 {
-                    slopes.push(
-                        (right.center_sample as f64 - left.center_sample as f64) / units as f64,
-                    );
+                    slopes.push((right.center_sample as f64 - left.center_sample as f64) / units as f64);
                 }
             }
         }
@@ -117,8 +115,7 @@ impl SlantEstimator {
             return None;
         }
         let residual_samples = libm::sqrt(residual_variance);
-        let source_epoch =
-            intercept - effective_sample_rate_hz * self.sync_center_ps as f64 / 1.0e12;
+        let source_epoch = intercept - effective_sample_rate_hz * self.sync_center_ps as f64 / 1.0e12;
         if !source_epoch.is_finite() || source_epoch < 0.0 {
             return None;
         }

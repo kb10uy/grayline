@@ -108,10 +108,7 @@ impl TransmissionEncoder {
                     .sum::<u64>()
         });
         SstvDuration::from_picos(
-            self.raster_start().as_picos()
-                + self.raster_duration().as_picos()
-                + identification
-                + 500 * PS_PER_MS,
+            self.raster_start().as_picos() + self.raster_duration().as_picos() + identification + 500 * PS_PER_MS,
         )
     }
 
@@ -168,15 +165,9 @@ impl Iterator for TransmissionEncoder {
         loop {
             match self.stage {
                 TransmissionStage::VoiceActivation => {
-                    if let Some((frequency_hz, duration_ms)) =
-                        VOX.get(self.voice_activation).copied()
-                    {
+                    if let Some((frequency_hz, duration_ms)) = VOX.get(self.voice_activation).copied() {
                         self.voice_activation += 1;
-                        return Some(self.emit(
-                            TxComponent::VoiceActivation,
-                            frequency_hz,
-                            duration_ms * PS_PER_MS,
-                        ));
+                        return Some(self.emit(TxComponent::VoiceActivation, frequency_hz, duration_ms * PS_PER_MS));
                     }
                     debug_assert_eq!(self.deadline_ps, VOX_DURATION_PS);
                     self.stage = TransmissionStage::Image;
@@ -239,8 +230,7 @@ mod tests {
             .until()
             .as_picos();
         let station_id = FskId::new("N0CALL").unwrap();
-        let mut transmission =
-            TransmissionEncoder::new(mode, image(mode, fill), station_id).unwrap();
+        let mut transmission = TransmissionEncoder::new(mode, image(mode, fill), station_id).unwrap();
         let duration = transmission.duration();
 
         let voice_activation: Vec<_> = transmission.by_ref().take(8).collect();
@@ -268,10 +258,7 @@ mod tests {
             .find(|tone| tone.component() == TxComponent::Footer)
             .unwrap();
         assert_eq!(footer.frequency().as_hz(), 1500);
-        assert_eq!(
-            footer.until().as_picos(),
-            VOX_DURATION_PS + image_end + 300 * PS_PER_MS
-        );
+        assert_eq!(footer.until().as_picos(), VOX_DURATION_PS + image_end + 300 * PS_PER_MS);
 
         let first_guard = transmission.next().unwrap();
         assert_eq!(first_guard.component(), TxComponent::StationIdentification);
@@ -306,8 +293,7 @@ mod tests {
     fn a_contest_number_lengthens_only_the_identifier() {
         let mode = Mode::Robot36;
         let station_id = FskId::new("N0CALL").unwrap();
-        let plain =
-            TransmissionEncoder::new(mode, image(mode, Rgb8::default()), station_id).unwrap();
+        let plain = TransmissionEncoder::new(mode, image(mode, Rgb8::default()), station_id).unwrap();
         let numbered = TransmissionEncoder::with_contest_number(
             mode,
             image(mode, Rgb8::default()),
@@ -331,10 +317,8 @@ mod tests {
     fn a_transmission_without_an_identifier_ends_after_the_raster() {
         let mode = Mode::Robot36;
         let station_id = FskId::new("N0CALL").unwrap();
-        let identified =
-            TransmissionEncoder::new(mode, image(mode, Rgb8::default()), station_id).unwrap();
-        let anonymous =
-            TransmissionEncoder::without_identifier(mode, image(mode, Rgb8::default())).unwrap();
+        let identified = TransmissionEncoder::new(mode, image(mode, Rgb8::default()), station_id).unwrap();
+        let anonymous = TransmissionEncoder::without_identifier(mode, image(mode, Rgb8::default())).unwrap();
 
         assert!(anonymous.duration() < identified.duration());
         assert_eq!(
@@ -355,18 +339,13 @@ mod tests {
     #[case(Mode::Scottie1, 9_000_000_000)]
     #[case(Mode::Robot36, 0)]
     #[case(Mode::Pd290, 0)]
-    fn the_raster_window_brackets_exactly_the_scanned_rows(
-        #[case] mode: Mode,
-        #[case] leading_ps: u64,
-    ) {
+    fn the_raster_window_brackets_exactly_the_scanned_rows(#[case] mode: Mode, #[case] leading_ps: u64) {
         let station_id = FskId::new("N0CALL").unwrap();
-        let mut transmission =
-            TransmissionEncoder::new(mode, image(mode, Rgb8::default()), station_id).unwrap();
+        let mut transmission = TransmissionEncoder::new(mode, image(mode, Rgb8::default()), station_id).unwrap();
         let start = transmission.raster_start().as_picos();
         assert_eq!(start, VOX_DURATION_PS + VIS_END_PS + leading_ps);
 
-        let units =
-            u64::from(mode.spec().active_rows() / u16::from(mode.spec().rows_per_raster_unit()));
+        let units = u64::from(mode.spec().active_rows() / u16::from(mode.spec().rows_per_raster_unit()));
         assert_eq!(
             transmission.raster_duration().as_picos(),
             units * mode.spec().period().as_picos()

@@ -10,11 +10,9 @@ use cpal::{
 use ringbuf::{HeapRb, traits::Split};
 
 use crate::{
-    AudioError, Capture, CaptureReader, FaultKind, FaultSlot, InputDevice, MINIMUM_SAMPLE_RATE_HZ,
-    OutputDevice, Playback, PlaybackWriter, StreamFault, capture,
-    device::{
-        describe, named, preferred_output_buffer_size, preferred_output_rate, preferred_rate,
-    },
+    AudioError, Capture, CaptureReader, FaultKind, FaultSlot, InputDevice, MINIMUM_SAMPLE_RATE_HZ, OutputDevice,
+    Playback, PlaybackWriter, StreamFault, capture,
+    device::{describe, named, preferred_output_buffer_size, preferred_output_rate, preferred_rate},
     playback,
 };
 
@@ -45,9 +43,7 @@ impl AudioHost {
             .filter(|device| device.default_input_config().is_ok())
             .filter_map(|device| describe(&device))
             .collect();
-        Ok(named(described)
-            .map(|(id, name)| InputDevice { id, name })
-            .collect())
+        Ok(named(described).map(|(id, name)| InputDevice { id, name }).collect())
     }
 
     /// Returns the host's default input device.
@@ -58,10 +54,7 @@ impl AudioHost {
     /// A default the crate cannot open is reported as no default at all.
     pub fn default_input_device(&self) -> Option<InputDevice> {
         let id = self.host.default_input_device()?.id().ok()?;
-        self.input_devices()
-            .ok()?
-            .into_iter()
-            .find(|device| device.id == id)
+        self.input_devices().ok()?.into_iter().find(|device| device.id == id)
     }
 
     /// Lists usable playback devices.
@@ -74,18 +67,13 @@ impl AudioHost {
             .filter(|device| device.default_output_config().is_ok())
             .filter_map(|device| describe(&device))
             .collect();
-        Ok(named(described)
-            .map(|(id, name)| OutputDevice { id, name })
-            .collect())
+        Ok(named(described).map(|(id, name)| OutputDevice { id, name }).collect())
     }
 
     /// Returns the host's default playback device.
     pub fn default_output_device(&self) -> Option<OutputDevice> {
         let id = self.host.default_output_device()?.id().ok()?;
-        self.output_devices()
-            .ok()?
-            .into_iter()
-            .find(|device| device.id == id)
+        self.output_devices().ok()?.into_iter().find(|device| device.id == id)
     }
 
     /// Opens `device` for capture and starts delivery.
@@ -178,8 +166,7 @@ impl AudioHost {
             .map_err(|_| AudioError::UnsupportedConfiguration(device.name.clone()))?;
         let sample_format = supported.sample_format();
         let channels = supported.channels();
-        let sample_rate =
-            preferred_output_rate(&target, supported.sample_rate(), channels, sample_format);
+        let sample_rate = preferred_output_rate(&target, supported.sample_rate(), channels, sample_format);
         if sample_rate < MINIMUM_SAMPLE_RATE_HZ || channels == 0 {
             return Err(AudioError::UnsupportedConfiguration(device.name.clone()));
         }
@@ -187,12 +174,7 @@ impl AudioHost {
         let config = StreamConfig {
             channels,
             sample_rate,
-            buffer_size: preferred_output_buffer_size(
-                &target,
-                sample_rate,
-                channels,
-                sample_format,
-            ),
+            buffer_size: preferred_output_buffer_size(&target, sample_rate, channels, sample_format),
         };
         let faults = FaultSlot::default();
         let report = fault_reporter(&faults, &device.name);
@@ -226,10 +208,7 @@ impl AudioHost {
             _ => return Err(AudioError::UnsupportedConfiguration(device.name.clone())),
         }
         .map_err(|error| AudioError::Backend(error.to_string()))?;
-        Ok((
-            Playback::new(stream, sample_rate, channels, state, faults),
-            writer,
-        ))
+        Ok((Playback::new(stream, sample_rate, channels, state, faults), writer))
     }
 }
 
@@ -296,10 +275,7 @@ mod tests {
     #[case(cpal::ErrorKind::StreamInvalidated, Some(FaultKind::Invalidated))]
     #[case(cpal::ErrorKind::HostUnavailable, Some(FaultKind::Backend))]
     #[case(cpal::ErrorKind::PermissionDenied, Some(FaultKind::Backend))]
-    fn stream_errors_are_classified(
-        #[case] kind: cpal::ErrorKind,
-        #[case] expected: Option<FaultKind>,
-    ) {
+    fn stream_errors_are_classified(#[case] kind: cpal::ErrorKind, #[case] expected: Option<FaultKind>) {
         assert_eq!(classify(kind), expected);
     }
 
@@ -326,10 +302,7 @@ mod tests {
         report(cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable));
         report(cpal::Error::new(cpal::ErrorKind::BackendError));
 
-        assert_eq!(
-            faults.take().map(|fault| fault.kind),
-            Some(FaultKind::Disconnected)
-        );
+        assert_eq!(faults.take().map(|fault| fault.kind), Some(FaultKind::Disconnected));
     }
 
     /// An error the stream survives must leave nothing behind for the

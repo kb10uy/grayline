@@ -48,9 +48,7 @@ impl FirDesign {
         let cutoff_hz = match self.kind {
             FirKind::LowPass => self.lower_frequency_hz,
             FirKind::HighPass => self.sample_rate_hz * 0.5 - self.lower_frequency_hz,
-            FirKind::BandPass | FirKind::BandStop => {
-                (self.upper_frequency_hz - self.lower_frequency_hz) * 0.5
-            }
+            FirKind::BandPass | FirKind::BandStop => (self.upper_frequency_hz - self.lower_frequency_hz) * 0.5,
         };
         let alpha = kaiser_alpha(self.attenuation_db);
         let half_order = self.order / 2;
@@ -89,15 +87,13 @@ impl FirDesign {
                 }
             }
             FirKind::BandPass => {
-                let center =
-                    PI * (self.lower_frequency_hz + self.upper_frequency_hz) / self.sample_rate_hz;
+                let center = PI * (self.lower_frequency_hz + self.upper_frequency_hz) / self.sample_rate_hz;
                 for (index, coefficient) in half.iter_mut().enumerate() {
                     *coefficient *= 2.0 * libm::cos(index as f64 * center);
                 }
             }
             FirKind::BandStop => {
-                let center =
-                    PI * (self.lower_frequency_hz + self.upper_frequency_hz) / self.sample_rate_hz;
+                let center = PI * (self.lower_frequency_hz + self.upper_frequency_hz) / self.sample_rate_hz;
                 half[0] = 1.0 - 2.0 * half[0];
                 for (index, coefficient) in half.iter_mut().enumerate().skip(1) {
                     *coefficient *= -2.0 * libm::cos(index as f64 * center);
@@ -228,9 +224,7 @@ fn validate_fir_design(design: FirDesign) -> Result<(), DspError> {
         return Err(DspError::InvalidGain);
     }
     match design.kind {
-        FirKind::LowPass | FirKind::HighPass => {
-            validate_frequency(design.sample_rate_hz, design.lower_frequency_hz)
-        }
+        FirKind::LowPass | FirKind::HighPass => validate_frequency(design.sample_rate_hz, design.lower_frequency_hz),
         FirKind::BandPass | FirKind::BandStop => validate_frequency_range(
             design.sample_rate_hz,
             design.lower_frequency_hz,
@@ -271,16 +265,17 @@ mod tests {
 
     fn response_at(coefficients: &[f64], frequency_hz: f64, sample_rate_hz: f64) -> f64 {
         let angular = 2.0 * PI * frequency_hz / sample_rate_hz;
-        let (real, imaginary) = coefficients.iter().enumerate().fold(
-            (0.0, 0.0),
-            |(real, imaginary), (index, coefficient)| {
-                let phase = angular * index as f64;
-                (
-                    real + coefficient * libm::cos(phase),
-                    imaginary - coefficient * libm::sin(phase),
-                )
-            },
-        );
+        let (real, imaginary) =
+            coefficients
+                .iter()
+                .enumerate()
+                .fold((0.0, 0.0), |(real, imaginary), (index, coefficient)| {
+                    let phase = angular * index as f64;
+                    (
+                        real + coefficient * libm::cos(phase),
+                        imaginary - coefficient * libm::sin(phase),
+                    )
+                });
         libm::sqrt(real * real + imaginary * imaginary)
     }
 
@@ -371,10 +366,7 @@ mod tests {
 
     #[test]
     fn non_finite_coefficients_have_a_distinct_error() {
-        assert_eq!(
-            Fir::new(vec![1.0, f64::NAN]).err(),
-            Some(DspError::InvalidCoefficient)
-        );
+        assert_eq!(Fir::new(vec![1.0, f64::NAN]).err(), Some(DspError::InvalidCoefficient));
         let mut filter = Fir::new(vec![1.0, 0.0]).unwrap();
         assert_eq!(
             filter.replace_coefficients(vec![1.0, f64::INFINITY]),

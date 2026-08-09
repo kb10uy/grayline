@@ -190,8 +190,7 @@ fn candidates(scope: SyncStart) -> impl Iterator<Item = Mode> {
         _ => None,
     };
     Mode::ALL.into_iter().filter(move |mode| {
-        mode.spec().decode_support() == Support::Supported
-            && only.is_none_or(|selected| *mode == selected)
+        mode.spec().decode_support() == Support::Supported && only.is_none_or(|selected| *mode == selected)
     })
 }
 
@@ -210,10 +209,7 @@ mod tests {
         detector.set_scope(scope);
         let pulse_samples = (rate * 0.006).round() as usize;
         let mut detected = None;
-        let feed = |detector: &mut SyncIntervalDetector,
-                    samples: usize,
-                    strength: f64,
-                    detected: &mut Option<Mode>| {
+        let feed = |detector: &mut SyncIntervalDetector, samples: usize, strength: f64, detected: &mut Option<Mode>| {
             for _ in 0..samples {
                 if let Some(mode) = detector.process(rate, strength) {
                     detected.get_or_insert(mode);
@@ -262,10 +258,7 @@ mod tests {
             detect_from_gaps(SyncStart::Only(Mode::Martin1), 8_000.0, &gaps),
             Some(Mode::Martin1)
         );
-        assert_eq!(
-            detect_from_gaps(SyncStart::Only(Mode::Scottie1), 8_000.0, &gaps),
-            None
-        );
+        assert_eq!(detect_from_gaps(SyncStart::Only(Mode::Scottie1), 8_000.0, &gaps), None);
     }
 
     /// Pulses lost to noise leave a gap a whole number of lines wide, which is
@@ -273,10 +266,7 @@ mod tests {
     #[test]
     fn a_train_with_missed_pulses_still_identifies_its_mode() {
         let gaps = vec![period_seconds(Mode::Martin1) * 3.0; INTERVAL_HISTORY];
-        assert_eq!(
-            detect_from_gaps(SyncStart::Any, 8_000.0, &gaps),
-            Some(Mode::Martin1)
-        );
+        assert_eq!(detect_from_gaps(SyncStart::Any, 8_000.0, &gaps), Some(Mode::Martin1));
     }
 
     /// Robot 36 at two lines is exactly Robot 72 at one. Nothing in the signal
@@ -284,10 +274,7 @@ mod tests {
     #[test]
     fn an_ambiguous_period_resolves_to_the_smallest_line_multiple() {
         let gaps = vec![period_seconds(Mode::Robot72); INTERVAL_HISTORY];
-        assert_eq!(
-            detect_from_gaps(SyncStart::Any, 8_000.0, &gaps),
-            Some(Mode::Robot72)
-        );
+        assert_eq!(detect_from_gaps(SyncStart::Any, 8_000.0, &gaps), Some(Mode::Robot72));
     }
 
     /// The tolerance has to separate the closest pair of candidates, which is
@@ -295,10 +282,7 @@ mod tests {
     #[test]
     fn neighbouring_candidates_are_not_confused() {
         let gaps = vec![period_seconds(Mode::Martin2) * 2.0; INTERVAL_HISTORY];
-        assert_eq!(
-            detect_from_gaps(SyncStart::Any, 8_000.0, &gaps),
-            Some(Mode::Martin2)
-        );
+        assert_eq!(detect_from_gaps(SyncStart::Any, 8_000.0, &gaps), Some(Mode::Martin2));
     }
 
     /// Random spacing is not a raster.
@@ -312,9 +296,6 @@ mod tests {
     #[test]
     fn a_mistimed_raster_is_still_identified() {
         let gaps = vec![period_seconds(Mode::Scottie1) * 1.0003; INTERVAL_HISTORY];
-        assert_eq!(
-            detect_from_gaps(SyncStart::Any, 8_000.0, &gaps),
-            Some(Mode::Scottie1)
-        );
+        assert_eq!(detect_from_gaps(SyncStart::Any, 8_000.0, &gaps), Some(Mode::Scottie1));
     }
 }

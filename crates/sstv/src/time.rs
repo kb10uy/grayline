@@ -129,21 +129,14 @@ mod tests {
             SstvDuration::from_picos(u64::MAX).checked_add(SstvDuration::from_picos(1)),
             None
         );
-        assert_eq!(
-            TxInstant::ZERO.checked_duration_since(TxInstant::from_picos(1)),
-            None
-        );
+        assert_eq!(TxInstant::ZERO.checked_duration_since(TxInstant::from_picos(1)), None);
     }
 
     #[rstest]
     #[case::truncates(1_500_000_000, 8_000, 12)]
     #[case::ceil_rounds_up(1_500_000_001, 8_000, 13)]
     #[case::one_second_exact(1_000_000_000_000, 48_000, 48_000)]
-    fn sample_conversion_agrees_with_open_form(
-        #[case] picos: u64,
-        #[case] rate_hz: u32,
-        #[case] ceil_expected: u64,
-    ) {
+    fn sample_conversion_agrees_with_open_form(#[case] picos: u64, #[case] rate_hz: u32, #[case] ceil_expected: u64) {
         let duration = SstvDuration::from_picos(picos);
         assert_eq!(
             duration.to_samples(rate_hz),
@@ -152,10 +145,7 @@ mod tests {
         assert_eq!(duration.to_samples_ceil(rate_hz), ceil_expected);
         let instant = TxInstant::from_picos(picos);
         assert_eq!(instant.to_samples(rate_hz), duration.to_samples(rate_hz));
-        assert_eq!(
-            instant.to_samples_ceil(rate_hz),
-            duration.to_samples_ceil(rate_hz)
-        );
+        assert_eq!(instant.to_samples_ceil(rate_hz), duration.to_samples_ceil(rate_hz));
     }
 
     #[test]
@@ -167,13 +157,8 @@ mod tests {
         assert_eq!(SstvDuration::from_micros(u64::MAX / 1_000_000 + 1), None);
         assert_eq!(
             SstvDuration::from_millis(u64::MAX / 1_000_000_000),
-            Some(SstvDuration::from_picos(
-                (u64::MAX / 1_000_000_000) * 1_000_000_000
-            ))
+            Some(SstvDuration::from_picos((u64::MAX / 1_000_000_000) * 1_000_000_000))
         );
-        assert_eq!(
-            SstvDuration::from_millis(u64::MAX / 1_000_000_000 + 1),
-            None
-        );
+        assert_eq!(SstvDuration::from_millis(u64::MAX / 1_000_000_000 + 1), None);
     }
 }

@@ -117,11 +117,7 @@ impl Pll {
     }
 
     /// Retunes the tracked range while preserving loop and filter state.
-    pub fn set_frequency_range(
-        &mut self,
-        lower_frequency_hz: f64,
-        upper_frequency_hz: f64,
-    ) -> Result<(), DspError> {
+    pub fn set_frequency_range(&mut self, lower_frequency_hz: f64, upper_frequency_hz: f64) -> Result<(), DspError> {
         if lower_frequency_hz >= upper_frequency_hz {
             return Err(DspError::InvalidFrequency);
         }

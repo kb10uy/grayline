@@ -89,9 +89,7 @@ impl RxProgress {
     pub fn fraction(self) -> f32 {
         match self {
             Self::Idle | Self::Acquiring => 0.0,
-            Self::Decoding { rows, total } if total > 0 => {
-                (rows as f32 / total as f32).clamp(0.0, 1.0)
-            }
+            Self::Decoding { rows, total } if total > 0 => (rows as f32 / total as f32).clamp(0.0, 1.0),
             Self::Decoding { .. } => 0.0,
             Self::Complete | Self::Stopped => 1.0,
         }
@@ -215,11 +213,7 @@ impl Mailbox {
     }
 
     fn take(&self) -> Option<RxSnapshot> {
-        self.slot
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .pending
-            .take()
+        self.slot.lock().unwrap_or_else(PoisonError::into_inner).pending.take()
     }
 }
 
@@ -343,10 +337,7 @@ impl RxWorker {
     }
 
     pub fn set_sync_start(&self, scope: SyncStart) {
-        *self
-            .sync_start
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = scope;
+        *self.sync_start.lock().unwrap_or_else(PoisonError::into_inner) = scope;
     }
 
     /// Returns the newest state, or `None` when nothing changed since the last
@@ -428,10 +419,7 @@ mod tests {
         });
 
         let snapshot = mailbox.take().unwrap();
-        assert_eq!(
-            snapshot.progress,
-            RxProgress::Decoding { rows: 3, total: 10 }
-        );
+        assert_eq!(snapshot.progress, RxProgress::Decoding { rows: 3, total: 10 });
         assert_eq!(snapshot.frame, Some(frame));
         assert_eq!(
             snapshot.error.map(|error| error.to_string()),
@@ -568,12 +556,10 @@ mod pipeline_tests {
         let mut pcm = Vec::new();
         let mut phase = 0.0_f64;
         for tone in TxEncoder::new(mode, image).unwrap() {
-            let deadline =
-                (tone.until().as_picos() as f64 * transmit_rate / 1.0e12).round() as usize;
+            let deadline = (tone.until().as_picos() as f64 * transmit_rate / 1.0e12).round() as usize;
             while pcm.len() < deadline {
                 pcm.push((phase.sin() * 0.8) as f32);
-                phase = (phase + TAU * f64::from(tone.frequency().as_hz()) / transmit_rate)
-                    .rem_euclid(TAU);
+                phase = (phase + TAU * f64::from(tone.frequency().as_hz()) / transmit_rate).rem_euclid(TAU);
             }
         }
         pcm
@@ -583,12 +569,10 @@ mod pipeline_tests {
         let mut pcm = Vec::new();
         let mut phase = 0.0_f64;
         for tone in TransmissionEncoder::new(mode, image, FskId::new(callsign).unwrap()).unwrap() {
-            let deadline =
-                (tone.until().as_picos() as f64 * f64::from(RATE) / 1.0e12).round() as usize;
+            let deadline = (tone.until().as_picos() as f64 * f64::from(RATE) / 1.0e12).round() as usize;
             while pcm.len() < deadline {
                 pcm.push((phase.sin() * 0.8) as f32);
-                phase = (phase + TAU * f64::from(tone.frequency().as_hz()) / f64::from(RATE))
-                    .rem_euclid(TAU);
+                phase = (phase + TAU * f64::from(tone.frequency().as_hz()) / f64::from(RATE)).rem_euclid(TAU);
             }
         }
         pcm
@@ -610,11 +594,7 @@ mod pipeline_tests {
         receive_with(pcm, trailing_silence, SyncStart::Disabled)
     }
 
-    fn receive_with(
-        pcm: &[f32],
-        trailing_silence: usize,
-        sync_start: SyncStart,
-    ) -> (RxSnapshot, Option<Frame>) {
+    fn receive_with(pcm: &[f32], trailing_silence: usize, sync_start: SyncStart) -> (RxSnapshot, Option<Frame>) {
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
         let worker = RxWorker::spawn(reader, true, true, false, sync_start, Waker::default());
         let mut snapshot = RxSnapshot::default();
@@ -649,12 +629,7 @@ mod pipeline_tests {
     }
 
     /// Waits for the worker to take everything the queue still holds.
-    fn drain(
-        feed: &mut CaptureWriter,
-        worker: &RxWorker,
-        snapshot: &mut RxSnapshot,
-        frame: &mut Option<Frame>,
-    ) {
+    fn drain(feed: &mut CaptureWriter, worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) {
         let deadline = Instant::now() + Duration::from_secs(30);
         while feed.vacant() < (1 << 16) && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(2));
@@ -687,14 +662,7 @@ mod pipeline_tests {
         let pcm = transmission(mode, expected.clone(), 0.0);
         let silence = vec![0.0_f32; RATE as usize * 3];
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(
-            reader,
-            true,
-            true,
-            false,
-            SyncStart::Disabled,
-            Waker::default(),
-        );
+        let worker = RxWorker::spawn(reader, true, true, false, SyncStart::Disabled, Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
 
@@ -725,31 +693,15 @@ mod pipeline_tests {
         let mode = Mode::Robot36;
         let pcm = transmission(mode, source_image(mode), 0.0);
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(
-            reader,
-            true,
-            true,
-            false,
-            SyncStart::Disabled,
-            Waker::default(),
-        );
+        let worker = RxWorker::spawn(reader, true, true, false, SyncStart::Disabled, Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
 
         // No trailing audio, so the reception is still running rather than
         // having been stopped by the signal going away.
-        push_all(
-            &mut feed,
-            &worker,
-            &pcm[..pcm.len() * 3 / 4],
-            &mut snapshot,
-            &mut frame,
-        );
+        push_all(&mut feed, &worker, &pcm[..pcm.len() * 3 / 4], &mut snapshot, &mut frame);
         drain(&mut feed, &worker, &mut snapshot, &mut frame);
-        assert!(
-            matches!(snapshot.progress, RxProgress::Decoding { .. }),
-            "{snapshot:?}"
-        );
+        assert!(matches!(snapshot.progress, RxProgress::Decoding { .. }), "{snapshot:?}");
 
         worker.set_muted_for_transmit(true);
         drain(&mut feed, &worker, &mut snapshot, &mut frame);
@@ -783,10 +735,7 @@ mod pipeline_tests {
 
         assert_eq!(snapshot.progress, RxProgress::Idle, "{snapshot:?}");
         assert!(frame.is_some());
-        assert!(
-            (0.65..1.0).contains(&snapshot.display_fraction),
-            "{snapshot:?}"
-        );
+        assert!((0.65..1.0).contains(&snapshot.display_fraction), "{snapshot:?}");
     }
 
     /// A station that notices a mistake stops and sends again a few seconds
@@ -828,41 +777,22 @@ mod pipeline_tests {
         let expected = source_image(mode);
         let pcm = transmission(mode, expected.clone(), 0.0);
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(
-            reader,
-            true,
-            true,
-            false,
-            SyncStart::Disabled,
-            Waker::default(),
-        );
+        let worker = RxWorker::spawn(reader, true, true, false, SyncStart::Disabled, Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
 
         // No trailing audio, so the reception is still running rather than
         // having been stopped by the signal going away.
-        push_all(
-            &mut feed,
-            &worker,
-            &pcm[..pcm.len() * 3 / 4],
-            &mut snapshot,
-            &mut frame,
-        );
+        push_all(&mut feed, &worker, &pcm[..pcm.len() * 3 / 4], &mut snapshot, &mut frame);
         drain(&mut feed, &worker, &mut snapshot, &mut frame);
-        assert!(
-            matches!(snapshot.progress, RxProgress::Decoding { .. }),
-            "{snapshot:?}"
-        );
+        assert!(matches!(snapshot.progress, RxProgress::Decoding { .. }), "{snapshot:?}");
 
         worker.request_reset();
         drain(&mut feed, &worker, &mut snapshot, &mut frame);
 
         assert_eq!(snapshot.progress, RxProgress::Idle, "{snapshot:?}");
         assert_eq!(snapshot.mode, None, "{snapshot:?}");
-        let history = snapshot
-            .history
-            .take()
-            .expect("the reception the reset ended");
+        let history = snapshot.history.take().expect("the reception the reset ended");
         assert_eq!(history.mode, mode);
 
         // The next transmission is received whole, so the reset left a search
@@ -901,10 +831,7 @@ mod pipeline_tests {
         let expected = source_image(mode);
         let (matched, baseline) = decode_at(mode, &expected, 0.0);
         assert_eq!(matched.progress, RxProgress::Complete, "{matched:?}");
-        assert!(
-            baseline < 40.0,
-            "matched reception is already poor: {baseline}"
-        );
+        assert!(baseline < 40.0, "matched reception is already poor: {baseline}");
 
         let (mistimed, error) = decode_at(mode, &expected, 300.0);
         assert_eq!(mistimed.progress, RxProgress::Complete, "{mistimed:?}");

@@ -7,10 +7,7 @@ use super::{Action, Menu};
 pub struct MenuHost;
 
 impl MenuHost {
-    pub fn install(
-        _cc: &eframe::CreationContext<'_>,
-        _model: &[Menu],
-    ) -> Result<Self, std::convert::Infallible> {
+    pub fn install(_cc: &eframe::CreationContext<'_>, _model: &[Menu]) -> Result<Self, std::convert::Infallible> {
         Ok(Self)
     }
 

@@ -50,8 +50,8 @@ where
             return Err(ModulatorError::InvalidSampleRate);
         }
 
-        let oscillator = Vco::new(f64::from(sample_rate_hz), 0.0, 0.0)
-            .map_err(|_| ModulatorError::InvalidSampleRate)?;
+        let oscillator =
+            Vco::new(f64::from(sample_rate_hz), 0.0, 0.0).map_err(|_| ModulatorError::InvalidSampleRate)?;
         Ok(Self {
             tones,
             oscillator,
@@ -100,8 +100,7 @@ where
                     *sample = self
                         .oscillator
                         .process_sample(0.0)
-                        .map_err(|_| ModulatorError::InvalidFrequency)?
-                        as f32;
+                        .map_err(|_| ModulatorError::InvalidFrequency)? as f32;
                 }
             }
             self.sample_position = self
@@ -197,11 +196,7 @@ mod tests {
 
     #[test]
     fn absolute_deadlines_use_ceil_without_duration_rounding_drift() {
-        let tones = [
-            tone(0, 125_000_000),
-            tone(1_000, 250_000_001),
-            tone(0, 375_000_001),
-        ];
+        let tones = [tone(0, 125_000_000), tone(1_000, 250_000_001), tone(0, 375_000_001)];
         let output = render(&tones, 16);
         assert_eq!(output.len(), 4);
         assert_eq!(output[0], 0.0);
@@ -256,10 +251,7 @@ mod tests {
     #[case(4_001)]
     fn nyquist_and_higher_frequencies_are_rejected(#[case] frequency_hz: u32) {
         let mut modulator = Modulator::new([tone(frequency_hz, 1)].into_iter(), 8_000).unwrap();
-        assert_eq!(
-            modulator.process(&mut [0.0]),
-            Err(ModulatorError::InvalidFrequency)
-        );
+        assert_eq!(modulator.process(&mut [0.0]), Err(ModulatorError::InvalidFrequency));
     }
 
     #[test]

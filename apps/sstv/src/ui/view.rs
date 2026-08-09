@@ -45,12 +45,7 @@ const LABEL: f32 = 11.0;
 /// platforms without a native menu bar always, and elsewhere as the fallback
 /// when installing the native one failed, so a machine that refuses it still
 /// has every menu action reachable.
-pub fn view(
-    ui: &mut Ui,
-    app: &mut App,
-    model: &[menu::Menu],
-    in_window_menu: bool,
-) -> Option<menu::Action> {
+pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bool) -> Option<menu::Action> {
     // Labels are inert throughout. Several of them sit inside rows that sense
     // the click themselves, and a selectable label takes the text cursor and
     // swallows the press; none of this text is worth dragging a selection
@@ -134,10 +129,7 @@ fn state(app: &App) -> String {
             TxPhase::Producing | TxPhase::Draining => match app.tx_progress() {
                 TxProgress::Scanning { rows, total } => app.i18n.text_with(
                     "state-transmitting",
-                    &[
-                        ("row", number(rows as u32)),
-                        ("total", number(total as u32)),
-                    ],
+                    &[("row", number(rows as u32)), ("total", number(total as u32))],
                 ),
                 TxProgress::Identifying => app.i18n.text("state-transmit-identifying"),
                 _ => app.i18n.text("state-transmit-leader"),
@@ -165,8 +157,7 @@ fn state(app: &App) -> String {
                 app.i18n.text("state-complete")
             } else {
                 let percent = (progress.fraction() * 100.0).round();
-                app.i18n
-                    .text_with("state-receiving", &[("percent", number(percent))])
+                app.i18n.text_with("state-receiving", &[("percent", number(percent))])
             }
         }
     }
@@ -257,9 +248,7 @@ fn transmit_button(ui: &mut Ui, app: &mut App, width: f32, height: f32) {
 fn tune_button(ui: &mut Ui, app: &mut App, width: f32, height: f32) {
     let active = app.is_tuning();
     let caption = TUNE_FREQUENCY_HZ.to_string();
-    let hint = app
-        .i18n
-        .text_with("action-tone", &[("frequency", arg(&caption))]);
+    let hint = app.i18n.text_with("action-tone", &[("frequency", arg(&caption))]);
     let size = egui::vec2(width, height);
     let problem = (!active).then(|| app.tune_problem()).flatten();
     let button = egui::Button::new(RichText::new(caption).size(SMALL)).selected(active);

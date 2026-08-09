@@ -148,9 +148,7 @@ fn main() -> Result<()> {
     println!(
         "{rows} rows, state {:?}, raster rate {:?}",
         pipeline.decoder().map(RxDecoder::state),
-        pipeline
-            .decoder()
-            .and_then(RxDecoder::effective_sample_rate_hz),
+        pipeline.decoder().and_then(RxDecoder::effective_sample_rate_hz),
     );
     if let Some(decoder) = pipeline.decoder_mut()
         && decoder.state() == RxState::Complete

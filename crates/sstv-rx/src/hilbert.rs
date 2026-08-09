@@ -47,8 +47,7 @@ impl HilbertDiscriminator {
         let analytic = self.transformer.process_sample(sample);
         let magnitude = analytic.in_phase.hypot(analytic.quadrature);
         let phase = analytic.quadrature.atan2(analytic.in_phase);
-        let previous = (self.phase_history_len == self.phase_lag)
-            .then_some(self.phase_history[self.next_phase]);
+        let previous = (self.phase_history_len == self.phase_lag).then_some(self.phase_history[self.next_phase]);
         self.phase_history[self.next_phase] = phase;
         self.next_phase = (self.next_phase + 1) % self.phase_lag;
         self.phase_history_len = (self.phase_history_len + 1).min(self.phase_lag);
@@ -56,9 +55,8 @@ impl HilbertDiscriminator {
             && magnitude > 1.0e-8
         {
             let delta = (phase - previous + PI).rem_euclid(TAU) - PI;
-            self.held_frequency = (delta.abs() * self.sample_rate_hz
-                / (TAU * self.phase_lag as f64))
-                .clamp(0.0, 3_000.0);
+            self.held_frequency =
+                (delta.abs() * self.sample_rate_hz / (TAU * self.phase_lag as f64)).clamp(0.0, 3_000.0);
         }
         self.output_filter.process_sample(self.held_frequency)
     }
@@ -101,10 +99,7 @@ mod tests {
             }
         }
         let estimate = sum / f64::from(rate / 10);
-        assert!(
-            (estimate - expected).abs() < 2.0,
-            "{rate} Hz produced {estimate} Hz"
-        );
+        assert!((estimate - expected).abs() < 2.0, "{rate} Hz produced {estimate} Hz");
     }
 
     #[rstest]

@@ -99,21 +99,18 @@ impl RasterScan {
 
     /// Returns each segment of `unit` with its offset from the raster unit start.
     pub fn offsets(self, unit: usize) -> impl Iterator<Item = (SstvDuration, ScanSegment)> {
-        self.unit(unit)
-            .iter()
-            .scan(SstvDuration::ZERO, |offset, segment| {
-                let start = *offset;
-                *offset = offset.checked_add(segment.duration)?;
-                Some((start, *segment))
-            })
+        self.unit(unit).iter().scan(SstvDuration::ZERO, |offset, segment| {
+            let start = *offset;
+            *offset = offset.checked_add(segment.duration)?;
+            Some((start, *segment))
+        })
     }
 
     /// Returns the midpoint of the first synchronization segment of `unit`.
     pub fn sync_center(self, unit: usize) -> Option<SstvDuration> {
         self.offsets(unit).find_map(|(offset, segment)| {
-            (segment.component == TxComponent::Sync).then(|| {
-                SstvDuration::from_picos(offset.as_picos() + segment.duration.as_picos() / 2)
-            })
+            (segment.component == TxComponent::Sync)
+                .then(|| SstvDuration::from_picos(offset.as_picos() + segment.duration.as_picos() / 2))
         })
     }
 
@@ -121,9 +118,7 @@ impl RasterScan {
     pub fn duration(self, unit: usize) -> Option<SstvDuration> {
         self.unit(unit)
             .iter()
-            .try_fold(SstvDuration::ZERO, |total, segment| {
-                total.checked_add(segment.duration)
-            })
+            .try_fold(SstvDuration::ZERO, |total, segment| total.checked_add(segment.duration))
     }
 }
 
@@ -135,18 +130,10 @@ const fn tone(component: TxComponent, hz: u32, duration_ps: u64) -> ScanSegment 
     }
 }
 
-const fn pixels(
-    component: TxComponent,
-    channel: ScanChannel,
-    row_offset: u8,
-    duration_ps: u64,
-) -> ScanSegment {
+const fn pixels(component: TxComponent, channel: ScanChannel, row_offset: u8, duration_ps: u64) -> ScanSegment {
     ScanSegment {
         component,
-        content: ScanContent::Pixels {
-            channel,
-            row_offset,
-        },
+        content: ScanContent::Pixels { channel, row_offset },
         duration: SstvDuration::from_picos(duration_ps),
     }
 }
@@ -176,20 +163,11 @@ const fn scottie(component_ps: u64) -> [ScanSegment; 7] {
     ]
 }
 
-const fn robot36(
-    selector_hz: u32,
-    chroma_component: TxComponent,
-    chroma: ScanChannel,
-) -> [ScanSegment; 6] {
+const fn robot36(selector_hz: u32, chroma_component: TxComponent, chroma: ScanChannel) -> [ScanSegment; 6] {
     [
         tone(TxComponent::Sync, SYNC_HZ, 9_000_000_000),
         tone(TxComponent::Porch, PORCH_HZ, 3_000_000_000),
-        pixels(
-            TxComponent::Luminance,
-            ScanChannel::Luminance,
-            0,
-            88_000_000_000,
-        ),
+        pixels(TxComponent::Luminance, ScanChannel::Luminance, 0, 88_000_000_000),
         tone(TxComponent::ChrominanceSelector, selector_hz, 4_500_000_000),
         tone(TxComponent::Porch, LEADER_HZ, 1_500_000_000),
         pixels(chroma_component, chroma, 0, 44_000_000_000),
@@ -200,30 +178,15 @@ const fn pd(component_ps: u64) -> [ScanSegment; 6] {
     [
         tone(TxComponent::Sync, SYNC_HZ, 20_000_000_000),
         tone(TxComponent::Porch, PORCH_HZ, 2_080_000_000),
-        pixels(
-            TxComponent::Luminance,
-            ScanChannel::Luminance,
-            0,
-            component_ps,
-        ),
-        pixels(
-            TxComponent::RedDifference,
-            ScanChannel::RedDifference,
-            0,
-            component_ps,
-        ),
+        pixels(TxComponent::Luminance, ScanChannel::Luminance, 0, component_ps),
+        pixels(TxComponent::RedDifference, ScanChannel::RedDifference, 0, component_ps),
         pixels(
             TxComponent::BlueDifference,
             ScanChannel::BlueDifference,
             0,
             component_ps,
         ),
-        pixels(
-            TxComponent::Luminance,
-            ScanChannel::Luminance,
-            1,
-            component_ps,
-        ),
+        pixels(TxComponent::Luminance, ScanChannel::Luminance, 1, component_ps),
     ]
 }
 
@@ -250,25 +213,12 @@ const MARTIN2_UNIT: [ScanSegment; 8] = martin(73_216_000_000);
 const SCOTTIE1_UNIT: [ScanSegment; 7] = scottie(138_240_000_000);
 const SCOTTIE2_UNIT: [ScanSegment; 7] = scottie(88_064_000_000);
 const SCOTTIE_DX_UNIT: [ScanSegment; 7] = scottie(345_600_000_000);
-const ROBOT36_UNIT: [ScanSegment; 6] = robot36(
-    PORCH_HZ,
-    TxComponent::RedDifference,
-    ScanChannel::RedDifference,
-);
-const ROBOT36_ALTERNATE: [ScanSegment; 6] = robot36(
-    2300,
-    TxComponent::BlueDifference,
-    ScanChannel::BlueDifference,
-);
+const ROBOT36_UNIT: [ScanSegment; 6] = robot36(PORCH_HZ, TxComponent::RedDifference, ScanChannel::RedDifference);
+const ROBOT36_ALTERNATE: [ScanSegment; 6] = robot36(2300, TxComponent::BlueDifference, ScanChannel::BlueDifference);
 const ROBOT72_UNIT: [ScanSegment; 9] = [
     tone(TxComponent::Sync, SYNC_HZ, 9_000_000_000),
     tone(TxComponent::Porch, PORCH_HZ, 3_000_000_000),
-    pixels(
-        TxComponent::Luminance,
-        ScanChannel::Luminance,
-        0,
-        138_000_000_000,
-    ),
+    pixels(TxComponent::Luminance, ScanChannel::Luminance, 0, 138_000_000_000),
     tone(TxComponent::Porch, PORCH_HZ, 4_500_000_000),
     tone(TxComponent::Porch, LEADER_HZ, 1_500_000_000),
     pixels(

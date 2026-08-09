@@ -31,9 +31,8 @@ impl ZeroCrossingFrequency {
     pub fn process_sample(&mut self, sample: f64) -> Option<f64> {
         let previous_sample = self.previous_sample.replace(sample);
         // Both polarities are measured, yielding one estimate per half-cycle.
-        let crossed = previous_sample.is_some_and(|previous| {
-            (sample >= 0.0 && previous < 0.0) || (sample < 0.0 && previous >= 0.0)
-        });
+        let crossed = previous_sample
+            .is_some_and(|previous| (sample >= 0.0 && previous < 0.0) || (sample < 0.0 && previous >= 0.0));
         let frequency = if let Some(previous_sample) = previous_sample.filter(|_| crossed) {
             // Linear interpolation estimates the fractional sample where the
             // segment between the previous and current values crosses zero.
@@ -43,8 +42,7 @@ impl ZeroCrossingFrequency {
                 let half_cycle_samples = crossing - previous;
                 // Reject sub-sample half-cycles, which cannot be represented
                 // without aliasing at this sample rate.
-                (half_cycle_samples >= 1.0)
-                    .then_some(self.sample_rate_hz * 0.5 / half_cycle_samples)
+                (half_cycle_samples >= 1.0).then_some(self.sample_rate_hz * 0.5 / half_cycle_samples)
             });
             self.previous_crossing = Some(crossing);
             frequency

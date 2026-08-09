@@ -152,14 +152,8 @@ mod tests {
     #[test]
     fn validates_dimensions_and_storage() {
         assert_eq!(ImageSize::new(0, 1), Err(SstvError::EmptyImage));
-        assert_eq!(
-            ImageSize::new(usize::MAX, 2),
-            Err(SstvError::ImageSizeOverflow)
-        );
-        assert_eq!(
-            ImageSize::new(usize::MAX / 2, 2),
-            Err(SstvError::ImageSizeOverflow)
-        );
+        assert_eq!(ImageSize::new(usize::MAX, 2), Err(SstvError::ImageSizeOverflow));
+        assert_eq!(ImageSize::new(usize::MAX / 2, 2), Err(SstvError::ImageSizeOverflow));
         let size = ImageSize::new(2, 2).unwrap();
         assert_eq!(
             RgbImage::from_pixels(size, vec![Rgb8::default(); 3]),

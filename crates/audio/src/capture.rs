@@ -76,12 +76,7 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub(crate) const fn new(
-        stream: Stream,
-        sample_rate_hz: u32,
-        channels: u16,
-        faults: FaultSlot,
-    ) -> Self {
+    pub(crate) const fn new(stream: Stream, sample_rate_hz: u32, channels: u16, faults: FaultSlot) -> Self {
         Self {
             stream,
             sample_rate_hz,
@@ -145,11 +140,7 @@ pub struct CaptureReader {
 }
 
 impl CaptureReader {
-    pub(crate) fn new(
-        consumer: HeapCons<f32>,
-        dropped: Arc<AtomicU64>,
-        sample_rate_hz: u32,
-    ) -> Self {
+    pub(crate) fn new(consumer: HeapCons<f32>, dropped: Arc<AtomicU64>, sample_rate_hz: u32) -> Self {
         Self {
             consumer,
             dropped,
@@ -208,9 +199,7 @@ impl CaptureWriter {
 
 impl core::fmt::Debug for CaptureWriter {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("CaptureWriter")
-            .finish_non_exhaustive()
+        formatter.debug_struct("CaptureWriter").finish_non_exhaustive()
     }
 }
 
@@ -223,9 +212,7 @@ pub fn synthetic_capture(
         return Err(AudioError::EmptyCapacity);
     }
     if sample_rate_hz < crate::MINIMUM_SAMPLE_RATE_HZ {
-        return Err(AudioError::UnsupportedConfiguration(format!(
-            "{sample_rate_hz} Hz"
-        )));
+        return Err(AudioError::UnsupportedConfiguration(format!("{sample_rate_hz} Hz")));
     }
     let (producer, consumer) = ringbuf::HeapRb::<f32>::new(capacity_samples).split();
     let dropped = Arc::new(AtomicU64::new(0));
@@ -272,13 +259,8 @@ where
 ///
 /// Overrun is reported through `dropped` instead of blocking, because this
 /// runs on the host's audio callback thread.
-fn publish<T>(
-    data: &[T],
-    channels: usize,
-    scratch: &mut [f32],
-    producer: &mut HeapProd<f32>,
-    dropped: &AtomicU64,
-) where
+fn publish<T>(data: &[T], channels: usize, scratch: &mut [f32], producer: &mut HeapProd<f32>, dropped: &AtomicU64)
+where
     T: Sample,
     f32: FromSample<T>,
 {
@@ -325,11 +307,7 @@ mod tests {
     #[case(1, &[0.25_f32, 0.5, 0.75], &[0.25, 0.5, 0.75])]
     #[case(2, &[0.25_f32, -1.0, 0.5, -1.0], &[0.25, 0.5])]
     #[case(3, &[0.25_f32, -1.0, -1.0, 0.5, -1.0, -1.0], &[0.25, 0.5])]
-    fn first_channel_is_extracted(
-        #[case] channels: usize,
-        #[case] input: &[f32],
-        #[case] expected: &[f32],
-    ) {
+    fn first_channel_is_extracted(#[case] channels: usize, #[case] input: &[f32], #[case] expected: &[f32]) {
         let mut out = [0.0_f32; 8];
         let count = extract_first_channel(input, channels, &mut out);
         assert_eq!(&out[..count], expected);
