@@ -42,6 +42,7 @@ pub enum FaultKind {
 pub struct StreamFault {
     /// The device the stream was running on, named as the operator saw it.
     pub device: String,
+    /// What the stream stopped for, as far as this crate can tell them apart.
     pub kind: FaultKind,
     /// What the host said, for the log.
     pub detail: String,

@@ -33,6 +33,10 @@ pub struct Response {
 }
 
 impl Response {
+    /// The lines that came back, without the `RPRT` status that ended them.
+    ///
+    /// Line endings are already off, so a script reads what the rig said
+    /// rather than how the socket framed it.
     pub fn lines(&self) -> &[String] {
         &self.lines
     }
@@ -111,10 +115,16 @@ impl Rigctld {
         Ok(rig)
     }
 
+    /// The address this connection was opened to.
     pub fn address(&self) -> &str {
         &self.address
     }
 
+    /// Whether this `rigctld` was started with `--vfo`.
+    ///
+    /// Reported so the caller can say which arrangement it settled on. The
+    /// commands this crate sends for itself are already addressed accordingly;
+    /// what a script sends is the script's own to spell.
     pub const fn requires_vfo(&self) -> bool {
         self.requires_vfo
     }

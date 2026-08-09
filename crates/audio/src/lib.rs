@@ -5,6 +5,8 @@
 //! and nothing from the underlying host API, so the SSTV core and the
 //! application never depend on a platform audio type.
 
+#![deny(missing_docs)]
+
 mod capture;
 mod device;
 mod error;

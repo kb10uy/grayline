@@ -11,7 +11,12 @@ pub enum RigError {
     Address(String),
     /// Nothing was listening, or the connection could not be established.
     #[error("rig control could not reach {address}: {detail}")]
-    Connect { address: String, detail: String },
+    Connect {
+        /// The address that was tried, as it was configured.
+        address: String,
+        /// What the platform said about the attempt.
+        detail: String,
+    },
     /// The socket failed while a command was in flight.
     #[error("the connection to rig control failed: {0}")]
     Transport(String),
@@ -25,10 +30,18 @@ pub enum RigError {
     /// command, so the number that can be looked up is more use than a guess
     /// at what it meant.
     #[error("`{command}` was refused by the rig with status {code}")]
-    Refused { command: String, code: i32 },
+    Refused {
+        /// The command as it was sent.
+        command: String,
+        /// Hamlib's own `RIG_E*` value, negated as `rigctld` reports it.
+        code: i32,
+    },
     /// The answer did not end the way the protocol says it must.
     #[error("rigctld answered `{command}` with nothing this crate could read")]
-    Unreadable { command: String },
+    Unreadable {
+        /// The command the unreadable answer came back to.
+        command: String,
+    },
     /// The command held a line break, or nothing at all.
     ///
     /// One call sends one command. A line break would frame two, and the

@@ -14,6 +14,8 @@
 //! runs at the same time, because sharing one rig between programs is what
 //! `rigctld` is for.
 
+#![deny(missing_docs)]
+
 mod error;
 mod rigctld;
 
