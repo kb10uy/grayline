@@ -9,6 +9,16 @@ use super::{
 
 const MIN_OBSERVATIONS: usize = 6;
 
+/// Most accepted observations the seed slope is drawn from.
+///
+/// The pairwise slope count grows with the square of the observations, and
+/// live tracking estimates again after every raster unit, so an unbounded
+/// seed would make each line dearer than the one before it. The seed is
+/// subsampled evenly across everything accepted, which keeps the long
+/// baselines the slope's precision comes from; the final fit still uses
+/// every accepted observation.
+const SEED_OBSERVATIONS: usize = 64;
+
 /// Least-squares estimate of raster timing from accepted sync observations.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SlantEstimate {
@@ -58,7 +68,9 @@ impl SlantEstimator {
     /// Fits timing, rejecting weak observations and large residual outliers.
     ///
     /// At least six accepted observations are required. A median pairwise slope
-    /// seeds outlier rejection; the reported values are then ordinary least squares.
+    /// over at most [`SEED_OBSERVATIONS`] evenly subsampled observations seeds
+    /// outlier rejection; the reported values are then ordinary least squares
+    /// over everything accepted.
     pub fn estimate(&self, observations: &[SyncObservation]) -> Option<SlantEstimate> {
         if self.configured_sample_rate_hz <= 0.0 || self.period_ps == 0 {
             return None;
@@ -72,9 +84,11 @@ impl SlantEstimator {
             return None;
         }
 
-        let mut slopes = Vec::new();
-        for (index, left) in accepted.iter().enumerate() {
-            for right in &accepted[index + 1..] {
+        let stride = accepted.len().div_ceil(SEED_OBSERVATIONS).max(1);
+        let seed: Vec<_> = accepted.iter().step_by(stride).collect();
+        let mut slopes = Vec::with_capacity(seed.len() * (seed.len() - 1) / 2);
+        for (index, left) in seed.iter().enumerate() {
+            for right in &seed[index + 1..] {
                 let units = right.unit as i64 - left.unit as i64;
                 if units != 0 {
                     slopes.push((right.center_sample as f64 - left.center_sample as f64) / units as f64);
@@ -84,14 +98,14 @@ impl SlantEstimator {
         if slopes.is_empty() {
             return None;
         }
-        slopes.sort_by(f64::total_cmp);
-        let seed_slope = slopes[slopes.len() / 2];
+        let middle = slopes.len() / 2;
+        let seed_slope = *slopes.select_nth_unstable_by(middle, f64::total_cmp).1;
         let mut intercepts: Vec<_> = accepted
             .iter()
             .map(|value| value.center_sample as f64 - seed_slope * value.unit as f64)
             .collect();
-        intercepts.sort_by(f64::total_cmp);
-        let seed_intercept = intercepts[intercepts.len() / 2];
+        let middle = intercepts.len() / 2;
+        let seed_intercept = *intercepts.select_nth_unstable_by(middle, f64::total_cmp).1;
         let nominal_period = self.configured_sample_rate_hz * self.period_ps as f64 / 1.0e12;
         let residual_limit = (nominal_period * 0.03).max(2.0);
         let filtered: Vec<_> = accepted
