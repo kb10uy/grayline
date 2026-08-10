@@ -21,6 +21,15 @@ the signal rather than the program.
 - [sstv/fskid.md](sstv/fskid.md): the FSK station-identification protocol,
   including the callsign, contest, and narrow N-VIS records.
 
+## `wefax/` — the protocols
+
+WEFAX as it exists on the air. Unlike SSTV it is not an amateur mode and has no
+reference implementation this project follows, so these values answer to the
+published standards rather than to anyone's source.
+
+- [wefax/protocol.md](wefax/protocol.md): modulation, index of cooperation,
+  line rates, the framing tones, and the phasing signal.
+
 ## `mmsstv/` — the original implementation
 
 The behavior of the original MMSSTV source in `docs/reference/mmsstv`, which this
@@ -47,6 +56,9 @@ The Rust implementation: what it is meant to be, and what it currently is.
   current crate structure.
 - [grayline/gui-design.md](grayline/gui-design.md): the desktop application, its
   audio boundary, and its platform integration.
+- [grayline/wefax.md](grayline/wefax.md): the WEFAX receive crate, what it took
+  from the core on its way in, and where it deliberately parts company with the
+  SSTV receive contract.
 - [grayline/rig-control.md](grayline/rig-control.md): the transports the rig is
   reached over, the script that decides what is sent, and the band plan both
   read. Describes a target design ahead of what is implemented.

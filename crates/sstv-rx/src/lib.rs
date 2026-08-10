@@ -7,7 +7,6 @@ mod afc;
 mod demodulator;
 mod error;
 mod frontend;
-mod hilbert;
 mod pipeline;
 mod sync;
 mod vis;

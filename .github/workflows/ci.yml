@@ -53,6 +53,7 @@ jobs:
         run: |
           cargo build -p grayline-sstv --no-default-features
           cargo build -p grayline-dsp --no-default-features
+          cargo build -p grayline-wefax --no-default-features
 
       # For the same reason, a crate that asks for no `std` feature from these
       # two is only held to it on its own: the workspace turns the feature on
