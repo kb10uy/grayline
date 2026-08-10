@@ -13,7 +13,8 @@ are planned.
 The repository contains:
 
 - `apps/`: one directory per shipped application, plus the browser demo.
-  `apps/sstv/` is the SSTV desktop application.
+  `apps/sstv/` is the SSTV desktop application and `apps/wefax/` the WEFAX
+  one.
 - `crates/`: the libraries. Directory names carry no prefix; the packages they
   hold are named `grayline-*`. `crates/shell/` holds what every application
   needs and no mode decides: platform integration, the localization machinery,

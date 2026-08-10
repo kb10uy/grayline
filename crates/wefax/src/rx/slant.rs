@@ -29,6 +29,8 @@ const MIN_DRIFT: f64 = 0.05;
 const MAX_DISPERSION: f64 = 1.0;
 /// Lines a correction suppresses the next one for.
 const HOLDOFF_LINES: usize = 32;
+/// Pairs a whole-picture fit aims to draw from.
+const REFINE_PAIRS: usize = 24;
 /// Range of levels a row needs before it is worth correlating.
 const MIN_ROW_CONTRAST: u8 = 8;
 /// Share of the typical score the best one has to beat.
@@ -61,31 +63,7 @@ impl SlantTracker {
             return None;
         }
         self.next_check = line + INTERVAL_LINES;
-
-        let first = line - WINDOW_LINES;
-        let mut displacements = Vec::with_capacity(WINDOW_LINES / PAIR_STRIDE);
-        let mut row = first;
-        while row + BASELINE < line {
-            if let (Some(early), Some(late)) = (raster.row(row), raster.row(row + BASELINE))
-                && has_contrast(early)
-                && let Some(displacement) = displacement(early, late)
-            {
-                displacements.push(displacement);
-            }
-            row += PAIR_STRIDE;
-        }
-        if displacements.len() < MIN_PAIRS {
-            return None;
-        }
-
-        let center = median(&mut displacements);
-        // The median rather than the mean: a coastline or a front that really
-        // does move sideways is one pair's answer, not the picture's.
-        let mut deviations: Vec<f64> = displacements.iter().map(|value| (value - center).abs()).collect();
-        if median(&mut deviations) > MAX_DISPERSION {
-            return None;
-        }
-        let drift = center / BASELINE as f64;
+        let drift = drift_between(raster, line - WINDOW_LINES, line, BASELINE, PAIR_STRIDE)?;
         if drift.abs() < MIN_DRIFT {
             return None;
         }
@@ -96,6 +74,53 @@ impl SlantTracker {
     pub(crate) fn reset(&mut self) {
         *self = Self::default();
     }
+}
+
+/// Measures the drift of the whole picture over a `baseline`-line span.
+///
+/// The live tracker is bound to a short window so it can correct a reception
+/// while it arrives, and that window is what sets the smallest drift it can
+/// see: sixty-four lines only displace by a pixel or so at the rate error it
+/// is allowed to ignore. A finished picture has no such bound — the baseline
+/// can be hundreds of lines, and the displacement grows with it while the
+/// noise measuring it does not.
+pub(crate) fn whole_picture_drift(raster: &GrayRaster, baseline: usize) -> Option<f64> {
+    let height = raster.height();
+    if baseline == 0 || height <= baseline {
+        return None;
+    }
+    let stride = ((height - baseline) / REFINE_PAIRS).max(1);
+    drift_between(raster, 0, height, baseline, stride)
+}
+
+/// Returns the drift in pixels per line across `first..last`.
+///
+/// Each pair is a row and the one `baseline` further on, and the answer is the
+/// median of what they say. The median rather than the mean: a coastline or a
+/// front that really does move sideways is one pair's answer, not the
+/// picture's.
+fn drift_between(raster: &GrayRaster, first: usize, last: usize, baseline: usize, stride: usize) -> Option<f64> {
+    let mut displacements = Vec::new();
+    let mut row = first;
+    while row + baseline < last {
+        if let (Some(early), Some(late)) = (raster.row(row), raster.row(row + baseline))
+            && has_contrast(early)
+            && let Some(displacement) = displacement(early, late)
+        {
+            displacements.push(displacement);
+        }
+        row += stride;
+    }
+    if displacements.len() < MIN_PAIRS {
+        return None;
+    }
+
+    let center = median(&mut displacements);
+    let mut deviations: Vec<f64> = displacements.iter().map(|value| (value - center).abs()).collect();
+    if median(&mut deviations) > MAX_DISPERSION {
+        return None;
+    }
+    Some(center / baseline as f64)
 }
 
 /// Returns whether a row carries enough variation to be correlated.

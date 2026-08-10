@@ -347,7 +347,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains fourteen packages:
+The workspace currently contains fifteen packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -364,6 +364,7 @@ The workspace currently contains fourteen packages:
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `decode-fax-wav` | Offline WEFAX receive integration | Implemented |
+| `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
 Their current dependency direction is:
@@ -399,6 +400,10 @@ grayline-sstv -----------+
 grayline-sstv-template -------+
 
 grayline-dsp ------------> grayline-wefax --> decode-fax-wav
+
+grayline-audio ----------+
+grayline-shell ----------+-> grayline-wefax-app
+grayline-wefax ----------+
 ```
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this

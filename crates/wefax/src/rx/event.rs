@@ -123,6 +123,19 @@ pub enum RxEvent {
     },
 }
 
+/// What refitting a finished picture changed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Refinement {
+    /// The line length the whole picture fits, in samples.
+    pub samples_per_line: f64,
+    /// How far that stood from the length decoding ended on, in parts per
+    /// million.
+    pub error_ppm: f64,
+    /// How far the picture was moved back towards the phase the phasing
+    /// signal established, in pixels.
+    pub displacement_pixels: f64,
+}
+
 /// What one call to the decoder consumed and left it in.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxProcessResult {

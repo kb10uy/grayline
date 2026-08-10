@@ -11,14 +11,39 @@ use crate::error::WefaxError;
 /// by doubling: doubling leaves up to half the allocation unused and copies
 /// everything retained so far each time it grows, and a chart running for
 /// twenty minutes would do that a dozen times over.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct GrayRaster {
     width: usize,
     height: usize,
     max_height: usize,
     growth: usize,
     pixels: Vec<u8>,
+    /// How far each row has been asked to move, before that was rounded to a
+    /// whole pixel.
+    ///
+    /// Rounding each correction on its own and adding the results is not the
+    /// same as rounding their sum. Every rounding leaves an error that runs
+    /// from minus half a pixel to plus half a pixel and back as the row number
+    /// climbs — a sawtooth whose period is that correction's own — and several
+    /// of those laid over each other show up as a zigzag along anything
+    /// vertical in the chart. What a correction actually rotates is therefore
+    /// the difference between the rounding of the new total and the rounding
+    /// of the old one, which leaves each row rotated by the rounding of one
+    /// number rather than by the sum of several roundings.
+    offsets: Vec<f64>,
 }
+
+/// Two rasters are equal when they hold the same picture.
+///
+/// The limits a raster grows under, and the sub-pixel bookkeeping the
+/// corrections keep, are how it got there rather than what it is.
+impl PartialEq for GrayRaster {
+    fn eq(&self, other: &Self) -> bool {
+        self.width == other.width && self.height == other.height && self.pixels == other.pixels
+    }
+}
+
+impl Eq for GrayRaster {}
 
 impl GrayRaster {
     /// Creates an empty raster that will grow `growth` rows at a time up to
@@ -34,6 +59,7 @@ impl GrayRaster {
             max_height,
             growth,
             pixels: Vec::with_capacity(reserved),
+            offsets: Vec::with_capacity(growth.min(max_height)),
         })
     }
 
@@ -64,6 +90,9 @@ impl GrayRaster {
             self.pixels.reserve_exact(self.growth.min(remaining) * self.width);
         }
         self.pixels.resize(self.pixels.len() + self.width, 0);
+        // A row decoded after a correction was read through the corrected
+        // clock, so it is already where it belongs and owes nothing.
+        self.offsets.push(0.0);
         let row = self.height;
         self.height += 1;
         Ok(row)
@@ -99,17 +128,15 @@ impl GrayRaster {
 
     /// Rotates every row left by `pixels`, negative for right.
     pub fn roll(&mut self, pixels: i64) {
-        let shift = self.wrap(pixels);
-        if shift == 0 {
+        if pixels == 0 {
             return;
         }
         for y in 0..self.height {
-            let start = y * self.width;
-            self.pixels[start..start + self.width].rotate_left(shift);
+            self.move_row(y, pixels as f64);
         }
     }
 
-    /// Rolls row `y` left by `(y - pivot) * pixels_per_line`, rounded.
+    /// Rolls row `y` left by `(y - pivot) * pixels_per_line`.
     ///
     /// A line clock running fast or slow displaces each row a little further
     /// than the one before it, so undoing that error on rows already decoded
@@ -119,20 +146,42 @@ impl GrayRaster {
             return;
         }
         for y in 0..self.height {
-            let offset = libm::round((y as f64 - pivot as f64) * pixels_per_line);
-            let shift = self.wrap(offset as i64);
-            if shift == 0 {
-                continue;
-            }
-            let start = y * self.width;
-            self.pixels[start..start + self.width].rotate_left(shift);
+            self.move_row(y, (y as f64 - pivot as f64) * pixels_per_line);
         }
+    }
+
+    /// Asks row `y` to move a further `pixels`, rotating it by however much
+    /// that changes its rounded position.
+    fn move_row(&mut self, y: usize, pixels: f64) {
+        let Some(offset) = self.offsets.get_mut(y) else {
+            return;
+        };
+        let before = rounded(*offset);
+        *offset += pixels;
+        let step = rounded(*offset) - before;
+        let shift = self.wrap(step as i64);
+        if shift == 0 {
+            return;
+        }
+        let start = y * self.width;
+        self.pixels[start..start + self.width].rotate_left(shift);
     }
 
     /// Reduces a signed displacement to the left rotation that produces it.
     fn wrap(&self, pixels: i64) -> usize {
         pixels.rem_euclid(self.width as i64) as usize
     }
+}
+
+/// Rounds a displacement to the pixel it lands on.
+///
+/// Half a pixel goes upwards rather than away from zero, so that adding a
+/// whole number of pixels moves the answer by exactly that many. Rounding away
+/// from zero does not: it turns -3.5 into -4 and 0.5 into 1, so a row rotated
+/// by minus four and then asked to come back four pixels would land one pixel
+/// past where it started.
+pub(crate) fn rounded(value: f64) -> f64 {
+    libm::floor(value + 0.5)
 }
 
 /// Builds a raster from rows, for a test or an offline caller that already
@@ -154,6 +203,7 @@ impl GrayRaster {
             max_height: rows.len(),
             growth: rows.len(),
             pixels,
+            offsets: vec![0.0; rows.len()],
         })
     }
 }
@@ -251,6 +301,45 @@ mod tests {
         sheared.shear(4, 0.25);
         assert_eq!(sheared.row(4), original.row(4));
         assert_ne!(sheared.row(8), original.row(8));
+    }
+
+    /// The reason the intended roll is kept before it is rounded. Rounding
+    /// each correction on its own leaves a sawtooth of half a pixel whose
+    /// period is that correction's own, and several of those laid over each
+    /// other are a zigzag along anything vertical in the chart.
+    #[test]
+    fn many_small_corrections_land_where_one_large_one_would() {
+        let width = 64;
+        let rows: Vec<Vec<u8>> = (0..200).map(|_| (0..width).map(|x| (x * 4) as u8).collect()).collect();
+        let mut stepped = GrayRaster::from_rows(width, &rows).unwrap();
+        let mut once = GrayRaster::from_rows(width, &rows).unwrap();
+
+        // Eighths, so the eight of them add up to one without a rounding error
+        // of their own confusing what is being measured.
+        for _ in 0..8 {
+            stepped.shear(0, 0.125);
+        }
+        once.shear(0, 1.0);
+
+        assert_eq!(stepped, once);
+    }
+
+    /// A picture rolled and then rolled back is the picture again, whatever
+    /// fractional position the corrections left its rows at.
+    #[test]
+    fn a_roll_is_undone_exactly_however_the_rows_were_left() {
+        let width = 64;
+        let rows: Vec<Vec<u8>> = (0..40).map(|_| (0..width).map(|x| (x * 4) as u8).collect()).collect();
+        let original = GrayRaster::from_rows(width, &rows).unwrap();
+        let mut raster = original.clone();
+
+        raster.shear(7, 0.5);
+        raster.roll(-3);
+        raster.roll(3);
+        let sheared = raster.clone();
+        raster.shear(7, -0.5);
+        assert_eq!(raster, original);
+        assert_ne!(sheared, original);
     }
 
     #[test]

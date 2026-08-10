@@ -8,10 +8,10 @@ use crate::{
         apt::AptEvent,
         clock::LineClock,
         config::{PhasingFallback, RxConfig},
-        event::{RxEvent, RxOutcome, RxProcessError, RxProcessResult, RxState, StopReason},
+        event::{Refinement, RxEvent, RxOutcome, RxProcessError, RxProcessResult, RxState, StopReason},
         input::DemodulatedBlock,
         phasing::{PhasingDetector, PhasingResult},
-        slant::SlantTracker,
+        slant::{self, SlantTracker},
     },
 };
 
@@ -23,6 +23,10 @@ use crate::{
 const PIXEL_GUARD: f64 = 0.187_5;
 /// Lines kept behind the one being decoded, for a correction that moves back.
 const RETAIN_LINES: usize = 2;
+/// Shortest span a completed picture is fitted over, in lines.
+const REFINE_FIRST_BASELINE: usize = 8;
+/// Lines a completed picture needs before fitting one is worth anything.
+const REFINE_MINIMUM_LINES: usize = REFINE_FIRST_BASELINE * 4;
 
 /// A stateful, streaming WEFAX line decoder.
 ///
@@ -44,6 +48,15 @@ pub struct WefaxDecoder {
     revision: u64,
     next_line: usize,
     next_sample: Option<u64>,
+    /// How far a slant correction has carried line zero from where the
+    /// phasing signal, and then the operator, put it — in pixels, positive
+    /// for leftwards.
+    ///
+    /// A correction pivots on the line being decoded so the rows around it
+    /// stay where they are, which moves the top of the picture instead. The
+    /// phasing signal is the only thing that ever knew where a line begins, so
+    /// what it established is put back when the reception ends.
+    origin_shift: f64,
     events: VecDeque<RxEvent>,
     window: SampleWindow,
     slant: SlantTracker,
@@ -73,6 +86,7 @@ impl WefaxDecoder {
             revision: 0,
             next_line: 0,
             next_sample: None,
+            origin_shift: 0.0,
             events: VecDeque::new(),
             window: SampleWindow::default(),
             slant: SlantTracker::default(),
@@ -224,18 +238,94 @@ impl WefaxDecoder {
 
     /// Changes the line length by a slant in pixels per line, correcting the
     /// rows already drawn to match.
+    ///
+    /// While a reception is running the correction pivots on the line being
+    /// decoded, so the rows around it keep the positions they were read at and
+    /// the next line is read where the picture says it is. Once it has ended
+    /// there is no next line, and the operator is working from the top of the
+    /// chart: the pivot moves to the first line, so straightening the bottom
+    /// leaves the end they aligned by hand where they put it.
     pub fn adjust_slant(&mut self, pixels_per_line: f64) -> Result<(), WefaxError> {
+        let pivot = if self.state.is_terminal() {
+            0
+        } else {
+            self.next_line.saturating_sub(1)
+        };
+        self.apply_slant(pixels_per_line, pivot)
+    }
+
+    /// Refits the whole of a finished picture, and puts its phase back.
+    ///
+    /// Two things a reception can only be told once it is over. The line rate
+    /// is fitted across the whole height rather than across the window a live
+    /// correction is bound to, which is what removes the lean the live
+    /// tracker's own threshold leaves behind — twenty-seven parts per million
+    /// is a hundred pixels of shear over twenty minutes. And the phase is
+    /// returned to what the phasing signal established, undoing the sideways
+    /// walk that pivoting each live correction on a different line caused.
+    ///
+    /// Returns what changed, or `None` when the picture said nothing usable.
+    pub fn refine(&mut self) -> Result<Option<Refinement>, WefaxError> {
+        if !self.state.is_terminal() {
+            return Err(WefaxError::NotComplete);
+        }
+        let Some(before) = self.samples_per_line() else {
+            return Ok(None);
+        };
+        let height = self.raster.as_ref().map_or(0, GrayRaster::height);
+        if height == 0 {
+            return Ok(None);
+        }
+
+        // Putting the phase back needs no fit, but fitting the rate needs
+        // enough picture for a long span to mean anything.
+        //
+        // Each span is twice the last. A fit removes what it measured, so the
+        // next span starts from a residual small enough to stay inside the
+        // displacement the correlation searches over, however far the picture
+        // leaned to begin with.
+        let mut baseline = REFINE_FIRST_BASELINE;
+        while height >= REFINE_MINIMUM_LINES && baseline * 2 <= height {
+            let drift = self
+                .raster
+                .as_ref()
+                .and_then(|raster| slant::whole_picture_drift(raster, baseline));
+            if let Some(drift) = drift {
+                self.apply_slant(drift, 0)?;
+            }
+            baseline *= 2;
+        }
+
+        // Only the walk the pivots caused is put back. A shift the operator
+        // asked for is theirs, and undoing it would be the application
+        // arguing with them.
+        let displacement = -crate::image::rounded(self.origin_shift);
+        self.origin_shift = 0.0;
+        if displacement != 0.0 {
+            self.shift_phase(displacement as i64)?;
+        }
+        let after = self.samples_per_line().unwrap_or(before);
+        Ok(Some(Refinement {
+            samples_per_line: after,
+            error_ppm: (after - before) / before * 1.0e6,
+            displacement_pixels: displacement,
+        }))
+    }
+
+    fn apply_slant(&mut self, pixels_per_line: f64, pivot: usize) -> Result<(), WefaxError> {
         if !pixels_per_line.is_finite() {
             return Err(WefaxError::InvalidLineClock);
         }
         let (Some(clock), Some(raster), Some(format)) = (self.clock.as_mut(), self.raster.as_mut(), self.format) else {
             return Err(WefaxError::NotImaging);
         };
-        let pivot = self.next_line.saturating_sub(1);
         let samples_per_pixel = format.samples_per_pixel(self.sample_rate_hz);
         let previous = clock.samples_per_line();
         clock.set_samples_per_line(previous + pixels_per_line * samples_per_pixel, pivot)?;
         raster.shear(pivot, pixels_per_line);
+        // `shear` rolls row y left by `(y - pivot) * pixels_per_line`, so line
+        // zero moves by whatever the pivot was not.
+        self.origin_shift += -(pivot as f64) * pixels_per_line;
         self.revision += 1;
         self.events.push_back(RxEvent::SlantAdjusted {
             line: pivot,
@@ -401,6 +491,7 @@ impl WefaxDecoder {
         )?);
         self.window.restart(clock.epoch_samples());
         self.slant.reset();
+        self.origin_shift = 0.0;
         self.clock = Some(clock);
         self.format = Some(format);
         self.phasing = None;
@@ -907,6 +998,147 @@ mod tests {
         for row in 0..raster.height() {
             assert!(raster.row(row).unwrap().iter().all(|level| level.abs_diff(200) <= 4));
         }
+    }
+
+    /// The live tracker gives up below its own threshold, which is a lean of
+    /// a hundred pixels over a long chart. Fitting the whole picture at the
+    /// end is what takes the rest of it out.
+    #[rstest]
+    #[case(300.0)]
+    #[case(-300.0)]
+    fn refining_a_finished_picture_takes_out_the_lean_the_tracker_left(#[case] rate_error_ppm: f64) {
+        let rate = 11_025;
+        let format = Format {
+            ioc: Ioc::Ioc288,
+            lines_per_minute: LinesPerMinute::L240,
+        };
+        let columns = texture(format.pixels_per_line());
+        let samples = stream_at(rate, format, WefaxBand::WIDE, 3.0, &columns, 200, rate_error_ppm);
+        // Slant tracking off, so the whole error is left for the refinement.
+        let mut decoder = decode(
+            rate,
+            format,
+            &samples,
+            RxConfig {
+                phasing_min_seconds: 1.0,
+                slant_tracking: false,
+                ..RxConfig::default()
+            },
+        );
+        decoder.stop(StopReason::Manual);
+
+        let truth = format.samples_per_line(rate) * (1.0 + rate_error_ppm * 1.0e-6);
+        let before = decoder.samples_per_line().unwrap();
+        assert!(
+            ((before - truth) / truth * 1.0e6).abs() > 100.0,
+            "the reception should still be leaning before it is refined"
+        );
+
+        let refinement = decoder.refine().unwrap().expect("the picture was fitted");
+        let after = decoder.samples_per_line().unwrap();
+        let error_ppm = (after - truth) / truth * 1.0e6;
+        assert!(
+            error_ppm.abs() < 20.0,
+            "{rate_error_ppm} ppm was left {error_ppm} ppm out"
+        );
+        assert_eq!(refinement.samples_per_line, after);
+    }
+
+    /// A correction pivots on the line being decoded, which moves the top of
+    /// the picture. The phasing signal is the only thing that ever knew where
+    /// a line begins, so what it established is put back at the end.
+    #[test]
+    fn refining_puts_the_phase_the_phasing_signal_found_back() {
+        let rate = 11_025;
+        let format = Format::MARINE;
+        let columns: Vec<u8> = (0..16).map(|index| (index * 17) as u8).collect();
+        let samples = stream(rate, format, WefaxBand::WIDE, 3.0, &columns, 12);
+        let mut decoder = decode(rate, format, &samples, config());
+
+        let original = decoder.raster().unwrap().clone();
+        // A correction pivoted well inside the picture carries line zero with
+        // it, which is the walk the refinement undoes.
+        decoder.adjust_slant(0.5).unwrap();
+        assert_ne!(decoder.raster().unwrap().row(0), original.row(0));
+
+        decoder.stop(StopReason::Manual);
+        let refinement = decoder.refine().unwrap().expect("something was put back");
+        assert_ne!(refinement.displacement_pixels, 0.0);
+        assert_eq!(decoder.raster().unwrap().row(0), original.row(0));
+    }
+
+    /// The operator's own nudge is theirs to keep, so it is not part of the
+    /// walk the refinement puts back.
+    #[test]
+    fn refining_keeps_a_shift_the_operator_asked_for() {
+        let rate = 11_025;
+        let format = Format::MARINE;
+        let columns: Vec<u8> = (0..16).map(|index| (index * 17) as u8).collect();
+        let samples = stream(rate, format, WefaxBand::WIDE, 3.0, &columns, 12);
+        let mut decoder = decode(rate, format, &samples, config());
+
+        decoder.shift_phase(40).unwrap();
+        let shifted = decoder.raster().unwrap().clone();
+        decoder.stop(StopReason::Manual);
+        decoder.refine().unwrap();
+
+        assert_eq!(decoder.raster().unwrap().row(0), shifted.row(0));
+    }
+
+    #[test]
+    fn refining_a_reception_that_has_not_ended_is_refused() {
+        let rate = 11_025;
+        let format = Format::MARINE;
+        let samples = stream(rate, format, WefaxBand::WIDE, 3.0, &[0, 255], 12);
+        let mut decoder = decode(rate, format, &samples, config());
+        assert_eq!(decoder.refine().unwrap_err(), WefaxError::NotComplete);
+    }
+
+    #[test]
+    fn refining_a_picture_too_short_to_fit_says_nothing() {
+        let mut decoder = WefaxDecoder::new(11_025).unwrap();
+        decoder.stop(StopReason::Manual);
+        assert_eq!(decoder.refine().unwrap(), None);
+    }
+
+    /// A finished chart is worked from its top: the operator lines the first
+    /// row up by hand and then straightens the rest against it.
+    #[test]
+    fn a_correction_after_the_reception_pivots_on_the_first_line() {
+        let rate = 11_025;
+        let format = Format::MARINE;
+        let columns: Vec<u8> = (0..16).map(|index| (index * 17) as u8).collect();
+        let samples = stream(rate, format, WefaxBand::WIDE, 3.0, &columns, 12);
+        let mut decoder = decode(rate, format, &samples, config());
+        decoder.stop(StopReason::Manual);
+
+        let before = decoder.raster().unwrap().clone();
+        decoder.adjust_slant(1.0).unwrap();
+        let after = decoder.raster().unwrap();
+
+        assert_eq!(after.row(0), before.row(0), "the first row is the pivot");
+        let last = after.height() - 1;
+        assert_ne!(after.row(last), before.row(last));
+    }
+
+    /// The picture is still the operator's to correct once it has arrived.
+    #[test]
+    fn the_phase_can_still_be_moved_after_the_reception() {
+        let rate = 11_025;
+        let format = Format::MARINE;
+        let columns: Vec<u8> = (0..16).map(|index| (index * 17) as u8).collect();
+        let samples = stream(rate, format, WefaxBand::WIDE, 3.0, &columns, 12);
+        let mut decoder = decode(rate, format, &samples, config());
+        decoder.stop(StopReason::Manual);
+
+        let before = decoder.raster().unwrap().clone();
+        let revision = decoder.raster_revision();
+        decoder.shift_phase(40).unwrap();
+
+        let mut expected = before.row(0).unwrap().to_vec();
+        expected.rotate_left(40);
+        assert_eq!(decoder.raster().unwrap().row(0).unwrap(), expected.as_slice());
+        assert!(decoder.raster_revision() > revision);
     }
 
     #[test]

@@ -1978,6 +1978,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-wefax-app"
+version = "0.3.1"
+dependencies = [
+ "directories",
+ "eframe",
+ "egui",
+ "egui_kittest",
+ "embed-resource",
+ "fluent-bundle",
+ "fontdb",
+ "grayline-audio",
+ "grayline-shell",
+ "grayline-wefax",
+ "hound",
+ "image",
+ "jiff",
+ "muda",
+ "raw-window-handle",
+ "rstest",
+ "thiserror 2.0.20",
+ "toml_edit",
+ "unic-langid",
+]
+
+[[package]]
 name = "guillotiere"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

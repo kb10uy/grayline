@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Grayline WEFAX
+GenericName=WEFAX
+Comment=Weather fax reception for amateur radio
+Exec=grayline-wefax
+Icon=grayline-wefax
+Terminal=false
+Categories=AudioVideo;Audio;HamRadio;
+Keywords=WEFAX;radiofax;weather fax;amateur radio;ham radio;
+StartupWMClass=grayline-wefax

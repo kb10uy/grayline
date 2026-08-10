@@ -14,7 +14,7 @@ interfaces are not.
 | Application | Directory | Status |
 | --- | --- | --- |
 | [Grayline SSTV](apps/sstv/README.md) | `apps/sstv/` | Released |
-| Grayline WEFAX | — | Planned |
+| Grayline WEFAX | `apps/wefax/` | Receive implemented |
 | Grayline RTTY | — | Planned |
 | Grayline PSK | — | Planned |
 

@@ -15,7 +15,7 @@ pub use clock::LineClock;
 pub use config::{MAX_RECEPTION_SECONDS, PhasingFallback, RxConfig};
 pub use decoder::WefaxDecoder;
 pub use demodulator::{DemodulatedChunk, Demodulator, MINIMUM_SAMPLE_RATE_HZ};
-pub use event::{RxEvent, RxOutcome, RxProcessError, RxProcessResult, RxState, StopReason};
+pub use event::{Refinement, RxEvent, RxOutcome, RxProcessError, RxProcessResult, RxState, StopReason};
 pub use input::DemodulatedBlock;
 pub use phasing::PhasingResult;
 pub use pipeline::ReceivePipeline;

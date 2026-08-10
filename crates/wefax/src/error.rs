@@ -60,6 +60,9 @@ pub enum WefaxError {
     /// The operation needs a reception that is drawing its raster.
     #[error("no raster is being drawn")]
     NotImaging,
+    /// The operation needs a reception that has ended.
+    #[error("the reception has not ended")]
+    NotComplete,
     /// A signal-processing stage rejected its configuration.
     #[error(transparent)]
     Dsp(#[from] DspError),
