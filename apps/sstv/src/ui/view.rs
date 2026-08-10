@@ -180,8 +180,8 @@ fn geometry_label(app: &App) -> String {
 
 /// The line under the image: what is being shown, and what is happening to it.
 ///
-/// The state used to be painted over the picture itself, which put text on top
-/// of the one thing on the tab worth looking at.
+/// The state reads here rather than over the picture, which would put text on
+/// top of the one thing on the tab worth looking at.
 fn action_bar(ui: &mut Ui, geometry: &str, state: &str) {
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

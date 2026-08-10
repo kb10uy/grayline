@@ -29,10 +29,6 @@ keying actually engaged rather than trusting that the command was accepted. So
 the application calls a Lua script at each moment it reaches, and what the
 script sends is the operator's.
 
-An earlier design put command lines directly in `config.toml`. It could send a
-command and nothing else: no branching, no reading an answer, no sharing one
-sequence across bands. This replaces it.
-
 ## Why `rigctld` Rather Than Linked Hamlib
 
 The transport is a socket to a `rigctld` the operator already has running,
@@ -416,14 +412,6 @@ same height.
 Nothing about rig control is in the menu bar except putting `rigcontrol.lua`
 and `bands.toml` where they can be edited, which sits under Settings. Writing
 a file out is a once-ever thing rather than an operating control.
-
-## What Came Before
-
-Rig control was first written with the commands themselves in `config.toml`:
-a list per event, and a second list per band. The keys of that arrangement —
-`[rig] address`, `[rig.commands]`, and `[rig.bands]` — are removed from the
-file when it is next saved, rather than left behind looking like settings that
-still do something.
 
 ## Verification Strategy
 

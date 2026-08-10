@@ -218,7 +218,6 @@ pub fn apply(app: &mut App, action: Action) -> bool {
     false
 }
 
-/// Matches the step egui's own zoom shortcuts take.
 const ZOOM_STEP: f32 = 0.1;
 
 /// Every item of every menu, in the order a renderer creates them.

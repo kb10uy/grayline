@@ -23,10 +23,9 @@ use ui::{menu, view};
 
 /// Draws the interface with the platform's UI font.
 ///
-/// The families go at the front of egui's list rather than being appended as a
-/// fallback, so Latin and Japanese come from one face instead of mixing the
-/// bundled font with a system one. egui's own fonts stay behind them, so a
-/// machine with none of these installed still renders text.
+/// The system families are installed ahead of the bundled fonts, so Latin and
+/// Japanese come from one face, while a machine with none of them installed
+/// still renders text.
 ///
 /// The font database is queried directly because the face index matters:
 /// Windows ships `Yu Gothic UI` as the second face of a collection whose first
@@ -233,9 +232,8 @@ impl eframe::App for Interface {
         }
         self.app.poll_workers(ui.ctx());
 
-        // egui handles Ctrl+Plus/Minus itself, so the factor it holds is
-        // adopted before the menu can change it. Whichever route the operator
-        // took, the result is one value that gets persisted.
+        // The zoom shortcuts and the menu both change the scale; whichever
+        // route the operator took, the result is one value that gets persisted.
         self.app.set_ui_scale(ui.ctx().zoom_factor());
 
         let model = menu::model(&self.app);
@@ -286,8 +284,6 @@ mod tests {
         }
     }
 
-    /// The wanted families have to come first, or Latin keeps rendering in
-    /// egui's bundled font while only Japanese falls through to the system.
     #[test]
     fn a_matched_family_is_installed_ahead_of_the_bundled_fonts() {
         let mut database = fontdb::Database::new();

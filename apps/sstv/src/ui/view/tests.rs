@@ -1,4 +1,4 @@
-//! Checks that the interface offers what it should, driven through egui's own
+//! Checks that the interface offers what it should, driven through a rendering
 //! test harness so what is asserted is what a widget actually reports.
 
 use egui_kittest::{
@@ -17,9 +17,8 @@ use super::panels::decibels;
 
 /// Runs the interface for a few frames and returns the harness.
 ///
-/// egui reports duplicate widget ids and bad layouts by panicking at run
-/// time rather than at compile time, so the whole view is exercised here:
-/// nothing else in the suite would notice.
+/// Duplicate widget ids and bad layouts only surface at run time, so the
+/// whole view is exercised here: nothing else in the suite would notice.
 fn render(app: &mut App) -> Harness<'_> {
     let mut harness = Harness::new_ui(|ui| {
         let model = menu::model(app);
@@ -554,9 +553,9 @@ fn switching_tabs_does_not_collide_widget_ids() {
     }
 }
 
-/// Pressing TX with nothing to send used to report the reason as an error.
-/// The button now refuses the press instead, so the reason is read from the
-/// state line and the button's own hover text.
+/// Pressing TX with nothing to send is refused at the button rather than
+/// reported as an error, so the reason is read from the state line and the
+/// button's own hover text.
 #[test]
 fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     let mut app = App::headless();
@@ -631,8 +630,8 @@ fn the_transmit_trigger_is_refused_while_a_tone_is_being_sent() {
 }
 
 /// A panel keeps the width it was last laid out at, so a window dragged
-/// narrow enough to squeeze this one used to leave it squeezed once the
-/// window was given its size back.
+/// narrow enough to squeeze this one could leave it squeezed once the
+/// window is given its size back.
 #[test]
 fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
     let mut app = App::headless();

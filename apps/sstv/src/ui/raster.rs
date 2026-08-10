@@ -72,10 +72,9 @@ impl Raster {
 
     /// Writes `pixels` over the raster, reusing the buffer they go in.
     ///
-    /// The buffer is only reused when the texture manager has finished with the
-    /// last one, which it has by the frame after an upload. Reusing it while it
-    /// was still shared would copy the pixels being replaced, so that case
-    /// starts a new one instead.
+    /// The buffer is only reused when the texture manager has finished with
+    /// the last one. Reusing it while it was still shared would copy the
+    /// pixels being replaced, so that case starts a new one instead.
     fn replace(&mut self, size: ImageSize, pixels: impl Iterator<Item = Color32>) {
         self.size = size;
         self.uploaded = false;

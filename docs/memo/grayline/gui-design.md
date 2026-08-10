@@ -159,7 +159,7 @@ unreachable. A shared name takes the host's own identifier beside it, which is
 the ALSA PCM name, as in `sof-hda-dsp (hw:CARD=0,DEV=6)`, or the WASAPI
 interface. Namesakes that even that cannot separate are numbered.
 
-`grayline-audio` is a new crate. It owns device enumeration, stream formats, and
+`grayline-audio` owns device enumeration, stream formats, and
 callback scheduling, and exposes only normalized mono `f32` blocks with sample
 positions. Keeping it separate preserves the rule that platform types must not
 appear in reusable core APIs, and lets the offline `gl-sstv` integrations
@@ -365,13 +365,12 @@ the first row instead of waiting for a fixed fraction of the image.
 
 The interface shows whether a reception is running as a bar that is always full
 and says what it says in colour alone: green while raster acquisition or
-decoding is in progress, and a flat grey otherwise. It carried a fill that
-emptied when nothing was arriving, which reads as a reading that fell rather
-than as a state that changed. Before that it showed the raw input amplitude,
-which was found to say nothing the operator was reading it for while being
-redrawable only as often as a block of audio arrives, so it stepped rather than
-moved. Nothing computes an input level now, and `Demodulator` never had an
-accessor for one. There is no numeric dBFS value or synchronization percentage.
+decoding is in progress, and a flat grey otherwise. A fill that emptied when
+nothing was arriving would read as a reading that fell rather than as a state
+that changed, and the raw input amplitude says nothing the operator would be
+reading the bar for while being redrawable only as often as a block of audio
+arrives. Nothing computes an input level, and `Demodulator` has no accessor
+for one. There is no numeric dBFS value or synchronization percentage.
 
 Clicking the bar ends the reception. Reception ends on its own when
 synchronization is lost or when nothing has progressed for twenty seconds, both
@@ -653,9 +652,8 @@ direction as supported, so unimplemented modes are never selectable.
 
 ## Internationalization
 
-User-visible strings are external from the first commit. English is the default
-locale and Japanese is the second. Retrofitting extraction later is more
-expensive than doing it now, and the string volume is small.
+User-visible strings are external. English is the default locale and Japanese
+is the second.
 
 - Strings are stored as [Fluent](https://projectfluent.org/) resources, one
   file per locale, loaded through `fluent-bundle`.
@@ -687,7 +685,7 @@ and spawns the receive worker, which demodulates, detects the mode from VIS,
 decodes the raster, and publishes snapshots. The interface adopts the newest
 snapshot on each frame and draws the partially decoded image progressively.
 
-Nothing simulated remains in the receive path. Mode, decoded rows, decoded
+Mode, decoded rows, decoded
 callsigns, and overrun counts all come from the worker. When no
 reception is in progress, the canvas shows a blank raster sized to the selected
 mode.

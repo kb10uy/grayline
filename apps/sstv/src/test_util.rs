@@ -11,13 +11,12 @@ static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
 /// Where an interface built without directories of its own keeps them.
 ///
-/// [`crate::app::App::headless`] used to hold empty paths, which are relative
-/// and therefore resolve against the working directory: the suite wrote the
-/// default band plan and rig script into the package directory every time it
-/// ran, and those files were committed more than once by mistake. One
-/// directory is shared by every headless interface because none of them is
-/// meant to see anything in it; a test that cares about what is on disk builds
-/// a [`TempDir`] of its own instead.
+/// [`crate::app::App::headless`] must not hold empty paths: they are relative
+/// and therefore resolve against the working directory, which would have the
+/// suite write the default band plan and rig script into the package
+/// directory every time it ran. One directory is shared by every headless
+/// interface because none of them is meant to see anything in it; a test that
+/// cares about what is on disk builds a [`TempDir`] of its own instead.
 ///
 /// Left behind rather than removed at exit, which no reliable hook covers. It
 /// sits under the system's temporary directory, which is where a file nobody

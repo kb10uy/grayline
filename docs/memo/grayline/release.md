@@ -27,9 +27,9 @@ target.
 
 `app` is a matrix over `grayline-sstv-app` and `grayline-wefax-app`, running
 Clippy, the tests, and a build for one package each. Each application is a long
-tail of its own, and the run used to wait for both of them in turn behind the
-core; running the three beside each other trades runner minutes for wall clock,
-and a failure now names which application broke rather than which command did.
+tail of its own; running the three beside each other trades runner minutes for
+wall clock, and a failure names which application broke rather than which
+command did.
 Each matrix leg keys its own cache: the two dependency graphs meet at eframe —
 which `crates/shell` already pulls in, so the core compiles it too — and
 diverge after it, and one key over both would have each run overwriting the

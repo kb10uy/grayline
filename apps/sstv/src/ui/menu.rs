@@ -313,15 +313,12 @@ pub fn apply(app: &mut App, action: Action) -> bool {
     false
 }
 
-/// Matches the step egui's own zoom shortcuts take.
 const ZOOM_STEP: f32 = 0.1;
 
 /// Every item of every menu, in the order a renderer creates them.
 ///
 /// Building the platform menu and updating it later both walk this, so the
-/// two cannot disagree about which entry corresponds to which item. They did
-/// once: separators were created but not counted, which shifted every later
-/// label onto the wrong entry.
+/// two cannot disagree about which entry corresponds to which item.
 ///
 /// The in-window bar draws straight from the model, so this is built only
 /// where the native menu is, and for the tests that cover it everywhere.
@@ -416,8 +413,7 @@ mod tests {
 
     /// The platform renderer creates one entry per item and later matches them
     /// by position, so a missed item shifts every later label onto the wrong
-    /// entry. Separators used to be skipped, which corrupted the submenus of
-    /// every menu after the first separator.
+    /// entry.
     #[test]
     fn flattening_counts_every_item_including_separators() {
         let model = model(&App::headless());

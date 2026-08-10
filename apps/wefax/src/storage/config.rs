@@ -6,7 +6,7 @@ use toml_edit::{DocumentMut, Item, value};
 
 /// The zoom the interface is laid out at.
 pub const DEFAULT_UI_SCALE: f32 = 1.0;
-/// Bounds on the zoom, matching what egui's own shortcuts stop at.
+/// Bounds on the zoom.
 pub const MINIMUM_UI_SCALE: f32 = 0.5;
 pub const MAXIMUM_UI_SCALE: f32 = 3.0;
 

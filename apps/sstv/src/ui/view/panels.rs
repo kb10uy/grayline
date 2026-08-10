@@ -184,12 +184,9 @@ pub(super) fn section(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui)) 
 
 /// Whether a picture is arriving, and the way out of one that is not.
 ///
-/// The bar used to show the input amplitude, which is not what the operator is
-/// looking for here and could only be redrawn as often as a block of audio
-/// arrives, so it stepped rather than moved. What it was read for is whether
-/// the signal is being decoded at all, so it stays full and says that in
-/// colour: a bar that empties reads as a reading that fell rather than as a
-/// state that changed.
+/// What the bar is read for is whether the signal is being decoded at all, so
+/// it stays full and says that in colour: a bar that empties reads as a
+/// reading that fell rather than as a state that changed.
 ///
 /// Clicking it ends the reception. The bar is where the operator sees that one
 /// has gone wrong, so it is also where they get to say so, and the row is one

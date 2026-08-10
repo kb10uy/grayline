@@ -1,6 +1,5 @@
-//! egui reports duplicate widget ids and impossible layouts by panicking at
-//! runtime, so every locale is rendered here rather than only in front of an
-//! operator.
+//! Duplicate widget ids and impossible layouts only surface at runtime, so
+//! every locale is rendered here rather than only in front of an operator.
 
 use egui_kittest::{
     Harness,
@@ -24,8 +23,7 @@ fn render(app: &mut App) -> Harness<'_> {
 
 /// Draws the window with the fonts the application installs for itself.
 ///
-/// The metrics of a system font are not egui's own, and the bar's alignment
-/// answers to them.
+/// The bar's alignment answers to the installed font's metrics.
 fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
         let model = menu::model(app);

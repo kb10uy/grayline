@@ -298,7 +298,7 @@ fn resource_icon() -> Option<IconData> {
     }
 }
 
-/// Reads an icon's color bitmap back as the RGBA egui expects.
+/// Reads an icon's color bitmap back as RGBA.
 unsafe fn icon_data(icon: HICON) -> Option<IconData> {
     unsafe {
         let mut info: ICONINFO = mem::zeroed();
@@ -335,8 +335,8 @@ unsafe fn color_bitmap(bitmap: HBITMAP) -> Option<IconData> {
         header.bmiHeader = BITMAPINFOHEADER {
             biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
             biWidth: width,
-            // A negative height asks for top-down rows, matching the order
-            // egui reads the buffer in.
+            // A negative height asks for top-down rows, the order the RGBA
+            // buffer carries them in.
             biHeight: -height,
             biPlanes: 1,
             biBitCount: 32,
