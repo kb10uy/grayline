@@ -1,17 +1,36 @@
-name: Release
+name: Release an application
 
+# Called by one workflow per application. Everything an application does not
+# share with the others — which tag names it, what its archives hold, and what
+# its release notes say — is an input, so a third application is a caller
+# rather than a copy of this file.
 on:
-  push:
-    tags: ["v*"]
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      tag:
-        description: The existing tag to build, such as v0.1.0
+      app:
+        description: The application's directory under apps/, such as sstv
         required: true
-
-concurrency:
-  group: release-${{ inputs.tag || github.ref }}
-  cancel-in-progress: false
+        type: string
+      title:
+        description: The product name the release is titled with
+        required: true
+        type: string
+      ref:
+        description: The tag to build, such as sstv-v0.3.1
+        required: true
+        type: string
+      manual:
+        description: Whether the archives carry the manual as help/
+        type: boolean
+        default: false
+      templates:
+        description: Whether the archives carry assets/templates/
+        type: boolean
+        default: false
+      notes:
+        description: The release notes, with @VERSION@ where the version goes
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -20,47 +39,52 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # The tag names the release and the executables carry the version compiled
-  # into them, so the two disagreeing is a mistake worth catching before three
+  # The tag names the release and the executable carries the version compiled
+  # into it, so the two disagreeing is a mistake worth catching before three
   # runners spend a release build on it.
   prepare:
     name: Prepare
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.ref }}
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Resolve the tag and check it against the workspace version
+      - name: Check the tag against the application's version
         id: resolve
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.ref }}
+          APP: ${{ inputs.app }}
         run: |
           version="$(cargo metadata --format-version 1 --no-deps \
-            | jq -r '.packages[] | select(.name == "grayline-sstv-app") | .version')"
-          if [ "$TAG" != "v$version" ]; then
-            echo "the tag $TAG does not match the workspace version $version" >&2
+            | jq -r --arg name "grayline-$APP-app" \
+              '.packages[] | select(.name == $name) | .version')"
+          if [ "$TAG" != "$APP-v$version" ]; then
+            echo "the tag $TAG does not name version $version of grayline-$APP-app" >&2
             exit 1
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # Rendered once for every archive, unlike the license page: the manual is
       # the same text on all three platforms, and pandoc is a package the two
       # other runners would have to install to produce a byte-identical copy.
       - name: Install pandoc
+        if: inputs.manual
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y pandoc
 
       - name: Build the manual
+        if: inputs.manual
         env:
-          GRAYLINE_VERSION: ${{ steps.resolve.outputs.tag }}
+          GRAYLINE_VERSION: v${{ steps.resolve.outputs.version }}
         run: bash docs/help/build.sh
 
       - uses: actions/upload-artifact@v4
+        if: inputs.manual
         with:
           name: manual
           path: target/help
@@ -80,10 +104,25 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - runner: macos-latest
             target: aarch64-apple-darwin
+    # bash on all three runners so the steps below read the same environment;
+    # the two steps that need PowerShell ask for it themselves.
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP: ${{ inputs.app }}
+      BINARY: grayline-${{ inputs.app }}
+      PACKAGE: grayline-${{ inputs.app }}-app
+      TARGET: ${{ matrix.target }}
+      ARCHIVE: grayline-${{ inputs.app }}-v${{ needs.prepare.outputs.version }}-${{ matrix.target }}
+      # Empty when the application does not carry them, which is what the
+      # bundle script reads as "leave this out".
+      HELP: ${{ inputs.manual && 'manual' || '' }}
+      TEMPLATES: ${{ inputs.templates && 'assets/templates' || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.ref }}
 
       - name: Install the Linux build dependencies
         if: runner.os == 'Linux'
@@ -96,15 +135,13 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ inputs.app }}-${{ matrix.target }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-about
 
       - name: Build the release executable
-        run: >
-          cargo build --release --locked --target ${{ matrix.target }}
-          -p grayline-sstv-app
+        run: cargo build --release --locked --target "$TARGET" -p "$PACKAGE"
 
       # A dependency on the Visual C++ redistributable is the one thing an
       # archive cannot repair on the operator's machine, so the invariant is
@@ -114,11 +151,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $path = "target/${{ matrix.target }}/release/grayline-sstv.exe"
+          $path = "target/${env:TARGET}/release/${env:BINARY}.exe"
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $text = [System.Text.Encoding]::ASCII.GetString($bytes)
           if ($text -match "VCRUNTIME140|api-ms-win-crt-") {
-            throw "grayline-sstv.exe links the C runtime dynamically"
+            throw "${env:BINARY}.exe links the C runtime dynamically"
           }
 
       # Generated on the platform being packaged rather than once for all
@@ -128,30 +165,34 @@ jobs:
         run: cargo about generate about.hbs --output-file licenses.html
 
       - uses: actions/download-artifact@v4
+        if: inputs.manual
         with:
           name: manual
           path: manual
 
       - name: Stage the archive contents
         if: runner.os != 'macOS'
-        shell: bash
-        env:
-          TAG: ${{ needs.prepare.outputs.tag }}
-          TARGET: ${{ matrix.target }}
         run: |
-          name="grayline-sstv-$TAG-$TARGET"
-          root="staging/$name"
+          root="staging/$ARCHIVE"
           mkdir -p "$root"
-          if [ -f "target/$TARGET/release/grayline-sstv.exe" ]; then
-            cp "target/$TARGET/release/grayline-sstv.exe" "$root/"
+          if [ -f "target/$TARGET/release/$BINARY.exe" ]; then
+            cp "target/$TARGET/release/$BINARY.exe" "$root/"
           else
-            cp "target/$TARGET/release/grayline-sstv" "$root/"
+            cp "target/$TARGET/release/$BINARY" "$root/"
           fi
           cp LICENSE licenses.html "$root/"
-          cp apps/sstv/README.md "$root/"
-          cp -r manual "$root/help"
-          cp -r assets/templates "$root/"
-          echo "ARCHIVE_NAME=$name" >> "$GITHUB_ENV"
+          # An application with a README of its own carries it; one without is
+          # not handed the repository's, which answers to this tree rather
+          # than to the operator.
+          if [ -f "apps/$APP/README.md" ]; then
+            cp "apps/$APP/README.md" "$root/"
+          fi
+          if [ -n "$HELP" ]; then
+            cp -r "$HELP" "$root/help"
+          fi
+          if [ -n "$TEMPLATES" ]; then
+            cp -r "$TEMPLATES" "$root/"
+          fi
 
       # A Wayland compositor has no way to learn the window icon from the
       # application, so the Linux archive has to carry the desktop entry the
@@ -159,37 +200,32 @@ jobs:
       - name: Add the desktop entry to the Linux archive
         if: runner.os == 'Linux'
         run: |
-          mkdir -p "staging/$ARCHIVE_NAME/assets"
-          cp apps/sstv/assets/grayline-sstv.desktop apps/sstv/assets/icon.png \
-            "staging/$ARCHIVE_NAME/assets/"
+          mkdir -p "staging/$ARCHIVE/assets"
+          cp "apps/$APP/assets/$BINARY.desktop" "apps/$APP/assets/icon.png" \
+            "staging/$ARCHIVE/assets/"
 
       # macOS gets a bundle in a disk image rather than an archive of bare
       # files: the bundle is what carries the icon and the microphone
       # permission text, and the image is what installs by drag and drop.
       - name: Build the application bundle and disk image
         if: runner.os == 'macOS'
-        env:
-          TAG: ${{ needs.prepare.outputs.tag }}
-          TARGET: ${{ matrix.target }}
         run: |
-          name="grayline-sstv-$TAG-$TARGET"
-          bash package/build-app.sh \
-            "target/$TARGET/release/grayline-sstv" manual licenses.html "$name.dmg"
-          echo "ARCHIVE_NAME=$name" >> "$GITHUB_ENV"
+          bash package/build-app.sh "$APP" "target/$TARGET/release/$BINARY" \
+            licenses.html "$ARCHIVE.dmg" "$HELP" "$TEMPLATES"
 
       - name: Create the tar archive
         if: runner.os == 'Linux'
-        run: tar -czf "$ARCHIVE_NAME.tar.gz" -C staging "$ARCHIVE_NAME"
+        run: tar -czf "$ARCHIVE.tar.gz" -C staging "$ARCHIVE"
 
       - name: Create the zip archive
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path "staging/$env:ARCHIVE_NAME" -DestinationPath "$env:ARCHIVE_NAME.zip"
+        run: Compress-Archive -Path "staging/${env:ARCHIVE}" -DestinationPath "${env:ARCHIVE}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}.*
+          name: ${{ env.ARCHIVE }}
+          path: ${{ env.ARCHIVE }}.*
           if-no-files-found: error
 
   release:
@@ -200,49 +236,27 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ needs.prepare.outputs.tag }}
+      TAG: ${{ inputs.ref }}
+      TITLE: ${{ inputs.title }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      NOTES: ${{ inputs.notes }}
+      PREFIX: grayline-${{ inputs.app }}-v${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.ref }}
 
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: grayline-sstv-*
+          pattern: grayline-${{ inputs.app }}-*
           merge-multiple: true
 
       - name: Write the checksums and the release notes
         working-directory: artifacts
         run: |
-          sha256sum grayline-sstv-* > SHA256SUMS
-          cat > notes.md <<'NOTES'
-          Each download holds the `grayline-sstv` application, this project's
-          license, the licenses of its dependencies as `licenses.html`, the
-          manual, and the MMSSTV templates ported to the KDL format.
-
-          | Platform | Download |
-          | --- | --- |
-          | Windows x86_64 | `grayline-sstv-TAG-x86_64-pc-windows-msvc.zip` |
-          | Linux x86_64 | `grayline-sstv-TAG-x86_64-unknown-linux-gnu.tar.gz` |
-          | macOS Apple Silicon | `grayline-sstv-TAG-aarch64-apple-darwin.dmg` |
-
-          The macOS disk image installs by dragging `GraylineSSTV.app` into
-          `Applications`. The bundle is ad-hoc signed rather than notarized,
-          so open the first launch from the context menu, or clear the
-          quarantine attribute:
-
-          ```text
-          xattr -dr com.apple.quarantine /Applications/GraylineSSTV.app
-          ```
-
-          The Linux archive carries `assets/grayline-sstv.desktop` and
-          `assets/icon.png`; installing both is what makes the window icon
-          appear, as `README.md` describes.
-
-          Downloads can be checked against `SHA256SUMS`.
-          NOTES
-          sed -i "s/TAG/$TAG/g" notes.md
+          sha256sum "$PREFIX"* > SHA256SUMS
+          printf '%s\n' "$NOTES" | sed "s/@VERSION@/v$VERSION/g" > notes.md
 
       # A re-run of a tag that was already released replaces its archives
       # rather than failing, which is what a rebuild is for.
@@ -251,9 +265,9 @@ jobs:
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release edit "$TAG" --notes-file notes.md
-            gh release upload "$TAG" grayline-sstv-* SHA256SUMS --clobber
+            gh release upload "$TAG" "$PREFIX"* SHA256SUMS --clobber
           else
             gh release create "$TAG" --verify-tag \
-              --title "Grayline SSTV $TAG" --notes-file notes.md \
-              grayline-sstv-* SHA256SUMS
+              --title "$TITLE v$VERSION" --notes-file notes.md \
+              "$PREFIX"* SHA256SUMS
           fi

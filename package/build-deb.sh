@@ -3,7 +3,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/Cargo.toml" | head -n 1)"
+version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/apps/sstv/Cargo.toml" | head -n 1)"
 
 GRAYLINE_VERSION="v$version" bash "$root/docs/help/build.sh"
 cd "$root"

@@ -57,7 +57,16 @@ wraps it in a drag-and-drop disk image with `build-app.sh`. It runs on a Mac
 too, given a built binary, a rendered manual, and a dependency license page:
 
 ```bash
-bash package/build-app.sh target/release/grayline-sstv target/help licenses.html GraylineSSTV.dmg
+bash package/build-app.sh sstv target/release/grayline-sstv licenses.html \
+  GraylineSSTV.dmg target/help assets/templates
+```
+
+The first argument names the application under `apps/`, and the last two are
+optional: an application whose archives carry neither the manual nor the
+templates passes neither, which is what the WEFAX release does.
+
+```bash
+bash package/build-app.sh wefax target/release/grayline-wefax licenses.html GraylineWEFAX.dmg
 ```
 
 The bundle is ad-hoc signed, not notarized, so a downloaded image is
