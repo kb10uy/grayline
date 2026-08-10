@@ -92,8 +92,7 @@ pub fn hilbert_coefficients(
         };
         let window = 0.54 - 0.46 * libm::cos(2.0 * PI * index as f64 / order as f64);
         coefficients.push(
-            -(2.0 * upper_frequency_hz * sample_period * upper
-                - 2.0 * lower_frequency_hz * sample_period * lower)
+            -(2.0 * upper_frequency_hz * sample_period * upper - 2.0 * lower_frequency_hz * sample_period * lower)
                 * window,
         );
     }

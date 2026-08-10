@@ -129,21 +129,11 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
 ///
 /// Returns whether the operator finished with it, which is losing focus to
 /// another field or to the button, or pressing Enter in it.
-pub(super) fn station_field(
-    ui: &mut Ui,
-    label: &str,
-    hint: &str,
-    text: &mut String,
-    width: f32,
-) -> bool {
+pub(super) fn station_field(ui: &mut Ui, label: &str, hint: &str, text: &mut String, width: f32) -> bool {
     ui.horizontal(|ui| {
         field_label(ui, label);
-        ui.add(
-            egui::TextEdit::singleline(text)
-                .desired_width(width)
-                .hint_text(hint),
-        )
-        .lost_focus()
+        ui.add(egui::TextEdit::singleline(text).desired_width(width).hint_text(hint))
+            .lost_focus()
     })
     .inner
 }
@@ -159,19 +149,15 @@ pub(super) fn device_fault_modal(ui: &mut Ui, app: &mut App) {
     };
 
     let reason = match fault.kind {
-        FaultKind::Disconnected => app.i18n.text_with(
-            "device-lost-disconnected",
-            &[("device", arg(&fault.device))],
-        ),
+        FaultKind::Disconnected => app
+            .i18n
+            .text_with("device-lost-disconnected", &[("device", arg(&fault.device))]),
         FaultKind::Invalidated => app
             .i18n
             .text_with("device-lost-invalidated", &[("device", arg(&fault.device))]),
         FaultKind::Backend => app.i18n.text_with(
             "device-lost-backend",
-            &[
-                ("device", arg(&fault.device)),
-                ("detail", arg(&fault.detail)),
-            ],
+            &[("device", arg(&fault.device)), ("detail", arg(&fault.detail))],
         ),
     };
 

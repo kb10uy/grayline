@@ -1796,6 +1796,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-decode-fax-wav"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "grayline-wefax",
+ "hound",
+ "image",
+]
+
+[[package]]
 name = "grayline-decode-wav"
 version = "0.3.1"
 dependencies = [
@@ -1955,6 +1965,41 @@ dependencies = [
  "grayline-sstv-fskid",
  "grayline-sstv-rx",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "grayline-wefax"
+version = "0.3.1"
+dependencies = [
+ "grayline-dsp",
+ "libm",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-wefax-app"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "eframe",
+ "egui",
+ "egui_kittest",
+ "embed-resource",
+ "fluent-bundle",
+ "fontdb",
+ "grayline-audio",
+ "grayline-shell",
+ "grayline-wefax",
+ "hound",
+ "image",
+ "jiff",
+ "muda",
+ "raw-window-handle",
+ "rstest",
+ "thiserror 2.0.20",
+ "toml_edit",
+ "unic-langid",
 ]
 
 [[package]]

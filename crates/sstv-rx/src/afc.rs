@@ -74,9 +74,7 @@ impl Afc {
                 return false;
             }
             let expected = f64::from(SYNC_HZ) + self.offset_hz;
-            if let Some(value) =
-                measurement.filter(|value| (value - expected).abs() <= MEASUREMENT_WINDOW_HZ)
-            {
+            if let Some(value) = measurement.filter(|value| (value - expected).abs() <= MEASUREMENT_WINDOW_HZ) {
                 self.measurements.push(value);
             }
             false
@@ -94,10 +92,7 @@ impl Afc {
         self.active = false;
         let duration = self.run_samples as f64 / self.sample_rate_hz;
         self.run_samples = 0;
-        if self.inhibit_samples > 0
-            || !RUN_SECONDS.contains(&duration)
-            || self.measurements.len() < RUN_MEASUREMENTS
-        {
+        if self.inhibit_samples > 0 || !RUN_SECONDS.contains(&duration) || self.measurements.len() < RUN_MEASUREMENTS {
             self.measurements.clear();
             return false;
         }
@@ -145,10 +140,7 @@ mod tests {
             "the buffer grew to {} measurements",
             afc.measurements.capacity()
         );
-        assert!(
-            !afc.finish_run(),
-            "an overlong run must not update the offset"
-        );
+        assert!(!afc.finish_run(), "an overlong run must not update the offset");
         assert_eq!(afc.offset_hz(), 0.0);
     }
 

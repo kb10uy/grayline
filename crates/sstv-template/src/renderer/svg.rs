@@ -8,8 +8,8 @@ use crate::{
         variable::interpolate,
     },
     scene::{
-        Anchor, Clip, Color, Gradient, GradientKind, GroupLayer, ImageFit, ImageLayer, Layer,
-        LayerSize, Length, Paint, Position, ReceivedImageLayer, Stroke, TextLayer,
+        Anchor, Clip, Color, Gradient, GradientKind, GroupLayer, ImageFit, ImageLayer, Layer, LayerSize, Length, Paint,
+        Position, ReceivedImageLayer, Stroke, TextLayer,
     },
 };
 
@@ -77,18 +77,12 @@ impl<'a> SvgGenerator<'a> {
         for layer in layers {
             match layer {
                 Layer::Image(layer) => self.write_asset(svg, layer, offset_x, offset_y)?,
-                Layer::ReceivedImage(layer) => {
-                    self.write_received_image(svg, layer, offset_x, offset_y)?
-                }
+                Layer::ReceivedImage(layer) => self.write_received_image(svg, layer, offset_x, offset_y)?,
                 Layer::Text(layer) => self.write_text(svg, layer, offset_x, offset_y)?,
                 Layer::Rectangle(layer) => {
                     let (x, y, width, height) =
                         self.box_geometry(layer.position, layer.size, offset_x, offset_y, None)?;
-                    write!(
-                        svg,
-                        "<rect x=\"{x}\" y=\"{y}\" width=\"{width}\" height=\"{height}\""
-                    )
-                    .unwrap();
+                    write!(svg, "<rect x=\"{x}\" y=\"{y}\" width=\"{width}\" height=\"{height}\"").unwrap();
                     if let Some(radius) = layer.size.radius {
                         let radius = resolve_length(radius, self.size, None)?;
                         write!(svg, " rx=\"{radius}\" ry=\"{radius}\"").unwrap();
@@ -205,8 +199,7 @@ impl<'a> SvgGenerator<'a> {
             offset,
         } = placement;
         let intrinsic = Some((f64::from(resource.width), f64::from(resource.height)));
-        let (x, y, width, height) =
-            self.box_geometry(position, size, offset.0, offset.1, intrinsic)?;
+        let (x, y, width, height) = self.box_geometry(position, size, offset.0, offset.1, intrinsic)?;
         let preserve = match size.fit {
             ImageFit::Stretch => "none",
             ImageFit::Cover => "xMidYMid slice",
@@ -299,14 +292,7 @@ impl<'a> SvgGenerator<'a> {
             write_stroke(svg, stroke, self.size, Some(font_size))?;
             svg.push_str(" paint-order=\"stroke fill\" stroke-linejoin=\"round\"");
         }
-        write_rotation(
-            svg,
-            layer.position,
-            offset_x,
-            offset_y,
-            self.size,
-            Some(font_size),
-        )?;
+        write_rotation(svg, layer.position, offset_x, offset_y, self.size, Some(font_size))?;
         svg.push('>');
         match lines.as_slice() {
             [line] => svg.push_str(&escape_xml(line)),
@@ -349,9 +335,7 @@ impl<'a> SvgGenerator<'a> {
                 (height * intrinsic_width / intrinsic_height, height)
             }
             _ => {
-                return Err(TemplateError::Schema(
-                    "layer dimensions cannot be resolved".into(),
-                ));
+                return Err(TemplateError::Schema("layer dimensions cannot be resolved".into()));
             }
         };
         if width <= 0.0 || height <= 0.0 {
@@ -390,10 +374,7 @@ impl<'a> SvgGenerator<'a> {
         if let Some(uri) = &self.received_uri {
             return Ok((uri.clone(), self.resources[uri].clone()));
         }
-        let image = self
-            .context
-            .received_image
-            .ok_or(TemplateError::MissingReceivedImage)?;
+        let image = self.context.received_image.ok_or(TemplateError::MissingReceivedImage)?;
         let resource = encode_received_image(image)?;
         let uri = self.insert_resource("rximage", resource.clone());
         self.received_uri = Some(uri.clone());
@@ -481,18 +462,12 @@ impl<'a> SvgGenerator<'a> {
     }
 }
 
-fn resolve_length(
-    length: Length,
-    size: RenderSize,
-    font_size: Option<f64>,
-) -> Result<f64, TemplateError> {
+fn resolve_length(length: Length, size: RenderSize, font_size: Option<f64>) -> Result<f64, TemplateError> {
     let value = match length {
         Length::FrameWidth(percent) => f64::from(size.width()) * percent / 100.0,
         Length::FrameHeight(percent) => f64::from(size.height()) * percent / 100.0,
         Length::Em(multiplier) => {
-            font_size
-                .ok_or_else(|| TemplateError::Schema("(em) requires a text font size".into()))?
-                * multiplier
+            font_size.ok_or_else(|| TemplateError::Schema("(em) requires a text font size".into()))? * multiplier
         }
     };
     if !value.is_finite() {
@@ -575,19 +550,9 @@ fn write_stroke(
 }
 
 fn write_color(svg: &mut String, attribute: &str, color: Color) {
-    write!(
-        svg,
-        " {attribute}=\"#{:02x}{:02x}{:02x}\"",
-        color.r, color.g, color.b
-    )
-    .unwrap();
+    write!(svg, " {attribute}=\"#{:02x}{:02x}{:02x}\"", color.r, color.g, color.b).unwrap();
     if color.a != 255 {
-        write!(
-            svg,
-            " {attribute}-opacity=\"{}\"",
-            f64::from(color.a) / 255.0
-        )
-        .unwrap();
+        write!(svg, " {attribute}-opacity=\"{}\"", f64::from(color.a) / 255.0).unwrap();
     }
 }
 

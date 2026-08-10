@@ -17,11 +17,7 @@ pub struct Resonator {
 
 impl Resonator {
     /// Creates a resonator centered at `frequency_hz` with the requested bandwidth.
-    pub fn new(
-        sample_rate_hz: f64,
-        frequency_hz: f64,
-        bandwidth_hz: f64,
-    ) -> Result<Self, DspError> {
+    pub fn new(sample_rate_hz: f64, frequency_hz: f64, bandwidth_hz: f64) -> Result<Self, DspError> {
         validate_parameters(frequency_hz, sample_rate_hz, bandwidth_hz)?;
         let mut resonator = Self {
             sample_rate_hz,
@@ -68,9 +64,7 @@ impl Resonator {
     /// Processes one sample without allocating.
     pub fn process_sample(&mut self, sample: f64) -> f64 {
         // Two-pole resonator: y[n] = a0*x[n] + b1*y[n-1] + b2*y[n-2].
-        let mut output = sample * self.input_gain
-            + self.state_1 * self.feedback_1
-            + self.state_2 * self.feedback_2;
+        let mut output = sample * self.input_gain + self.state_1 * self.feedback_1 + self.state_2 * self.feedback_2;
         self.state_2 = self.state_1;
         if output.abs() < f64::MIN_POSITIVE {
             output = 0.0;
@@ -95,9 +89,7 @@ impl Resonator {
     fn update_coefficients(&mut self) {
         let angular_frequency = 2.0 * PI * self.frequency_hz / self.sample_rate_hz;
         // Bandwidth places the pole radius; frequency places the pole angle.
-        self.feedback_1 = 2.0
-            * libm::exp(-PI * self.bandwidth_hz / self.sample_rate_hz)
-            * libm::cos(angular_frequency);
+        self.feedback_1 = 2.0 * libm::exp(-PI * self.bandwidth_hz / self.sample_rate_hz) * libm::cos(angular_frequency);
         self.feedback_2 = libm::exp(-2.0 * PI * self.bandwidth_hz / self.sample_rate_hz);
         self.feedback_2 = -self.feedback_2;
         // Preserve the detector scaling used by MMSSTV's tone-envelope bank.
@@ -109,11 +101,7 @@ impl Resonator {
     }
 }
 
-fn validate_parameters(
-    frequency_hz: f64,
-    sample_rate_hz: f64,
-    bandwidth_hz: f64,
-) -> Result<(), DspError> {
+fn validate_parameters(frequency_hz: f64, sample_rate_hz: f64, bandwidth_hz: f64) -> Result<(), DspError> {
     if !sample_rate_hz.is_finite() || sample_rate_hz <= 0.0 {
         return Err(DspError::InvalidSampleRate);
     }
@@ -168,10 +156,7 @@ mod tests {
         resonator.set_bandwidth(120.0).unwrap();
         assert_eq!(resonator.bandwidth_hz(), 120.0);
         assert_ne!(resonator.process_sample(0.0), 0.0);
-        assert_eq!(
-            resonator.set_bandwidth(-1.0),
-            Err(DspError::InvalidBandwidth)
-        );
+        assert_eq!(resonator.set_bandwidth(-1.0), Err(DspError::InvalidBandwidth));
     }
 
     #[test]

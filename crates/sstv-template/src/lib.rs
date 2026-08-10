@@ -15,10 +15,9 @@ mod scene;
 pub use error::{AssetError, TemplateError};
 pub use image::{RenderSize, Rgba8, RgbaImage, composite};
 pub use renderer::{
-    AssetProvider, EmptyAssetProvider, EncodedAsset, FileAssetProvider, RenderContext, Renderer,
-    valid_variable_name,
+    AssetProvider, EmptyAssetProvider, EncodedAsset, FileAssetProvider, RenderContext, Renderer, valid_variable_name,
 };
 pub use scene::{
-    Anchor, Color, EllipseLayer, GroupLayer, ImageFit, ImageLayer, Layer, Length, LineLayer,
-    ReceivedImageLayer, RectangleLayer, Template, TextLayer, VariableValue, Variables,
+    Anchor, Color, EllipseLayer, GroupLayer, ImageFit, ImageLayer, Layer, Length, LineLayer, ReceivedImageLayer,
+    RectangleLayer, Template, TextLayer, VariableValue, Variables,
 };

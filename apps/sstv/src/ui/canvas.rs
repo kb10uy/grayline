@@ -35,23 +35,17 @@ pub fn image_view(ui: &mut Ui, raster: &mut Raster, decoded_fraction: f32) -> Re
     // The undecoded region is excluded by clipping the raster rather than by
     // covering it, so the boundary stays exact at any viewport scale.
     let texture = raster.texture(ui.ctx()).id();
-    ui.painter_at(Rect::from_min_max(
-        rect.min,
-        Pos2::new(rect.right(), boundary),
-    ))
-    .image(
-        texture,
-        rect,
-        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-        Color32::WHITE,
-    );
+    ui.painter_at(Rect::from_min_max(rect.min, Pos2::new(rect.right(), boundary)))
+        .image(
+            texture,
+            rect,
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            Color32::WHITE,
+        );
 
     if decoded_fraction < 1.0 {
-        ui.painter().hline(
-            rect.left()..=rect.right(),
-            boundary,
-            Stroke::new(2.0, SCAN_LINE),
-        );
+        ui.painter()
+            .hline(rect.left()..=rect.right(), boundary, Stroke::new(2.0, SCAN_LINE));
     }
     area
 }
@@ -89,16 +83,8 @@ mod tests {
         2.0,
         Rect::from_min_size(Pos2::new(100.0, 0.0), Vec2::new(200.0, 100.0))
     )]
-    #[case(
-        area(400.0, 200.0),
-        2.0,
-        Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 200.0))
-    )]
-    fn letterbox_centers_without_distortion(
-        #[case] area: Rect,
-        #[case] aspect_ratio: f32,
-        #[case] expected: Rect,
-    ) {
+    #[case(area(400.0, 200.0), 2.0, Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 200.0)))]
+    fn letterbox_centers_without_distortion(#[case] area: Rect, #[case] aspect_ratio: f32, #[case] expected: Rect) {
         let result = letterbox(area, aspect_ratio);
         assert_eq!(result, expected);
         assert!((result.width() / result.height() - aspect_ratio).abs() < f32::EPSILON);

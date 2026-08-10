@@ -347,7 +347,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twelve packages:
+The workspace currently contains fifteen packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -362,6 +362,9 @@ The workspace currently contains twelve packages:
 | `web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
+| `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
+| `decode-fax-wav` | Offline WEFAX receive integration | Implemented |
+| `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
 Their current dependency direction is:
@@ -395,7 +398,19 @@ grayline-tone-tx ------+
 grayline-rig ------------+-> grayline-sstv-app
 grayline-sstv -----------+
 grayline-sstv-template -------+
+
+grayline-dsp ------------> grayline-wefax --> decode-fax-wav
+
+grayline-audio ----------+
+grayline-shell ----------+-> grayline-wefax-app
+grayline-wefax ----------+
 ```
+
+`grayline-wefax` depends on `grayline-dsp` and on nothing else in this
+workspace. That it needs no part of `grayline-sstv` is the point of the split
+between a mode's crates and the core: WEFAX shares the numerical layer, and
+shares nothing of SSTV's protocol. Where it needed something the SSTV front end
+had, that piece moved down into `grayline-dsp` rather than across.
 
 `grayline-audio` is the platform audio boundary. It exposes normalized mono
 `f32` samples with stream positions and keeps the host API out of its public
@@ -417,8 +432,8 @@ moment is a Lua script the application hosts, because what a rig wants around a
 transmission differs by rig and by station. The whole arrangement is described
 in [rig-control.md](rig-control.md).
 
-`grayline-dsp` and `grayline-sstv` build as allocation-backed `no_std` crates by
-default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
+`grayline-dsp`, `grayline-sstv`, and `grayline-wefax` build as allocation-backed
+`no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
 remain in `decode-wav` and `encode-wav`, outside the portable core.
 `grayline-sstv-template` is a
 standard-library application-support crate: it depends on `grayline-sstv` only at
@@ -430,9 +445,20 @@ rendering.
 
 `grayline-dsp` provides radix-2 FFT, windowed real spectra, FIR and IIR design and
 processing, Hilbert transforms, zero-crossing frequency measurement, a
-phase-continuous VCO, PLL frequency discrimination, and resonator tone
-detection. The standalone FFT and PLL are not currently part of the WAV receive
-path; that path uses a Hilbert phase-difference discriminator.
+phase-continuous VCO, PLL and Hilbert phase-difference frequency discrimination,
+and resonator tone detection. The standalone FFT and PLL are not currently part
+of the WAV receive path; that path uses the Hilbert phase-difference
+discriminator.
+
+`frequency::HilbertDiscriminator` and `detector::ToneDetector` were the SSTV
+front end's own until a second mode needed them, which is the point at which
+the reading that would generalize them exists. Both take the band they work in
+from a design struct rather than from a constant, because that is the only
+thing the two callers answer differently: the discriminator's reported range
+and output cutoff follow the mode's signal band, and the tone detector's
+envelope cutoff follows how quickly the tone it looks for comes and goes. What
+stays internal is what both callers want the same — the sample-rate-keyed phase
+lag, the Hilbert passband margins, and the filter responses.
 
 `grayline-sstv-rx` provides a stateful `Demodulator` that accepts contiguous
 normalized mono PCM packets and emits owned demodulated chunks with absolute

@@ -15,18 +15,11 @@ pub(super) fn least_squares_line(points: &[(f64, f64)]) -> Option<(f64, f64, f64
     let count = points.len() as f64;
     let mean_x = points.iter().map(|(x, _)| x).sum::<f64>() / count;
     let mean_y = points.iter().map(|(_, y)| y).sum::<f64>() / count;
-    let denominator = points
-        .iter()
-        .map(|(x, _)| (x - mean_x) * (x - mean_x))
-        .sum::<f64>();
+    let denominator = points.iter().map(|(x, _)| (x - mean_x) * (x - mean_x)).sum::<f64>();
     if denominator <= 0.0 {
         return None;
     }
-    let slope = points
-        .iter()
-        .map(|(x, y)| (x - mean_x) * (y - mean_y))
-        .sum::<f64>()
-        / denominator;
+    let slope = points.iter().map(|(x, y)| (x - mean_x) * (y - mean_y)).sum::<f64>() / denominator;
     let intercept = mean_y - slope * mean_x;
     let mean_squared_residual = points
         .iter()

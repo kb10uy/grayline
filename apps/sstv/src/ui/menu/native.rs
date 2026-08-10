@@ -41,8 +41,9 @@ impl Entry {
                 entry.set_text(label);
                 entry.set_checked(*checked);
             }
-            (Self::Command(entry), Item::Command { label, .. })
-            | (Self::Pending(entry), Item::Pending(label)) => entry.set_text(label),
+            (Self::Command(entry), Item::Command { label, .. }) | (Self::Pending(entry), Item::Pending(label)) => {
+                entry.set_text(label)
+            }
             (Self::Separator, Item::Separator) => {}
             _ => debug_assert!(false, "menu entries drifted from the model"),
         }
@@ -117,11 +118,7 @@ impl MenuHost {
                     self.items.push(Entry::Submenu(submenu.clone()));
                     self.append_items(&submenu, items)?;
                 }
-                Item::Check {
-                    label,
-                    checked,
-                    action,
-                } => {
+                Item::Check { label, checked, action } => {
                     let entry = CheckMenuItem::new(label, true, *checked, None);
                     parent.append(&entry)?;
                     self.actions.insert(entry.id().clone(), action.clone());

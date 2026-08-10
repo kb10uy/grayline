@@ -56,10 +56,9 @@ impl IirLowPassDesign {
         let warped_cutoff = libm::tan(PI * self.cutoff_hz / self.sample_rate_hz);
         let chebyshev_u = match self.response {
             IirResponse::Butterworth => None,
-            IirResponse::Chebyshev { ripple_db } => Some(
-                libm::asinh(1.0 / libm::sqrt(libm::pow(10.0, 0.1 * ripple_db) - 1.0))
-                    / self.order as f64,
-            ),
+            IirResponse::Chebyshev { ripple_db } => {
+                Some(libm::asinh(1.0 / libm::sqrt(libm::pow(10.0, 0.1 * ripple_db) - 1.0)) / self.order as f64)
+            }
         };
         let mut pole_index = (self.order & 1) + 1;
 
@@ -95,10 +94,7 @@ impl IirLowPassDesign {
         if let IirResponse::Chebyshev { ripple_db } = self.response
             && self.order.is_multiple_of(2)
         {
-            let scale = libm::pow(
-                1.0 / libm::pow(10.0, ripple_db / 20.0),
-                1.0 / (self.order / 2) as f64,
-            );
+            let scale = libm::pow(1.0 / libm::pow(10.0, ripple_db / 20.0), 1.0 / (self.order / 2) as f64);
             for section in &mut sections {
                 section.b0 *= scale;
                 section.b1 *= scale;
@@ -151,10 +147,7 @@ impl Iir {
             return Err(DspError::InvalidCoefficient);
         }
         let states = alloc::vec![SosState::default(); coefficients.len()];
-        Ok(Self {
-            coefficients,
-            states,
-        })
+        Ok(Self { coefficients, states })
     }
 
     /// Designs and creates a low-pass filter.
@@ -207,10 +200,7 @@ fn validate_design(design: IirLowPassDesign) -> Result<(), DspError> {
     if !design.sample_rate_hz.is_finite() || design.sample_rate_hz <= 0.0 {
         return Err(DspError::InvalidSampleRate);
     }
-    if !design.cutoff_hz.is_finite()
-        || design.cutoff_hz <= 0.0
-        || design.cutoff_hz >= design.sample_rate_hz * 0.5
-    {
+    if !design.cutoff_hz.is_finite() || design.cutoff_hz <= 0.0 || design.cutoff_hz >= design.sample_rate_hz * 0.5 {
         return Err(DspError::InvalidFrequency);
     }
     if let IirResponse::Chebyshev { ripple_db } = design.response
@@ -303,10 +293,7 @@ mod tests {
             a1: 0.0,
             a2: 0.0,
         };
-        assert_eq!(
-            Iir::new(alloc::vec![section]).err(),
-            Some(DspError::InvalidCoefficient)
-        );
+        assert_eq!(Iir::new(alloc::vec![section]).err(), Some(DspError::InvalidCoefficient));
     }
 
     #[test]

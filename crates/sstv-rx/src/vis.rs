@@ -167,9 +167,7 @@ impl VisDecoder {
     fn armed(&self) -> bool {
         match self.detection {
             VisDetection::Loose => true,
-            VisDetection::Strict => {
-                self.leader_evidence as f64 >= self.sample_rate_hz * LEADER_EVIDENCE_SECONDS
-            }
+            VisDetection::Strict => self.leader_evidence as f64 >= self.sample_rate_hz * LEADER_EVIDENCE_SECONDS,
         }
     }
 
@@ -250,11 +248,7 @@ mod tests {
     fn feed_vis_bits(decoder: &mut VisDecoder, raw: u8) -> Option<Mode> {
         let mut detected = feed(decoder, 1_200.0, 0.030);
         for bit in 0..8 {
-            let frequency = if raw & (1 << bit) != 0 {
-                1_100.0
-            } else {
-                1_300.0
-            };
+            let frequency = if raw & (1 << bit) != 0 { 1_100.0 } else { 1_300.0 };
             detected = detected.or(feed(decoder, frequency, 0.030));
         }
         detected.or(feed(decoder, 1_200.0, 0.030))
@@ -311,10 +305,7 @@ mod tests {
         }
         detected = detected.or(feed(&mut decoder, 1_200.0, 0.010));
         detected = detected.or(feed(&mut decoder, 1_900.0, 0.3));
-        assert_eq!(
-            detected.or(feed_vis_bits(&mut decoder, 0xac)),
-            Some(Mode::Martin1)
-        );
+        assert_eq!(detected.or(feed_vis_bits(&mut decoder, 0xac)), Some(Mode::Martin1));
     }
 
     /// The trigger asks for more 1200 Hz than the break holds, so the break
@@ -352,17 +343,10 @@ mod tests {
         feed(&mut decoder, 1_500.0, 0.001);
         let mut detected = feed(&mut decoder, 1_200.0, 0.024);
         for bit in 0..8 {
-            let frequency = if 0xac & (1 << bit) != 0 {
-                1_100.0
-            } else {
-                1_300.0
-            };
+            let frequency = if 0xac & (1 << bit) != 0 { 1_100.0 } else { 1_300.0 };
             detected = detected.or(feed(&mut decoder, frequency, 0.030));
         }
-        assert_eq!(
-            detected.or(feed(&mut decoder, 1_200.0, 0.030)),
-            Some(Mode::Martin1)
-        );
+        assert_eq!(detected.or(feed(&mut decoder, 1_200.0, 0.030)), Some(Mode::Martin1));
     }
 
     #[test]

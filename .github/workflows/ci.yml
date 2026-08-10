@@ -16,9 +16,32 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Check
+  # On its own because it needs neither the system packages nor the compiled
+  # dependencies every other job waits for: a misformatted change is reported
+  # in under a minute rather than behind a build.
+  format:
+    name: Format
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  # The libraries, the tools, and the browser demo's host build: everything a
+  # change can break with no application involved. The two applications are
+  # excluded so they can run beside this job rather than after it; each is a
+  # long tail of its own, and the run used to wait for both of them in turn.
+  core:
+    name: Core
+    runs-on: ubuntu-latest
+    # Named once and reused by the three commands below, so a member that
+    # leaves the core cannot be dropped from one of them alone.
+    env:
+      SCOPE: --workspace --exclude grayline-sstv-app --exclude grayline-wefax-app
     steps:
       # The submodule is reference material and nothing builds against it.
       - uses: actions/checkout@v5
@@ -34,17 +57,17 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: core
 
-      - name: Check formatting
-        run: cargo fmt --all --check
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy $SCOPE --all-targets -- -D warnings
       - name: Run tests
-        run: cargo test --workspace
-      - name: Build the workspace
-        run: cargo build --workspace
+        run: cargo test $SCOPE
+      - name: Build the core
+        run: cargo build $SCOPE
 
       # A workspace build does not cover this: another member enabling the
       # `std` feature hides a core primitive used through `std` alone, so the
@@ -53,6 +76,7 @@ jobs:
         run: |
           cargo build -p grayline-sstv --no-default-features
           cargo build -p grayline-dsp --no-default-features
+          cargo build -p grayline-wefax --no-default-features
 
       # For the same reason, a crate that asks for no `std` feature from these
       # two is only held to it on its own: the workspace turns the feature on
@@ -61,6 +85,44 @@ jobs:
         run: |
           cargo build -p grayline-tone-tx
           cargo build -p grayline-sstv-rx
+
+  # One job per application, so the two compile at the same time and a failure
+  # names which one broke rather than which command did. Each keeps its own
+  # cache: the two dependency graphs meet at eframe and diverge after it, and
+  # one key over both would have each run overwriting the other's entry.
+  app:
+    name: App (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: SSTV
+            package: grayline-sstv-app
+          - name: WEFAX
+            package: grayline-wefax-app
+    steps:
+      - uses: actions/checkout@v5
+
+      # ALSA for the same reason as the core job.
+      - name: Install the Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libasound2-dev mold
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.package }}
+
+      - name: Run Clippy
+        run: cargo clippy -p ${{ matrix.package }} --all-targets -- -D warnings
+      - name: Run tests
+        run: cargo test -p ${{ matrix.package }}
+      - name: Build the application
+        run: cargo build -p ${{ matrix.package }}
 
   # The browser demo is the one member whose target is not the host, and the
   # host build says nothing about it: on Linux the JavaScript bindings compile

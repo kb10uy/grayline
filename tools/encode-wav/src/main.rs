@@ -56,7 +56,5 @@ fn run() -> Result<()> {
 }
 
 fn usage<T>() -> Result<T> {
-    bail!(
-        "usage: encode-wav [--callsign CALLSIGN] <TEMPLATE.kdl> <BACKGROUND_IMAGE> <MODE> <OUTPUT.wav>"
-    )
+    bail!("usage: encode-wav [--callsign CALLSIGN] <TEMPLATE.kdl> <BACKGROUND_IMAGE> <MODE> <OUTPUT.wav>")
 }

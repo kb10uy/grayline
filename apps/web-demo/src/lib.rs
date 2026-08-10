@@ -87,11 +87,7 @@ impl SstvReceiver {
     /// and for the refit performed by [`SstvReceiver::finish`], at three bytes
     /// per sample.
     #[wasm_bindgen(constructor)]
-    pub fn new(
-        sample_rate_hz: f64,
-        live_slant: bool,
-        staging_seconds: f64,
-    ) -> Result<SstvReceiver, JsError> {
+    pub fn new(sample_rate_hz: f64, live_slant: bool, staging_seconds: f64) -> Result<SstvReceiver, JsError> {
         console_error_panic_hook::set_once();
         if !sample_rate_hz.is_finite() || sample_rate_hz < MINIMUM_SAMPLE_RATE_HZ {
             return Err(JsError::new(&format!(
@@ -224,13 +220,8 @@ impl SstvReceiver {
             self.stage = stage;
             return Err(JsError::new("the stream is already finished"));
         };
-        let image_revision = pipeline
-            .decoder()
-            .map_or(0, |decoder| decoder.image_revision())
-            + 1;
-        let outcome = pipeline
-            .finish()
-            .map_err(|error| JsError::new(&error.to_string()))?;
+        let image_revision = pipeline.decoder().map_or(0, |decoder| decoder.image_revision()) + 1;
+        let outcome = pipeline.finish().map_err(|error| JsError::new(&error.to_string()))?;
         let (image, state, completed_rows) = match outcome.outcome {
             RxOutcome::Complete(image) => {
                 let rows = image.size().height() as u32;
@@ -238,8 +229,9 @@ impl SstvReceiver {
             }
             RxOutcome::Incomplete { image, state } => {
                 let rows = match state {
-                    RxState::Decoding { completed_rows }
-                    | RxState::Stopped { completed_rows, .. } => completed_rows as u32,
+                    RxState::Decoding { completed_rows } | RxState::Stopped { completed_rows, .. } => {
+                        completed_rows as u32
+                    }
                     RxState::Complete => image.size().height() as u32,
                     RxState::Acquiring => 0,
                 };
@@ -257,11 +249,7 @@ impl SstvReceiver {
             completed_rows,
             frequency_offset_hz: outcome.frequency_offset_hz,
             effective_sample_rate_hz: outcome.effective_sample_rate_hz,
-            callsigns: outcome
-                .fsk_ids
-                .iter()
-                .map(|id| id.as_str().to_owned())
-                .collect(),
+            callsigns: outcome.fsk_ids.iter().map(|id| id.as_str().to_owned()).collect(),
             image_revision,
         }));
         Ok(self.status())

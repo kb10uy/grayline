@@ -9,15 +9,11 @@ use super::*;
 pub(super) fn status_bar(ui: &mut Ui, app: &App) {
     let snapshot = app.audio.snapshot();
     let audio = match app.audio.sample_rate_hz() {
-        Some(rate) => app
-            .i18n
-            .text_with("status-audio", &[("rate", number(rate))]),
+        Some(rate) => app.i18n.text_with("status-audio", &[("rate", number(rate))]),
         None => app.i18n.text("status-no-audio"),
     };
     let output = match app.output_sample_rate_hz() {
-        Some(rate) => app
-            .i18n
-            .text_with("status-output-audio", &[("rate", number(rate))]),
+        Some(rate) => app.i18n.text_with("status-output-audio", &[("rate", number(rate))]),
         None if app.audio.output_device.is_some() => app.i18n.text("status-output-ready"),
         None => app.i18n.text("status-no-output"),
     };

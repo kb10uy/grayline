@@ -1,9 +1,6 @@
 use alloc::{collections::VecDeque, vec::Vec};
 
-use super::{
-    clock::RasterClock, config::sync_detector_delay_samples, input::SampleBuffer,
-    raster::RasterProfile,
-};
+use super::{clock::RasterClock, config::sync_detector_delay_samples, input::SampleBuffer, raster::RasterProfile};
 use crate::time::SstvDuration;
 
 pub(super) const HISTORY_LEN: usize = 16;
@@ -45,24 +42,13 @@ pub(super) fn observe(
         .period_ps
         .checked_mul(unit as u64)?
         .checked_add(profile.sync_center_ps)?;
-    let expected =
-        clock
-            .sample_at(protocol)
-            .ok()?
-            .checked_add(libm::round(sync_detector_delay_samples(
-                sample_rate_hz,
-                sync_detector_delay,
-            )) as u64)?;
-    let half_period = clock
-        .samples_for(profile.period_ps)
+    let expected = clock
+        .sample_at(protocol)
         .ok()?
-        .div_ceil(2)
-        .max(2);
+        .checked_add(libm::round(sync_detector_delay_samples(sample_rate_hz, sync_detector_delay)) as u64)?;
+    let half_period = clock.samples_for(profile.period_ps).ok()?.div_ceil(2).max(2);
     let start = expected.saturating_sub(half_period).max(input.first());
-    let end = expected
-        .saturating_add(half_period)
-        .saturating_add(1)
-        .min(input.end());
+    let end = expected.saturating_add(half_period).saturating_add(1).min(input.end());
     if end <= start + 2 {
         return None;
     }
@@ -98,17 +84,10 @@ pub(super) fn observe(
     } else {
         peak_sample
     };
-    let center_sample = refine_center(
-        input,
-        profile,
-        envelope_center,
-        sample_rate_hz,
-        sync_detector_delay,
-    )
-    .unwrap_or_else(|| {
-        (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay))
-            .max(0.0) as u64
-    });
+    let center_sample = refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay)
+        .unwrap_or_else(|| {
+            (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay)).max(0.0) as u64
+        });
     Some(SyncObservation {
         unit,
         peak_sample,

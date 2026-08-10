@@ -47,11 +47,9 @@ impl Response {
     /// answer this crate reads for itself holds exactly one number, so the
     /// first one found is the one that was asked for.
     fn number(&self) -> Option<u64> {
-        self.lines.iter().find_map(|line| {
-            line.rsplit(':')
-                .next()
-                .and_then(|value| value.trim().parse().ok())
-        })
+        self.lines
+            .iter()
+            .find_map(|line| line.rsplit(':').next().and_then(|value| value.trim().parse().ok()))
     }
 
     fn text(&self, name: &str) -> Option<&str> {
@@ -90,11 +88,10 @@ impl Rigctld {
             .map_err(|_| RigError::Address(address.to_owned()))?
             .next()
             .ok_or_else(|| RigError::Address(address.to_owned()))?;
-        let stream =
-            TcpStream::connect_timeout(&target, timeout).map_err(|error| RigError::Connect {
-                address: address.to_owned(),
-                detail: error.to_string(),
-            })?;
+        let stream = TcpStream::connect_timeout(&target, timeout).map_err(|error| RigError::Connect {
+            address: address.to_owned(),
+            detail: error.to_string(),
+        })?;
         let connect = |error: std::io::Error| RigError::Connect {
             address: address.to_owned(),
             detail: error.to_string(),
@@ -158,12 +155,9 @@ impl Rigctld {
     /// Asks which mode the rig is using.
     pub fn mode(&mut self) -> Result<String, RigError> {
         let response = self.query("\\get_mode")?;
-        response
-            .text("mode")
-            .map(str::to_owned)
-            .ok_or(RigError::Unreadable {
-                command: "\\get_mode".to_owned(),
-            })
+        response.text("mode").map(str::to_owned).ok_or(RigError::Unreadable {
+            command: "\\get_mode".to_owned(),
+        })
     }
 
     /// Sends one of this crate's own commands, addressed as `rigctld` wants.
@@ -295,10 +289,7 @@ mod tests {
 
     #[test]
     fn a_frequency_is_read_from_a_labelled_answer() {
-        let fake = FakeRig::spawn(&[
-            "chk_vfo:\nChkVFO: 0\nRPRT 0\n",
-            "get_freq:\nFreq: 14230000\nRPRT 0\n",
-        ]);
+        let fake = FakeRig::spawn(&["chk_vfo:\nChkVFO: 0\nRPRT 0\n", "get_freq:\nFreq: 14230000\nRPRT 0\n"]);
         let mut rig = Rigctld::connect(&fake.address, TEST_TIMEOUT).unwrap();
 
         assert_eq!(rig.frequency_hz(), Ok(14_230_000));
@@ -322,10 +313,7 @@ mod tests {
     /// name one, which is a failure the operator would have no way to read.
     #[test]
     fn a_vfo_answer_puts_a_vfo_on_this_crate_s_own_commands() {
-        let fake = FakeRig::spawn(&[
-            "chk_vfo:\nChkVFO: 1\nRPRT 0\n",
-            "get_freq:\nFreq: 7178000\nRPRT 0\n",
-        ]);
+        let fake = FakeRig::spawn(&["chk_vfo:\nChkVFO: 1\nRPRT 0\n", "get_freq:\nFreq: 7178000\nRPRT 0\n"]);
         let mut rig = Rigctld::connect(&fake.address, TEST_TIMEOUT).unwrap();
 
         assert!(rig.requires_vfo());

@@ -116,10 +116,7 @@ impl FskEncoder {
     }
 
     const fn event(tone: FskTxTone, duration_micros: u32) -> FskTxEvent {
-        FskTxEvent {
-            tone,
-            duration_micros,
-        }
+        FskTxEvent { tone, duration_micros }
     }
 
     fn total_events(&self) -> usize {
@@ -243,10 +240,7 @@ mod tests {
         let id = FskId::new("JL1HIS").unwrap();
         let number = FskNumber::new(number).unwrap();
 
-        assert_events(
-            id.encoder_with_number(number),
-            &symbols[..JL1HIS.len() + record.len()],
-        );
+        assert_events(id.encoder_with_number(number), &symbols[..JL1HIS.len() + record.len()]);
     }
 
     #[rstest]

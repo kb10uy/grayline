@@ -57,17 +57,13 @@ mod tests {
 
     #[test]
     fn arguments_are_substituted_without_isolation_marks() {
-        let formatted = I18n::new(Locale::En, &CATALOG)
-            .text_with("state-receiving", &[("percent", number(94))]);
+        let formatted = I18n::new(Locale::En, &CATALOG).text_with("state-receiving", &[("percent", number(94))]);
         assert_eq!(formatted, "RECEIVING \u{b7} 94%");
     }
 
     #[test]
     fn missing_keys_fall_back_to_the_key() {
-        assert_eq!(
-            I18n::new(Locale::En, &CATALOG).text("no-such-key"),
-            "no-such-key"
-        );
+        assert_eq!(I18n::new(Locale::En, &CATALOG).text("no-such-key"), "no-such-key");
     }
 
     /// Collects every key the application asks for by name.
@@ -87,10 +83,7 @@ mod tests {
                     // strings.
                     && path.file_name().is_some_and(|name| name != "locales.rs")
                 {
-                    collect(
-                        &std::fs::read_to_string(&path).expect("a source file"),
-                        keys,
-                    );
+                    collect(&std::fs::read_to_string(&path).expect("a source file"), keys);
                 }
             }
         }
@@ -98,10 +91,7 @@ mod tests {
         // `text("key")` and `text_with("key", ...)`, which is every way the
         // bundle is reached, plus the `label_key` arms that answer with one.
         fn collect(source: &str, keys: &mut BTreeSet<String>) {
-            for (index, _) in source
-                .match_indices("text(")
-                .chain(source.match_indices("text_with("))
-            {
+            for (index, _) in source.match_indices("text(").chain(source.match_indices("text_with(")) {
                 let rest = &source[index..];
                 let Some(open) = rest.find('(') else { continue };
                 let Some(quoted) = rest[open + 1..].strip_prefix('"') else {
@@ -116,9 +106,7 @@ mod tests {
 
         let mut keys = BTreeSet::new();
         walk(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src")
-                .as_path(),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path(),
             &mut keys,
         );
         keys
@@ -133,10 +121,7 @@ mod tests {
             "the call sites should have been found: {requested:?}"
         );
         let missing = requested.difference(&defined).collect::<Vec<_>>();
-        assert!(
-            missing.is_empty(),
-            "keys asked for but not defined: {missing:?}"
-        );
+        assert!(missing.is_empty(), "keys asked for but not defined: {missing:?}");
     }
 
     /// Every label a menu or a control is named by has to resolve.
@@ -150,10 +135,7 @@ mod tests {
             .map(crate::app::Tab::label_key)
             .into_iter()
             .chain(crate::app::Dsp::ALL.map(crate::app::Dsp::label_key))
-            .chain(
-                crate::storage::history::HistoryFormat::ALL
-                    .map(crate::storage::history::HistoryFormat::label_key),
-            )
+            .chain(crate::storage::history::HistoryFormat::ALL.map(crate::storage::history::HistoryFormat::label_key))
             .chain(crate::storage::paths::Folder::ALL.map(crate::storage::paths::Folder::label_key))
             .chain(
                 [
@@ -177,12 +159,9 @@ mod tests {
     /// check below does not reach this one there.
     #[test]
     fn the_carried_icon_decodes() {
-        let icon = image::load_from_memory_with_format(
-            crate::identity::IDENTITY.icon_png,
-            image::ImageFormat::Png,
-        )
-        .expect("the carried icon should decode")
-        .into_rgba8();
+        let icon = image::load_from_memory_with_format(crate::identity::IDENTITY.icon_png, image::ImageFormat::Png)
+            .expect("the carried icon should decode")
+            .into_rgba8();
         assert_eq!(icon.width(), icon.height());
     }
 
@@ -193,10 +172,7 @@ mod tests {
         let icon = grayline_shell::platform::window_icon(&crate::identity::IDENTITY)
             .expect("the application icon should be available");
         assert!(icon.width > 0 && icon.height > 0);
-        assert_eq!(
-            icon.rgba.len(),
-            icon.width as usize * icon.height as usize * 4
-        );
+        assert_eq!(icon.rgba.len(), icon.width as usize * icon.height as usize * 4);
         assert!(
             icon.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0),
             "the icon should not be fully transparent"

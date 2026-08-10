@@ -101,11 +101,7 @@ impl Raster {
             match self.texture.as_mut() {
                 Some(texture) => texture.set(Arc::clone(&self.image), TextureOptions::NEAREST),
                 None => {
-                    self.texture = Some(ctx.load_texture(
-                        "raster",
-                        Arc::clone(&self.image),
-                        TextureOptions::NEAREST,
-                    ));
+                    self.texture = Some(ctx.load_texture("raster", Arc::clone(&self.image), TextureOptions::NEAREST));
                 }
             }
             self.uploaded = true;
@@ -193,14 +189,8 @@ mod tests {
     #[test]
     fn blank_rasters_match_mode_geometry() {
         let raster = Raster::blank(Mode::Scottie2);
-        assert_eq!(
-            raster.size().width(),
-            Mode::Scottie2.spec().width() as usize
-        );
-        assert_eq!(
-            raster.size().height(),
-            Mode::Scottie2.spec().height() as usize
-        );
+        assert_eq!(raster.size().width(), Mode::Scottie2.spec().width() as usize);
+        assert_eq!(raster.size().height(), Mode::Scottie2.spec().height() as usize);
     }
 
     #[test]
@@ -239,12 +229,7 @@ mod tests {
         assert!(raster.set_frame(&Frame {
             width: Mode::Robot36.spec().width().into(),
             height: Mode::Robot36.spec().height().into(),
-            rgba: vec![
-                7;
-                Mode::Robot36.spec().width() as usize
-                    * Mode::Robot36.spec().height() as usize
-                    * 4
-            ],
+            rgba: vec![7; Mode::Robot36.spec().width() as usize * Mode::Robot36.spec().height() as usize * 4],
         }));
 
         assert_eq!(raster.texture(&context).id(), first);
@@ -259,17 +244,9 @@ mod tests {
         raster.set_frame(&Frame {
             width: Mode::Robot36.spec().width().into(),
             height: Mode::Robot36.spec().height().into(),
-            rgba: vec![
-                7;
-                Mode::Robot36.spec().width() as usize
-                    * Mode::Robot36.spec().height() as usize
-                    * 4
-            ],
+            rgba: vec![7; Mode::Robot36.spec().width() as usize * Mode::Robot36.spec().height() as usize * 4],
         });
         assert_eq!(raster.image.pixels.as_ptr(), before);
-        assert_eq!(
-            raster.image.pixels[0],
-            Color32::from_rgba_unmultiplied(7, 7, 7, 7)
-        );
+        assert_eq!(raster.image.pixels[0], Color32::from_rgba_unmultiplied(7, 7, 7, 7));
     }
 }

@@ -13,7 +13,8 @@ are planned.
 The repository contains:
 
 - `apps/`: one directory per shipped application, plus the browser demo.
-  `apps/sstv/` is the SSTV desktop application.
+  `apps/sstv/` is the SSTV desktop application and `apps/wefax/` the WEFAX
+  one.
 - `crates/`: the libraries. Directory names carry no prefix; the packages they
   hold are named `grayline-*`. `crates/shell/` holds what every application
   needs and no mode decides: platform integration, the localization machinery,
@@ -28,6 +29,8 @@ The repository contains:
   `docs/memo/README.md` indexes it.
   - `docs/memo/sstv/`: the protocols themselves — modes, timing, VIS, and
     FSKID — independent of any one implementation.
+  - `docs/memo/wefax/`: the WEFAX signal on the air — modulation, index of
+    cooperation, line rates, framing tones, and the phasing signal.
   - `docs/memo/mmsstv/`: the behavior of the original application, including
     its DSP implementation and where it departs from published descriptions.
   - `docs/memo/grayline/`: this project — target architecture, the desktop
@@ -131,8 +134,9 @@ This repository uses a Cargo workspace. Run commands from the workspace root.
 
 - Build all workspace members with `cargo build --workspace`.
 - Run all tests with `cargo test --workspace`.
-- Check that `grayline-sstv` still builds without `std` using
-  `cargo build -p grayline-sstv --no-default-features`. A workspace build does
+- Check that `grayline-sstv` and `grayline-wefax` still build without `std`
+  using `cargo build -p grayline-sstv --no-default-features` and
+  `cargo build -p grayline-wefax --no-default-features`. A workspace build does
   not cover this: another member enabling the `std` feature hides a core
   primitive used through `std` alone, so the crate can stop being `no_std`
   without any workspace command noticing.
@@ -153,6 +157,7 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
+cargo build -p grayline-wefax --no-default-features
 cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown
 ```
 

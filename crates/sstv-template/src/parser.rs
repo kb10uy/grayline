@@ -5,9 +5,9 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use crate::{
     TemplateError,
     scene::{
-        Anchor, Clip, Color, EllipseLayer, Font, FontStyle, Gradient, GradientKind, GradientStop,
-        GroupLayer, ImageFit, ImageLayer, Layer, LayerSize, Length, LineLayer, Paint, Position,
-        ReceivedImageLayer, RectangleLayer, Stroke, Template, TextLayer,
+        Anchor, Clip, Color, EllipseLayer, Font, FontStyle, Gradient, GradientKind, GradientStop, GroupLayer, ImageFit,
+        ImageLayer, Layer, LayerSize, Length, LineLayer, Paint, Position, ReceivedImageLayer, RectangleLayer, Stroke,
+        Template, TextLayer,
     },
 };
 
@@ -84,10 +84,7 @@ fn parse_image(node: &KdlNode) -> Result<ImageLayer, TemplateError> {
     }
     let children = required_children(node)?;
     validate_child_names(children, &["position", "size", "clip"])?;
-    let position = parse_position(
-        required_unique_child(children, "position")?,
-        PositionKind::Anchored,
-    )?;
+    let position = parse_position(required_unique_child(children, "position")?, PositionKind::Anchored)?;
     let size = parse_size(required_unique_child(children, "size")?, SizeKind::Image)?;
     Ok(ImageLayer {
         reference,
@@ -103,22 +100,14 @@ fn parse_received_image(node: &KdlNode) -> Result<ReceivedImageLayer, TemplateEr
     validate_child_names(children, &["position", "size", "clip"])?;
     let size = parse_size(required_unique_child(children, "size")?, SizeKind::Image)?;
     Ok(ReceivedImageLayer {
-        position: parse_position(
-            required_unique_child(children, "position")?,
-            PositionKind::Anchored,
-        )?,
+        position: parse_position(required_unique_child(children, "position")?, PositionKind::Anchored)?,
         clip: parse_image_clip(children, size)?,
         size,
     })
 }
 
-fn parse_image_clip(
-    children: &KdlDocument,
-    size: LayerSize,
-) -> Result<Option<Clip>, TemplateError> {
-    let clip = optional_unique_child(children, "clip")?
-        .map(parse_clip)
-        .transpose()?;
+fn parse_image_clip(children: &KdlDocument, size: LayerSize) -> Result<Option<Clip>, TemplateError> {
+    let clip = optional_unique_child(children, "clip")?.map(parse_clip).transpose()?;
     if clip.is_some() && size.radius.is_some() {
         return schema("a clipped layer has no corner to round");
     }
@@ -130,11 +119,7 @@ fn parse_text(node: &KdlNode) -> Result<TextLayer, TemplateError> {
     let children = required_children(node)?;
     validate_child_names(children, &["position", "font", "fill", "stroke"])?;
     let font_node = required_unique_child(children, "font")?;
-    validate_properties(
-        font_node,
-        &["family", "size", "weight", "style", "leading"],
-        0,
-    )?;
+    validate_properties(font_node, &["family", "size", "weight", "style", "leading"], 0)?;
     let family = required_string(font_node, "family")?.to_owned();
     if family.is_empty() {
         return schema("font family must not be empty");
@@ -157,10 +142,7 @@ fn parse_text(node: &KdlNode) -> Result<TextLayer, TemplateError> {
 
     Ok(TextLayer {
         text,
-        position: parse_position(
-            required_unique_child(children, "position")?,
-            PositionKind::Anchored,
-        )?,
+        position: parse_position(required_unique_child(children, "position")?, PositionKind::Anchored)?,
         font: Font {
             family,
             size: required_length(font_node, "size")?,
@@ -179,22 +161,14 @@ fn parse_rectangle(node: &KdlNode) -> Result<RectangleLayer, TemplateError> {
     no_entries(node)?;
     let children = required_children(node)?;
     validate_child_names(children, &["position", "size", "fill", "stroke"])?;
-    let fill = optional_unique_child(children, "fill")?
-        .map(parse_fill)
-        .transpose()?;
+    let fill = optional_unique_child(children, "fill")?.map(parse_fill).transpose()?;
     let stroke = optional_unique_child(children, "stroke")?
         .map(parse_stroke)
         .transpose()?;
     require_paint(fill.as_ref(), stroke)?;
     Ok(RectangleLayer {
-        position: parse_position(
-            required_unique_child(children, "position")?,
-            PositionKind::Anchored,
-        )?,
-        size: parse_size(
-            required_unique_child(children, "size")?,
-            SizeKind::Rectangle,
-        )?,
+        position: parse_position(required_unique_child(children, "position")?, PositionKind::Anchored)?,
+        size: parse_size(required_unique_child(children, "size")?, SizeKind::Rectangle)?,
         fill,
         stroke,
     })
@@ -204,18 +178,13 @@ fn parse_ellipse(node: &KdlNode) -> Result<EllipseLayer, TemplateError> {
     no_entries(node)?;
     let children = required_children(node)?;
     validate_child_names(children, &["position", "size", "fill", "stroke"])?;
-    let fill = optional_unique_child(children, "fill")?
-        .map(parse_fill)
-        .transpose()?;
+    let fill = optional_unique_child(children, "fill")?.map(parse_fill).transpose()?;
     let stroke = optional_unique_child(children, "stroke")?
         .map(parse_stroke)
         .transpose()?;
     require_paint(fill.as_ref(), stroke)?;
     Ok(EllipseLayer {
-        position: parse_position(
-            required_unique_child(children, "position")?,
-            PositionKind::Anchored,
-        )?,
+        position: parse_position(required_unique_child(children, "position")?, PositionKind::Anchored)?,
         size: parse_size(required_unique_child(children, "size")?, SizeKind::Shape)?,
         fill,
         stroke,
@@ -227,14 +196,8 @@ fn parse_line(node: &KdlNode) -> Result<LineLayer, TemplateError> {
     let children = required_children(node)?;
     validate_child_names(children, &["start", "end", "stroke"])?;
     Ok(LineLayer {
-        start: parse_position(
-            required_unique_child(children, "start")?,
-            PositionKind::Endpoint,
-        )?,
-        end: parse_position(
-            required_unique_child(children, "end")?,
-            PositionKind::Endpoint,
-        )?,
+        start: parse_position(required_unique_child(children, "start")?, PositionKind::Endpoint)?,
+        end: parse_position(required_unique_child(children, "end")?, PositionKind::Endpoint)?,
         stroke: parse_stroke(required_unique_child(children, "stroke")?)?,
     })
 }
@@ -432,8 +395,7 @@ fn parse_color(value: &str) -> Result<Color, TemplateError> {
         return schema(format!("color `{value}` must be #RRGGBB or #RRGGBBAA"));
     }
     let channel = |range: std::ops::Range<usize>| {
-        u8::from_str_radix(&hex[range], 16)
-            .map_err(|_| TemplateError::Schema(format!("color `{value}` is invalid")))
+        u8::from_str_radix(&hex[range], 16).map_err(|_| TemplateError::Schema(format!("color `{value}` is invalid")))
     };
     Ok(Color {
         r: channel(0..2)?,
@@ -444,9 +406,8 @@ fn parse_color(value: &str) -> Result<Color, TemplateError> {
 }
 
 fn required_length(node: &KdlNode, name: &str) -> Result<Length, TemplateError> {
-    parse_optional_length(node, name, false)?.ok_or_else(|| {
-        TemplateError::Schema(format!("`{}` requires property `{name}`", node.name()))
-    })
+    parse_optional_length(node, name, false)?
+        .ok_or_else(|| TemplateError::Schema(format!("`{}` requires property `{name}`", node.name())))
 }
 
 fn optional_length(node: &KdlNode, name: &str) -> Result<Option<Length>, TemplateError> {
@@ -454,16 +415,11 @@ fn optional_length(node: &KdlNode, name: &str) -> Result<Option<Length>, Templat
 }
 
 fn required_coordinate(node: &KdlNode, name: &str) -> Result<Length, TemplateError> {
-    parse_optional_length(node, name, true)?.ok_or_else(|| {
-        TemplateError::Schema(format!("`{}` requires property `{name}`", node.name()))
-    })
+    parse_optional_length(node, name, true)?
+        .ok_or_else(|| TemplateError::Schema(format!("`{}` requires property `{name}`", node.name())))
 }
 
-fn parse_optional_length(
-    node: &KdlNode,
-    name: &str,
-    allow_negative: bool,
-) -> Result<Option<Length>, TemplateError> {
+fn parse_optional_length(node: &KdlNode, name: &str, allow_negative: bool) -> Result<Option<Length>, TemplateError> {
     let Some(entry) = unique_property(node, name)? else {
         return Ok(None);
     };
@@ -494,9 +450,8 @@ fn parse_optional_length(
 }
 
 fn required_number(node: &KdlNode, name: &str) -> Result<f64, TemplateError> {
-    optional_number(node, name)?.ok_or_else(|| {
-        TemplateError::Schema(format!("`{}` requires property `{name}`", node.name()))
-    })
+    optional_number(node, name)?
+        .ok_or_else(|| TemplateError::Schema(format!("`{}` requires property `{name}`", node.name())))
 }
 
 fn optional_number(node: &KdlNode, name: &str) -> Result<Option<f64>, TemplateError> {
@@ -519,9 +474,7 @@ fn optional_number(node: &KdlNode, name: &str) -> Result<Option<f64>, TemplateEr
 
 fn required_string<'a>(node: &'a KdlNode, name: &str) -> Result<&'a str, TemplateError> {
     unique_property(node, name)?
-        .ok_or_else(|| {
-            TemplateError::Schema(format!("`{}` requires property `{name}`", node.name()))
-        })?
+        .ok_or_else(|| TemplateError::Schema(format!("`{}` requires property `{name}`", node.name())))?
         .value()
         .as_string()
         .ok_or_else(|| TemplateError::Schema(format!("property `{name}` must be a string")))
@@ -529,9 +482,7 @@ fn required_string<'a>(node: &'a KdlNode, name: &str) -> Result<&'a str, Templat
 
 fn required_integer(node: &KdlNode, name: &str) -> Result<i128, TemplateError> {
     unique_property(node, name)?
-        .ok_or_else(|| {
-            TemplateError::Schema(format!("`{}` requires property `{name}`", node.name()))
-        })?
+        .ok_or_else(|| TemplateError::Schema(format!("`{}` requires property `{name}`", node.name())))?
         .value()
         .as_integer()
         .ok_or_else(|| TemplateError::Schema(format!("property `{name}` must be an integer")))
@@ -539,20 +490,17 @@ fn required_integer(node: &KdlNode, name: &str) -> Result<i128, TemplateError> {
 
 fn one_string_argument(node: &KdlNode) -> Result<&str, TemplateError> {
     validate_properties(node, &[], 1)?;
-    node.entries()[0].value().as_string().ok_or_else(|| {
-        TemplateError::Schema(format!("`{}` argument must be a string", node.name()))
-    })
+    node.entries()[0]
+        .value()
+        .as_string()
+        .ok_or_else(|| TemplateError::Schema(format!("`{}` argument must be a string", node.name())))
 }
 
 fn no_entries(node: &KdlNode) -> Result<(), TemplateError> {
     validate_properties(node, &[], 0)
 }
 
-fn validate_properties(
-    node: &KdlNode,
-    allowed: &[&str],
-    positional_count: usize,
-) -> Result<(), TemplateError> {
+fn validate_properties(node: &KdlNode, allowed: &[&str], positional_count: usize) -> Result<(), TemplateError> {
     let mut seen = HashSet::new();
     let mut positional = 0;
     for entry in node.entries() {
@@ -581,15 +529,11 @@ fn validate_properties(
     Ok(())
 }
 
-fn unique_property<'a>(
-    node: &'a KdlNode,
-    name: &str,
-) -> Result<Option<&'a KdlEntry>, TemplateError> {
-    let mut entries = node.entries().iter().filter(|entry| {
-        entry
-            .name()
-            .is_some_and(|entry_name| entry_name.value() == name)
-    });
+fn unique_property<'a>(node: &'a KdlNode, name: &str) -> Result<Option<&'a KdlEntry>, TemplateError> {
+    let mut entries = node
+        .entries()
+        .iter()
+        .filter(|entry| entry.name().is_some_and(|entry_name| entry_name.value() == name));
     let first = entries.next();
     if entries.next().is_some() {
         return schema(format!("duplicate property `{name}` on `{}`", node.name()));
@@ -611,22 +555,12 @@ fn validate_child_names(document: &KdlDocument, allowed: &[&str]) -> Result<(), 
     Ok(())
 }
 
-fn required_unique_child<'a>(
-    document: &'a KdlDocument,
-    name: &str,
-) -> Result<&'a KdlNode, TemplateError> {
-    optional_unique_child(document, name)?
-        .ok_or_else(|| TemplateError::Schema(format!("missing child `{name}`")))
+fn required_unique_child<'a>(document: &'a KdlDocument, name: &str) -> Result<&'a KdlNode, TemplateError> {
+    optional_unique_child(document, name)?.ok_or_else(|| TemplateError::Schema(format!("missing child `{name}`")))
 }
 
-fn optional_unique_child<'a>(
-    document: &'a KdlDocument,
-    name: &str,
-) -> Result<Option<&'a KdlNode>, TemplateError> {
-    let mut nodes = document
-        .nodes()
-        .iter()
-        .filter(|node| node.name().value() == name);
+fn optional_unique_child<'a>(document: &'a KdlDocument, name: &str) -> Result<Option<&'a KdlNode>, TemplateError> {
+    let mut nodes = document.nodes().iter().filter(|node| node.name().value() == name);
     let first = nodes.next();
     if nodes.next().is_some() {
         return schema(format!("duplicate child `{name}`"));
@@ -711,10 +645,9 @@ group {
         .unwrap_err();
         assert!(duplicate.to_string().contains("duplicate property"));
 
-        let unitless = Template::parse(
-            "rect { position x=1 y=(fh)1; size width=(fw)1 height=(fh)1; fill color=\"#ffffff\"; }",
-        )
-        .unwrap_err();
+        let unitless =
+            Template::parse("rect { position x=1 y=(fh)1; size width=(fw)1 height=(fh)1; fill color=\"#ffffff\"; }")
+                .unwrap_err();
         assert!(unitless.to_string().contains("requires a unit"));
     }
 
@@ -819,10 +752,7 @@ ellipse {
             "rect {{\nposition x=(fw)0 y=(fh)0\nsize width=(fw)1 height=(fh)1\n{fill}\n}}"
         ))
         .unwrap_err();
-        assert!(
-            error.to_string().contains(message),
-            "expected `{message}` in `{error}`"
-        );
+        assert!(error.to_string().contains(message), "expected `{message}` in `{error}`");
     }
 
     #[rstest]
@@ -925,10 +855,7 @@ group {
     )]
     fn rejects_misplaced_geometry(#[case] source: &str, #[case] message: &str) {
         let error = Template::parse(source).unwrap_err();
-        assert!(
-            error.to_string().contains(message),
-            "expected `{message}` in `{error}`"
-        );
+        assert!(error.to_string().contains(message), "expected `{message}` in `{error}`");
     }
 
     #[test]

@@ -24,8 +24,7 @@ static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 /// removes belongs.
 pub(crate) fn scratch_dir() -> &'static Path {
     static SCRATCH: LazyLock<PathBuf> = LazyLock::new(|| {
-        let path =
-            std::env::temp_dir().join(format!("grayline-sstv-headless-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("grayline-sstv-headless-{}", std::process::id()));
         fs::create_dir_all(&path).unwrap();
         path
     });
@@ -37,8 +36,7 @@ pub(crate) struct TempDir(PathBuf);
 impl TempDir {
     pub(crate) fn new() -> Self {
         let index = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-        let path =
-            std::env::temp_dir().join(format!("grayline-sstv-test-{}-{index}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("grayline-sstv-test-{}-{index}", std::process::id()));
         fs::create_dir_all(&path).unwrap();
         Self(path)
     }

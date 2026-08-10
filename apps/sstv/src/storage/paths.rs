@@ -70,12 +70,8 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn discover() -> io::Result<Self> {
-        let base_dirs = BaseDirs::new().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "could not determine the user directories",
-            )
-        })?;
+        let base_dirs = BaseDirs::new()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not determine the user directories"))?;
         let pictures_dir = UserDirs::new()
             .and_then(|directories| directories.picture_dir().map(Path::to_path_buf))
             .unwrap_or_else(|| base_dirs.home_dir().join("Pictures"));
@@ -85,9 +81,7 @@ impl AppPaths {
         // synchronize a log describing hardware the other machine does not
         // have. Linux keeps a directory for exactly this; elsewhere the local
         // half of the data directory is the closest equivalent.
-        let state_dir = base_dirs
-            .state_dir()
-            .unwrap_or_else(|| base_dirs.data_local_dir());
+        let state_dir = base_dirs.state_dir().unwrap_or_else(|| base_dirs.data_local_dir());
 
         // Every application in the family nests under one directory, so the
         // settings they share have somewhere to sit beside them and the whole
@@ -95,14 +89,8 @@ impl AppPaths {
         // is the exception: the operator browses that one themselves, so it is
         // flat and spelled the way the application is.
         Ok(Self::from_roots(
-            base_dirs
-                .config_dir()
-                .join(FAMILY_DIRECTORY)
-                .join(APP_DIRECTORY),
-            base_dirs
-                .data_dir()
-                .join(FAMILY_DIRECTORY)
-                .join(APP_DIRECTORY),
+            base_dirs.config_dir().join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
+            base_dirs.data_dir().join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
             pictures_dir.join(PICTURES_DIRECTORY),
             state_dir.join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
         ))
@@ -133,12 +121,10 @@ impl AppPaths {
             )
         })?;
 
-        let log_dir = self.log_file.parent().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "the log file has no parent directory",
-            )
-        })?;
+        let log_dir = self
+            .log_file
+            .parent()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the log file has no parent directory"))?;
 
         for directory in [
             config_dir,
@@ -234,10 +220,7 @@ mod tests {
 
         paths.initialize().unwrap();
 
-        assert_eq!(
-            fs::read_to_string(&paths.config_file).unwrap(),
-            DEFAULT_CONFIG
-        );
+        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), DEFAULT_CONFIG);
         for directory in [
             &paths.templates_dir,
             &paths.assets_dir,

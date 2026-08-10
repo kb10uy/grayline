@@ -23,12 +23,8 @@ pub const FILE_MANAGER: Option<&str> = if cfg!(target_os = "linux") {
 /// Only Linux has distribution packages that install the manual; another
 /// platform reaching here has no package and therefore no fallback.
 pub fn manual_fallback(identity: &Identity) -> Option<PathBuf> {
-    cfg!(target_os = "linux").then(|| {
-        PathBuf::from(format!(
-            "/usr/share/doc/{}/help/index.html",
-            identity.process_name
-        ))
-    })
+    cfg!(target_os = "linux")
+        .then(|| PathBuf::from(format!("/usr/share/doc/{}/help/index.html", identity.process_name)))
 }
 
 /// Linux keeps its per-application directories lowercase, under a base

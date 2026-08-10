@@ -46,9 +46,6 @@ impl Waker {
 
 impl core::fmt::Debug for Waker {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("Waker")
-            .field(&self.0.is_some())
-            .finish()
+        formatter.debug_tuple("Waker").field(&self.0.is_some()).finish()
     }
 }

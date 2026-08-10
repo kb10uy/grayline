@@ -186,16 +186,8 @@ impl FskDecoder {
                 };
             }
             Frame::Header => self.reset(),
-            Frame::Call {
-                bytes,
-                len,
-                checksum,
-            } if symbol == END_OF_RECORD && len > 0 => {
-                self.frame = Frame::Checksum {
-                    bytes,
-                    len,
-                    checksum,
-                };
+            Frame::Call { bytes, len, checksum } if symbol == END_OF_RECORD && len > 0 => {
+                self.frame = Frame::Checksum { bytes, len, checksum };
             }
             Frame::Call {
                 mut bytes,
@@ -210,11 +202,7 @@ impl FskDecoder {
                 };
             }
             Frame::Call { .. } => self.reset(),
-            Frame::Checksum {
-                bytes,
-                len,
-                checksum,
-            } => {
+            Frame::Checksum { bytes, len, checksum } => {
                 if symbol != checksum & 0x3f {
                     self.reset();
                     return None;
@@ -238,22 +226,11 @@ impl FskDecoder {
                 let mut trimmed = [0; MAX_ID_LEN];
                 trimmed[..end - start].copy_from_slice(&bytes[start..end]);
                 if end > start {
-                    return Some(FskRecord::Id(FskId::from_symbols(
-                        trimmed,
-                        (end - start) as u8,
-                    )));
+                    return Some(FskRecord::Id(FskId::from_symbols(trimmed, (end - start) as u8)));
                 }
             }
-            Frame::Number {
-                bytes,
-                len,
-                checksum,
-            } if symbol == END_OF_RECORD && len > 0 => {
-                self.frame = Frame::NumberChecksum {
-                    bytes,
-                    len,
-                    checksum,
-                };
+            Frame::Number { bytes, len, checksum } if symbol == END_OF_RECORD && len > 0 => {
+                self.frame = Frame::NumberChecksum { bytes, len, checksum };
             }
             Frame::Number { .. } if symbol == COUNTED_NUMBER => {
                 self.frame = Frame::Counted {
@@ -279,21 +256,13 @@ impl FskDecoder {
                 }
             }
             Frame::Number { .. } => self.reset(),
-            Frame::NumberChecksum {
-                bytes,
-                len,
-                checksum,
-            } => {
+            Frame::NumberChecksum { bytes, len, checksum } => {
                 self.reset();
                 if symbol == checksum & 0x3f {
                     return Some(FskRecord::Number(FskNumber::from_symbols(bytes, len)));
                 }
             }
-            Frame::Counted {
-                count,
-                len,
-                checksum,
-            } => {
+            Frame::Counted { count, len, checksum } => {
                 let count = (count << 6) | u16::from(symbol);
                 let checksum = checksum ^ symbol;
                 self.frame = if len == 0 {
@@ -381,14 +350,7 @@ mod tests {
                 } else {
                     FskTone::Mark
                 };
-                match feed_tone(
-                    &mut decoder,
-                    tone,
-                    SYMBOL_SECONDS,
-                    rate,
-                    &mut written,
-                    &mut deadline,
-                ) {
+                match feed_tone(&mut decoder, tone, SYMBOL_SECONDS, rate, &mut written, &mut deadline) {
                     Some(FskRecord::Id(decoded)) => id = id.or(Some(decoded)),
                     Some(FskRecord::Number(decoded)) => number = number.or(Some(decoded)),
                     None => {}
@@ -424,9 +386,7 @@ mod tests {
 
     #[test]
     fn trims_identifier_whitespace() {
-        let symbols = [
-            0x2a, 0x00, 0x2a, 0x2c, 0x11, 0x28, 0x29, 0x33, 0x00, 0x01, 0x25,
-        ];
+        let symbols = [0x2a, 0x00, 0x2a, 0x2c, 0x11, 0x28, 0x29, 0x33, 0x00, 0x01, 0x25];
         assert_eq!(decode_id(&symbols, 8_000).unwrap().as_str(), "JL1HIS");
     }
 
@@ -437,10 +397,7 @@ mod tests {
     #[case::text_letters(&[0x11, 0x13, 0x28, 0x01, 0x2a], "13H")]
     #[case::counted(&[0x02, 0x00, 0x01, 0x03], "001")]
     #[case::counted_wide(&[0x02, 0x3f, 0x3f, 0x02], "4095")]
-    fn decodes_a_contest_number_after_the_identifier(
-        #[case] number: &[u8],
-        #[case] expected: &str,
-    ) {
+    fn decodes_a_contest_number_after_the_identifier(#[case] number: &[u8], #[case] expected: &str) {
         let mut symbols = [0; 16];
         symbols[..JL1HIS.len()].copy_from_slice(&JL1HIS);
         symbols[JL1HIS.len()..JL1HIS.len() + number.len()].copy_from_slice(number);
@@ -461,10 +418,7 @@ mod tests {
         symbols[..JL1HIS.len()].copy_from_slice(&JL1HIS);
         symbols[JL1HIS.len()..JL1HIS.len() + number.len()].copy_from_slice(number);
 
-        assert_eq!(
-            decode_number(&symbols[..JL1HIS.len() + number.len()], 8_000),
-            None
-        );
+        assert_eq!(decode_number(&symbols[..JL1HIS.len() + number.len()], 8_000), None);
     }
 
     /// A transmission that sends no contest number is the ordinary case, and

@@ -51,8 +51,7 @@ impl FskId {
 
     /// Returns the decoded identifier as modified-ASCII text.
     pub fn as_str(&self) -> &str {
-        str::from_utf8(&self.bytes[..usize::from(self.len)])
-            .expect("FSKID symbols always decode to ASCII")
+        str::from_utf8(&self.bytes[..usize::from(self.len)]).expect("FSKID symbols always decode to ASCII")
     }
 
     /// Creates a bounded encoder for this identifier's complete physical FSKID sequence.
@@ -113,8 +112,7 @@ impl FskNumber {
 
     /// Returns the decoded contest number as text.
     pub fn as_str(&self) -> &str {
-        str::from_utf8(&self.bytes[..usize::from(self.len)])
-            .expect("FSKID symbols always decode to ASCII")
+        str::from_utf8(&self.bytes[..usize::from(self.len)]).expect("FSKID symbols always decode to ASCII")
     }
 
     /// Accepts number text the decoder has already validated against the
@@ -157,10 +155,7 @@ impl FskNumber {
         for (byte, digit) in bytes.iter_mut().zip(reversed[..len].iter().rev()) {
             *byte = *digit;
         }
-        Self {
-            bytes,
-            len: len as u8,
-        }
+        Self { bytes, len: len as u8 }
     }
 }
 
@@ -218,11 +213,7 @@ mod tests {
         assert_eq!(id.to_string(), " N0_CALL ");
         assert_eq!(FskIdError::Empty.to_string(), "FSKID must not be empty");
         assert_eq!(
-            FskIdError::InvalidByte {
-                index: 2,
-                byte: b'!',
-            }
-            .to_string(),
+            FskIdError::InvalidByte { index: 2, byte: b'!' }.to_string(),
             "invalid FSKID byte 0x21 at offset 2"
         );
     }

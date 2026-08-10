@@ -35,14 +35,7 @@ pub(super) fn library(ui: &mut Ui, app: &mut App) {
 
             let labels = ListLabels::new(app, "section-stocks");
             let previous_stock = app.library.stock;
-            match entry_list(
-                ui,
-                &labels,
-                size,
-                &app.library.stocks,
-                &mut app.library.stock,
-                true,
-            ) {
+            match entry_list(ui, &labels, size, &app.library.stocks, &mut app.library.stock, true) {
                 Some(ListAction::Reveal) => app.reveal(Folder::Stocks),
                 Some(ListAction::Refresh) => app.refresh_stocks(),
                 None => {}
@@ -117,13 +110,7 @@ fn entry_list(
 ///
 /// A table rather than a column of buttons builds only the visible rows. Stock
 /// geometry gets its own aligned column; template names use the complete row.
-fn entry_table(
-    ui: &mut Ui,
-    labels: &ListLabels,
-    entries: &[Entry],
-    selected: &mut Option<usize>,
-    show_geometry: bool,
-) {
+fn entry_table(ui: &mut Ui, labels: &ListLabels, entries: &[Entry], selected: &mut Option<usize>, show_geometry: bool) {
     let row_height = ui.spacing().interact_size.y;
     let mut table = TableBuilder::new(ui)
         .id_salt(&labels.title)

@@ -235,8 +235,7 @@ impl Plan {
             config_dir: config_dir.to_path_buf(),
             ports: settings.ports.clone(),
             bands,
-            poll: (settings.poll_seconds > 0.0)
-                .then(|| Duration::from_secs_f32(settings.poll_seconds)),
+            poll: (settings.poll_seconds > 0.0).then(|| Duration::from_secs_f32(settings.poll_seconds)),
             lead_in: Duration::from_secs_f32(settings.lead_in_seconds),
             tail: Duration::from_secs_f32(settings.tail_seconds),
         }
@@ -244,14 +243,9 @@ impl Plan {
 }
 
 fn rig_loop(plan: Plan, requests: &Receiver<Request>, snapshot: &Arc<Mutex<RigSnapshot>>) {
-    let host = match ScriptHost::source(&plan.config_dir).and_then(|source| {
-        ScriptHost::load(
-            &source,
-            &plan.ports,
-            Arc::clone(&plan.bands),
-            DEFAULT_TIMEOUT,
-        )
-    }) {
+    let host = match ScriptHost::source(&plan.config_dir)
+        .and_then(|source| ScriptHost::load(&source, &plan.ports, Arc::clone(&plan.bands), DEFAULT_TIMEOUT))
+    {
         Ok(host) => host,
         Err(error) => {
             update(snapshot, |state| {
@@ -359,10 +353,7 @@ fn read_tuning(
     let reading = read.map(|(frequency_hz, mode)| Reading {
         frequency_hz,
         mode,
-        band: plan
-            .bands
-            .for_frequency(frequency_hz)
-            .map(|band| band.name.clone()),
+        band: plan.bands.for_frequency(frequency_hz).map(|band| band.name.clone()),
     });
     update(snapshot, |state| state.reading = reading);
     Ok(())
@@ -460,10 +451,7 @@ mod tests {
             if predicate(&snapshot) {
                 return snapshot;
             }
-            assert!(
-                Instant::now() < deadline,
-                "rig control settled at {snapshot:?}"
-            );
+            assert!(Instant::now() < deadline, "rig control settled at {snapshot:?}");
             thread::sleep(Duration::from_millis(5));
         }
     }
@@ -522,11 +510,7 @@ mod tests {
         worker.transmit();
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
 
-        assert!(
-            asked.elapsed() >= Duration::from_millis(300),
-            "{:?}",
-            asked.elapsed()
-        );
+        assert!(asked.elapsed() >= Duration::from_millis(300), "{:?}", asked.elapsed());
     }
 
     #[test]
@@ -553,9 +537,7 @@ mod tests {
     #[test]
     fn a_frequency_without_a_mode_is_not_a_reading() {
         let fake = FakeRig::spawn(7_178_000);
-        let config = with_script(
-            "return { poll_frequency = function(ctx) return ctx.ports.rig:frequency() end }",
-        );
+        let config = with_script("return { poll_frequency = function(ctx) return ctx.ports.rig:frequency() end }");
         let worker = RigWorker::spawn(
             &RigSettings {
                 poll_seconds: 0.02,
@@ -650,12 +632,7 @@ mod tests {
         let snapshot = settle(&worker, |snapshot| snapshot.error.is_some());
 
         assert!(
-            snapshot
-                .error
-                .as_ref()
-                .unwrap()
-                .to_string()
-                .contains("no antenna"),
+            snapshot.error.as_ref().unwrap().to_string().contains("no antenna"),
             "{snapshot:?}"
         );
         // The script failed, not the connection, so rig control is still up.
@@ -675,12 +652,7 @@ mod tests {
         let snapshot = settle(&worker, |snapshot| snapshot.error.is_some());
 
         assert!(
-            snapshot
-                .error
-                .as_ref()
-                .unwrap()
-                .to_string()
-                .contains("too long"),
+            snapshot.error.as_ref().unwrap().to_string().contains("too long"),
             "{snapshot:?}"
         );
         assert_ne!(snapshot.state, RigState::Transmitting);
@@ -695,12 +667,7 @@ mod tests {
         let snapshot = settle(&worker, |snapshot| snapshot.state == RigState::Failed);
 
         assert!(
-            snapshot
-                .error
-                .as_ref()
-                .unwrap()
-                .to_string()
-                .contains("table"),
+            snapshot.error.as_ref().unwrap().to_string().contains("table"),
             "{snapshot:?}"
         );
     }
@@ -755,8 +722,7 @@ mod tests {
         });
 
         assert!(
-            fake.received()
-                .contains(&"+BAND 40m 7171000 LSB true".to_owned()),
+            fake.received().contains(&"+BAND 40m 7171000 LSB true".to_owned()),
             "{:?}",
             fake.received()
         );
@@ -766,9 +732,7 @@ mod tests {
     #[test]
     fn a_keyed_rig_is_not_tuned() {
         let fake = FakeRig::spawn(14_230_000);
-        let config = with_script(
-            "return { set_frequency = function(ctx, hz) ctx.ports.rig:send('F ' .. hz) end }",
-        );
+        let config = with_script("return { set_frequency = function(ctx, hz) ctx.ports.rig:send('F ' .. hz) end }");
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 

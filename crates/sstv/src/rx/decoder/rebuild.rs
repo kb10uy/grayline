@@ -53,8 +53,8 @@ impl RxDecoder {
         if self.staged.is_none() {
             return Err(SstvError::StagingDisabled);
         }
-        let estimator = SlantEstimator::for_mode(self.sample_rate_hz, self.mode)
-            .expect("decoder mode has a raster profile");
+        let estimator =
+            SlantEstimator::for_mode(self.sample_rate_hz, self.mode).expect("decoder mode has a raster profile");
         let staged = self.staged.as_ref().expect("staging checked above");
         let acquisition_clock = acquire_full(
             staged,
@@ -126,16 +126,15 @@ impl RxDecoder {
         if units < LIVE_SLANT_MIN_UNITS {
             return Ok(());
         }
-        let estimator = SlantEstimator::for_mode(self.sample_rate_hz, self.mode)
-            .expect("decoder mode has a raster profile");
+        let estimator =
+            SlantEstimator::for_mode(self.sample_rate_hz, self.mode).expect("decoder mode has a raster profile");
         let Some(estimate) = estimator.estimate(&self.staged_observations) else {
             return Ok(());
         };
         if self.rate_estimates.len() == LIVE_SLANT_SMOOTHING {
             self.rate_estimates.pop_front();
         }
-        self.rate_estimates
-            .push_back(estimate.effective_sample_rate_hz);
+        self.rate_estimates.push_back(estimate.effective_sample_rate_hz);
         if self
             .last_slant_unit
             .is_some_and(|last| units < last + LIVE_SLANT_HOLDOFF_UNITS)
@@ -143,11 +142,7 @@ impl RxDecoder {
             return Ok(());
         }
         let smoothed = self.rate_estimates.iter().sum::<f64>() / self.rate_estimates.len() as f64;
-        let current = self
-            .decode
-            .clock
-            .expect("clock acquired")
-            .effective_sample_rate_hz();
+        let current = self.decode.clock.expect("clock acquired").effective_sample_rate_hz();
         if (smoothed / current - 1.0).abs() * 1.0e6 < live_slant_threshold_ppm(units) {
             return Ok(());
         }
@@ -170,11 +165,7 @@ impl RxDecoder {
     ///
     /// Returns the number of units redrawn, which may be fewer than `units`
     /// when the refit reaches past the samples received so far.
-    pub(super) fn rebuild_live(
-        &mut self,
-        clock: RasterClock,
-        units: usize,
-    ) -> Result<usize, SstvError> {
+    pub(super) fn rebuild_live(&mut self, clock: RasterClock, units: usize) -> Result<usize, SstvError> {
         let staged = self.staged.take().expect("staging checked by the caller");
         let units = self.covered_units(&staged, clock, units);
         if units == 0 {
@@ -238,22 +229,12 @@ impl RxDecoder {
     /// decoded units later in the stream, sometimes past the samples received
     /// so far. Those units are redrawn as the audio arrives, so the correction
     /// applies to what is covered instead of being rejected outright.
-    pub(super) fn covered_units(
-        &self,
-        staged: &SampleBuffer,
-        clock: RasterClock,
-        units: usize,
-    ) -> usize {
+    pub(super) fn covered_units(&self, staged: &SampleBuffer, clock: RasterClock, units: usize) -> usize {
         (0..units)
             .take_while(|unit| self.unit_is_covered(staged, clock, *unit))
             .count()
     }
-    pub(super) fn unit_is_covered(
-        &self,
-        staged: &SampleBuffer,
-        clock: RasterClock,
-        unit: usize,
-    ) -> bool {
+    pub(super) fn unit_is_covered(&self, staged: &SampleBuffer, clock: RasterClock, unit: usize) -> bool {
         let width = self.decode.image.size().width();
         let covered = |sample: u64| staged.frequency(sample).is_some();
         for segment in self.profile.pixels().iter() {

@@ -22,10 +22,7 @@ pub(super) enum AssetFormat {
     WebP,
 }
 
-pub(super) fn validate_fonts(
-    layers: &[Layer],
-    database: &usvg::fontdb::Database,
-) -> Result<(), TemplateError> {
+pub(super) fn validate_fonts(layers: &[Layer], database: &usvg::fontdb::Database) -> Result<(), TemplateError> {
     for layer in layers {
         match layer {
             Layer::Text(text) => {
@@ -45,10 +42,7 @@ pub(super) fn validate_fonts(
     Ok(())
 }
 
-pub(super) fn validate_asset(
-    asset: &EncodedAsset,
-    reference: &str,
-) -> Result<Resource, TemplateError> {
+pub(super) fn validate_asset(asset: &EncodedAsset, reference: &str) -> Result<Resource, TemplateError> {
     if let Some(resource) = asset.validated.get() {
         return Ok(resource.clone());
     }
@@ -80,10 +74,7 @@ fn decode_asset(data: Arc<Vec<u8>>, reference: &str) -> Result<Resource, Templat
     })
 }
 
-fn transcode_to_png(
-    reader: image::ImageReader<Cursor<&[u8]>>,
-    reference: &str,
-) -> Result<Resource, TemplateError> {
+fn transcode_to_png(reader: image::ImageReader<Cursor<&[u8]>>, reference: &str) -> Result<Resource, TemplateError> {
     let decoded = reader.decode().map_err(|error| TemplateError::Asset {
         reference: reference.to_owned(),
         source: AssetError::new(error.to_string()),
@@ -106,12 +97,10 @@ fn transcode_to_png(
 }
 
 pub(super) fn encode_received_image(image: &RgbImage) -> Result<Resource, TemplateError> {
-    let width = u32::try_from(image.size().width()).map_err(|_| {
-        TemplateError::InvalidDimensions("received image width exceeds PNG limits".into())
-    })?;
-    let height = u32::try_from(image.size().height()).map_err(|_| {
-        TemplateError::InvalidDimensions("received image height exceeds PNG limits".into())
-    })?;
+    let width = u32::try_from(image.size().width())
+        .map_err(|_| TemplateError::InvalidDimensions("received image width exceeds PNG limits".into()))?;
+    let height = u32::try_from(image.size().height())
+        .map_err(|_| TemplateError::InvalidDimensions("received image height exceeds PNG limits".into()))?;
     let rgb = image.to_rgb_bytes();
     let mut png = Vec::new();
     image::codecs::png::PngEncoder::new(Cursor::new(&mut png)).write_image(

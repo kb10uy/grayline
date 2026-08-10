@@ -17,11 +17,7 @@ pub struct Vco {
 
 impl Vco {
     /// Creates a VCO with frequencies in hertz and a linearly interpolated sine table.
-    pub fn new(
-        sample_rate_hz: f64,
-        free_frequency_hz: f64,
-        control_gain_hz: f64,
-    ) -> Result<Self, DspError> {
+    pub fn new(sample_rate_hz: f64, free_frequency_hz: f64, control_gain_hz: f64) -> Result<Self, DspError> {
         validate_sample_rate(sample_rate_hz)?;
         validate_free_frequency(sample_rate_hz, free_frequency_hz)?;
         if !control_gain_hz.is_finite() {
@@ -98,8 +94,7 @@ impl Vco {
         let fraction = position - libm::floor(position);
         // Linear interpolation favors spectral quality over bit compatibility
         // with MMSSTV's truncated table lookup.
-        self.sine_table[lower_index]
-            + fraction * (self.sine_table[upper_index] - self.sine_table[lower_index])
+        self.sine_table[lower_index] + fraction * (self.sine_table[upper_index] - self.sine_table[lower_index])
     }
 }
 
@@ -168,14 +163,8 @@ mod tests {
     #[test]
     fn rejects_non_finite_and_nyquist_controlled_frequencies() {
         let mut oscillator = Vco::new(8_000.0, 1_000.0, 2_000.0).unwrap();
-        assert_eq!(
-            oscillator.process_sample(1.5),
-            Err(DspError::InvalidFrequency)
-        );
-        assert_eq!(
-            oscillator.process_sample(f64::NAN),
-            Err(DspError::InvalidFrequency)
-        );
+        assert_eq!(oscillator.process_sample(1.5), Err(DspError::InvalidFrequency));
+        assert_eq!(oscillator.process_sample(f64::NAN), Err(DspError::InvalidFrequency));
     }
 
     #[test]

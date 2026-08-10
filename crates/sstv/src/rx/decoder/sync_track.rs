@@ -49,8 +49,7 @@ impl RxDecoder {
             self.phase_displacements.clear();
             return self.note_bad_sync();
         }
-        let displacement =
-            i64::try_from(displacement).map_err(|_| SstvError::SamplePositionOverflow)?;
+        let displacement = i64::try_from(displacement).map_err(|_| SstvError::SamplePositionOverflow)?;
         self.note_good_sync();
         if self.config.live_sync {
             if self.phase_displacements.len() == PHASE_AGREEMENT {
@@ -63,8 +62,7 @@ impl RxDecoder {
             if self.phase_displacements.len() == PHASE_AGREEMENT && holdoff_done {
                 let minimum = *self.phase_displacements.iter().min().expect("non-empty");
                 let maximum = *self.phase_displacements.iter().max().expect("non-empty");
-                let correction =
-                    self.phase_displacements.iter().sum::<i64>() / PHASE_AGREEMENT as i64;
+                let correction = self.phase_displacements.iter().sum::<i64>() / PHASE_AGREEMENT as i64;
                 if maximum - minimum <= 2 && correction.unsigned_abs() >= MIN_PHASE_DISPLACEMENT {
                     self.decode
                         .clock

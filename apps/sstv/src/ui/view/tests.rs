@@ -40,8 +40,7 @@ fn every_tab_renders(#[case] tab: Tab) {
 }
 
 fn app_label(tab: Tab) -> String {
-    grayline_shell::i18n::I18n::new(Locale::default(), &crate::locales::CATALOG)
-        .text(tab.label_key())
+    grayline_shell::i18n::I18n::new(Locale::default(), &crate::locales::CATALOG).text(tab.label_key())
 }
 
 #[rstest]
@@ -51,8 +50,7 @@ fn every_locale_renders(#[case] locale: Locale) {
     let mut app = App::headless();
     app.select_locale(locale);
     let harness = render(&mut app);
-    let receive =
-        grayline_shell::i18n::I18n::new(locale, &crate::locales::CATALOG).text("tab-receive");
+    let receive = grayline_shell::i18n::I18n::new(locale, &crate::locales::CATALOG).text("tab-receive");
     harness.get_by_label(&receive);
 }
 
@@ -86,9 +84,7 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
     let retry = app.i18n.text("action-rig-retry");
     let unknown = app.i18n.text("rig-frequency-unknown");
     let mode = "LSB";
-    let readout = app
-        .i18n
-        .text_with("radio-frequency", &[("frequency", arg("7.100"))]);
+    let readout = app.i18n.text_with("radio-frequency", &[("frequency", arg("7.100"))]);
 
     {
         let harness = render(&mut app);
@@ -111,10 +107,7 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
         let mode_rect = harness.get_by_label(mode).rect();
         let frequency_rect = harness.get_by_label(&readout).rect();
         let step_rect = harness.get_by_label("−").rect();
-        assert_eq!(
-            step_rect.height(),
-            frequency_rect.bottom() - mode_rect.top()
-        );
+        assert_eq!(step_rect.height(), frequency_rect.bottom() - mode_rect.top());
         harness.get_by_label(&retry);
     }
 
@@ -220,14 +213,9 @@ fn the_receive_indicator_spans_its_row() {
     let dsp_labels = Dsp::ALL.map(|dsp| app.i18n.text(dsp.label_key()));
 
     let harness = render(&mut app);
-    let bar = harness
-        .get_by_role(egui::accesskit::Role::ProgressIndicator)
-        .rect();
+    let bar = harness.get_by_role(egui::accesskit::Role::ProgressIndicator).rect();
     let left = harness.get_by_label(&dsp_labels[0]).rect().left();
-    let right = harness
-        .get_by_label(dsp_labels.last().unwrap())
-        .rect()
-        .right();
+    let right = harness.get_by_label(dsp_labels.last().unwrap()).rect().right();
 
     assert!(
         (bar.left() - left).abs() < 1.0 && (bar.right() - right).abs() < 1.0,
@@ -247,9 +235,7 @@ fn hovering_the_receive_indicator_offers_the_reset() {
 
     let mut harness = render(&mut app);
     assert!(harness.query_by_label(&hint).is_none());
-    harness
-        .get_by_role(egui::accesskit::Role::ProgressIndicator)
-        .hover();
+    harness.get_by_role(egui::accesskit::Role::ProgressIndicator).hover();
     harness.run();
 
     harness.get_by_label(&hint);
@@ -263,9 +249,7 @@ fn clicking_the_receive_indicator_asks_for_a_reset() {
 
     {
         let mut harness = render(&mut app);
-        harness
-            .get_by_role(egui::accesskit::Role::ProgressIndicator)
-            .click();
+        harness.get_by_role(egui::accesskit::Role::ProgressIndicator).click();
         harness.run();
     }
 
@@ -451,10 +435,7 @@ fn template_and_stock_tables_give_the_file_name_most_of_the_width() {
     let template_width = harness.get_by_label(template).rect().width();
     let stock_width = harness.get_by_label(stock).rect().width();
     assert!(template_width > stock_width);
-    assert!(
-        stock_width > 240.0,
-        "stock name column was {stock_width} points"
-    );
+    assert!(stock_width > 240.0, "stock name column was {stock_width} points");
 }
 
 /// The row is what senses the click, so its text must not. A selectable
@@ -637,10 +618,7 @@ fn the_transmit_trigger_is_refused_while_a_tone_is_being_sent() {
 
     assert!(app.is_tuning());
     assert_eq!(app.tx_error, None);
-    assert_eq!(
-        app.transmit_problem(),
-        Some(app.i18n.text("error-tone-active"))
-    );
+    assert_eq!(app.transmit_problem(), Some(app.i18n.text("error-tone-active")));
 
     // The tone's own button is what gives the rig back.
     {
@@ -658,12 +636,10 @@ fn the_transmit_trigger_is_refused_while_a_tone_is_being_sent() {
 #[test]
 fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
     let mut app = App::headless();
-    let mut harness = Harness::builder()
-        .with_size(egui::vec2(900.0, 700.0))
-        .build_ui(|ui| {
-            let model = menu::model(&app);
-            view(ui, &mut app, &model, menu::is_in_window());
-        });
+    let mut harness = Harness::builder().with_size(egui::vec2(900.0, 700.0)).build_ui(|ui| {
+        let model = menu::model(&app);
+        view(ui, &mut app, &model, menu::is_in_window());
+    });
 
     harness.run();
     assert_eq!(side_panel_width(&harness), Some(SIDE_PANEL_WIDTH));
@@ -683,6 +659,5 @@ fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
 }
 
 fn side_panel_width(harness: &Harness<'_>) -> Option<f32> {
-    egui::containers::panel::PanelState::load(&harness.ctx, Id::new("side-panel"))
-        .map(|state| state.outer_rect.width())
+    egui::containers::panel::PanelState::load(&harness.ctx, Id::new("side-panel")).map(|state| state.outer_rect.width())
 }

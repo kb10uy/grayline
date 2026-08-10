@@ -91,8 +91,8 @@ impl fmt::Debug for I18n {
 impl I18n {
     /// Builds the lookup for `locale` over `catalog`.
     pub fn new(locale: Locale, catalog: &Catalog) -> Self {
-        let resource = FluentResource::try_new(catalog.source(locale).to_owned())
-            .expect("bundled locale resource parses");
+        let resource =
+            FluentResource::try_new(catalog.source(locale).to_owned()).expect("bundled locale resource parses");
         let mut bundle = FluentBundle::new(vec![locale.identifier()]);
         bundle.set_use_isolating(false);
         bundle
@@ -128,9 +128,7 @@ impl I18n {
             return key.to_owned();
         };
         let mut errors = Vec::new();
-        self.bundle
-            .format_pattern(pattern, args, &mut errors)
-            .into_owned()
+        self.bundle.format_pattern(pattern, args, &mut errors).into_owned()
     }
 }
 

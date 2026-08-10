@@ -104,10 +104,9 @@ pub fn model(app: &App) -> Vec<Menu> {
                     action: Action::ZoomOut,
                 },
                 Item::Command {
-                    label: app.i18n.text_with(
-                        "menu-zoom-reset",
-                        &[("percent", number(ui_scale_percent(app)))],
-                    ),
+                    label: app
+                        .i18n
+                        .text_with("menu-zoom-reset", &[("percent", number(ui_scale_percent(app)))]),
                     action: Action::ZoomReset,
                 },
             ],
@@ -369,21 +368,14 @@ fn items(ui: &mut egui::Ui, items: &[Item]) -> Option<Action> {
     let mut activated = None;
     for item in items {
         match item {
-            Item::Submenu {
-                label,
-                items: nested,
-            } => {
+            Item::Submenu { label, items: nested } => {
                 ui.menu_button(label, |ui| {
                     if let Some(action) = self::items(ui, nested) {
                         activated = Some(action);
                     }
                 });
             }
-            Item::Check {
-                label,
-                checked,
-                action,
-            } => {
+            Item::Check { label, checked, action } => {
                 let mut checked = *checked;
                 if ui.checkbox(&mut checked, label).clicked() {
                     activated = Some(action.clone());
@@ -432,9 +424,7 @@ mod tests {
         let expected: usize = model.iter().map(|menu| count(&menu.items)).sum();
         assert_eq!(flatten(&model).len(), expected);
         assert!(
-            model
-                .iter()
-                .any(|menu| menu.items.contains(&Item::Separator)),
+            model.iter().any(|menu| menu.items.contains(&Item::Separator)),
             "the model needs a separator for this to be worth asserting"
         );
     }

@@ -24,8 +24,9 @@ impl Template {
     pub fn uses_timestamps(&self, variables: &Variables) -> bool {
         fn any(layers: &[Layer], variables: &Variables) -> bool {
             layers.iter().any(|layer| match layer {
-                Layer::Text(text) => references(&text.text)
-                    .any(|name| matches!(variables.get(name), Some(VariableValue::Timestamp(_)))),
+                Layer::Text(text) => {
+                    references(&text.text).any(|name| matches!(variables.get(name), Some(VariableValue::Timestamp(_))))
+                }
                 Layer::Group(group) => any(&group.layers, variables),
                 _ => false,
             })
@@ -46,9 +47,7 @@ impl Template {
     pub fn uses_radio(&self) -> bool {
         fn any(layers: &[Layer]) -> bool {
             layers.iter().any(|layer| match layer {
-                Layer::Text(text) => {
-                    references(&text.text).any(|name| name.starts_with(RADIO_PREFIX))
-                }
+                Layer::Text(text) => references(&text.text).any(|name| name.starts_with(RADIO_PREFIX)),
                 Layer::Group(group) => any(&group.layers),
                 _ => false,
             })
@@ -319,11 +318,7 @@ impl Variables {
     }
 
     /// Inserts or replaces a named value.
-    pub fn insert(
-        &mut self,
-        name: impl Into<String>,
-        value: VariableValue,
-    ) -> Option<VariableValue> {
+    pub fn insert(&mut self, name: impl Into<String>, value: VariableValue) -> Option<VariableValue> {
         self.values.insert(name.into(), value)
     }
 

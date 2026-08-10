@@ -1,0 +1,18 @@
+[package]
+name = "grayline-wefax"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+std = ["thiserror/std", "grayline-dsp/std"]
+
+[dependencies]
+grayline-dsp = { path = "../dsp" }
+libm.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

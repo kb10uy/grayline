@@ -14,9 +14,7 @@ use grayline_sstv::{
     rx::{DemodulatedBlock, RasterStart, RxConfig, RxEvent, RxState, Staging, StopReason},
     time::SstvDuration,
 };
-use grayline_sstv_rx::{
-    DemodulatedChunk, Demodulator, Detection, SyncStart, VisDetection, sync_detector_delay,
-};
+use grayline_sstv_rx::{DemodulatedChunk, Demodulator, Detection, SyncStart, VisDetection, sync_detector_delay};
 use jiff::Zoned;
 
 use crate::{
@@ -69,12 +67,7 @@ const fn vis_detection(strict: bool) -> VisDetection {
     }
 }
 
-fn live_rx_config(
-    mode: Mode,
-    sample_rate_hz: u32,
-    live_slant: bool,
-    raster_start: RasterStart,
-) -> RxConfig {
+fn live_rx_config(mode: Mode, sample_rate_hz: u32, live_slant: bool, raster_start: RasterStart) -> RxConfig {
     RxConfig {
         raster_start,
         live_sync: true,
@@ -152,12 +145,7 @@ struct Session {
 }
 
 impl Session {
-    fn new(
-        sample_rate_hz: u32,
-        sync_start: SyncStart,
-        vis_restart: bool,
-        vis_strict: bool,
-    ) -> Result<Self, AppError> {
+    fn new(sample_rate_hz: u32, sync_start: SyncStart, vis_restart: bool, vis_strict: bool) -> Result<Self, AppError> {
         let mut demodulator = Demodulator::new(sample_rate_hz)?;
         demodulator.set_sync_start(sync_start);
         demodulator.set_header_restart(vis_restart);
@@ -214,12 +202,7 @@ impl Session {
     /// Capture overrun breaks the contiguity the demodulator requires, so the
     /// pipeline restarts rather than decoding across the gap.
     fn reset(&mut self) -> Result<(), AppError> {
-        *self = Self::new(
-            self.sample_rate_hz,
-            self.sync_start,
-            self.vis_restart,
-            self.vis_strict,
-        )?;
+        *self = Self::new(self.sample_rate_hz, self.sync_start, self.vis_restart, self.vis_strict)?;
         Ok(())
     }
 
@@ -244,9 +227,7 @@ impl Session {
         let total = usize::from(decoder.mode().spec().active_rows());
         let rows = match decoder.state() {
             RxState::Acquiring => 0,
-            RxState::Decoding { completed_rows } | RxState::Stopped { completed_rows, .. } => {
-                completed_rows
-            }
+            RxState::Decoding { completed_rows } | RxState::Stopped { completed_rows, .. } => completed_rows,
             RxState::Complete => total,
         };
         Some(if total == 0 {
@@ -274,19 +255,15 @@ impl Session {
     ) -> Option<HistoryCandidate> {
         let mode = decoder.mode();
         let completed_rows = match decoder.state() {
-            RxState::Decoding { completed_rows } | RxState::Stopped { completed_rows, .. } => {
-                completed_rows
-            }
+            RxState::Decoding { completed_rows } | RxState::Stopped { completed_rows, .. } => completed_rows,
             RxState::Complete => usize::from(mode.spec().active_rows()),
             RxState::Acquiring => 0,
         };
-        history_eligible(completed_rows, usize::from(mode.spec().active_rows())).then(|| {
-            HistoryCandidate {
-                mode,
-                frame: Frame::from_image(decoder.image()),
-                received_at: received_at.clone().unwrap_or_else(receive_time),
-                fsk_ids: fsk_ids.to_vec(),
-            }
+        history_eligible(completed_rows, usize::from(mode.spec().active_rows())).then(|| HistoryCandidate {
+            mode,
+            frame: Frame::from_image(decoder.image()),
+            received_at: received_at.clone().unwrap_or_else(receive_time),
+            fsk_ids: fsk_ids.to_vec(),
         })
     }
 
@@ -310,8 +287,7 @@ impl Session {
         self.demodulator = Demodulator::new(self.sample_rate_hz)?;
         self.demodulator.set_sync_start(self.sync_start);
         self.demodulator.set_header_restart(self.vis_restart);
-        self.demodulator
-            .set_vis_detection(vis_detection(self.vis_strict));
+        self.demodulator.set_vis_detection(vis_detection(self.vis_strict));
         self.awaiting_signal = true;
         Ok(())
     }
@@ -323,9 +299,10 @@ impl Session {
     fn reception_finished(&self) -> bool {
         !self.awaiting_signal
             && !matches!(self.refinement, Refinement::Waiting)
-            && self.decoder.as_ref().is_some_and(|decoder| {
-                matches!(decoder.state(), RxState::Complete | RxState::Stopped { .. })
-            })
+            && self
+                .decoder
+                .as_ref()
+                .is_some_and(|decoder| matches!(decoder.state(), RxState::Complete | RxState::Stopped { .. }))
     }
 
     fn take_refinement_error(&mut self) -> Option<AppError> {
@@ -344,8 +321,7 @@ impl Session {
             // over. It is kept on the same terms as any other reception: only
             // one far enough along to be worth looking at.
             if let Some(previous) = self.decoder.as_ref() {
-                self.superseded =
-                    Self::history_candidate(previous, &self.received_at, &self.fsk_ids);
+                self.superseded = Self::history_candidate(previous, &self.received_at, &self.fsk_ids);
             }
             self.decoder = Some(RxDecoder::with_config(
                 mode,
@@ -354,9 +330,7 @@ impl Session {
                     mode,
                     self.sample_rate_hz,
                     live_slant,
-                    chunk
-                        .detection()
-                        .map_or(RasterStart::Acquire, Detection::raster_start),
+                    chunk.detection().map_or(RasterStart::Acquire, Detection::raster_start),
                 ),
             )?);
             self.published_revision = None;
@@ -670,16 +644,16 @@ pub(super) fn run(
             .unwrap_or_default();
         let mut history = superseded.or(interrupted_history);
         let history_ready = if reception_finished {
-            let deadline =
-                *history_deadline.get_or_insert_with(|| Instant::now() + FSK_HISTORY_WAIT);
+            let deadline = *history_deadline.get_or_insert_with(|| Instant::now() + FSK_HISTORY_WAIT);
             !session.fsk_ids.is_empty() || Instant::now() >= deadline
         } else {
             false
         };
         if history.is_none() && history_ready {
-            history = session.decoder.as_ref().and_then(|decoder| {
-                Session::history_candidate(decoder, &session.received_at, &session.fsk_ids)
-            });
+            history = session
+                .decoder
+                .as_ref()
+                .and_then(|decoder| Session::history_candidate(decoder, &session.received_at, &session.fsk_ids));
         }
         let frame = interrupted_frame.or_else(|| {
             (reception_finished || last_frame.elapsed() >= FRAME_INTERVAL)
@@ -762,9 +736,7 @@ mod tests {
     #[case(false)]
     #[case(true)]
     fn live_receptions_enable_automatic_stop(#[case] live_slant: bool) {
-        assert!(
-            live_rx_config(Mode::Robot36, 8_000, live_slant, RasterStart::AfterHeader).auto_stop
-        );
+        assert!(live_rx_config(Mode::Robot36, 8_000, live_slant, RasterStart::AfterHeader).auto_stop);
     }
 
     /// Refinement collects trailing audio after the picture is complete, so the
@@ -780,8 +752,7 @@ mod tests {
         const RATE: u32 = 48_000;
         let spec = mode.spec();
         let units = u64::from(spec.active_rows()) / u64::from(spec.rows_per_raster_unit());
-        let raster = SstvDuration::from_picos(spec.period().as_picos() * units)
-            .to_samples_ceil(RATE) as usize;
+        let raster = SstvDuration::from_picos(spec.period().as_picos() * units).to_samples_ceil(RATE) as usize;
         let tail = RATE as usize * REFINEMENT_TAIL_SECONDS;
         assert!(
             staging_limit(mode, RATE) >= raster + tail,

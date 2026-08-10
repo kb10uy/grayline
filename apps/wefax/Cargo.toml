@@ -1,0 +1,71 @@
+[package]
+name = "grayline-wefax-app"
+description = "Weather fax reception for amateur radio"
+# Versioned on its own for the reason recorded beside the SSTV application's
+# own manifest. This one starts at 0.1.0 rather than inheriting the number
+# the SSTV application had reached before it existed.
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# The package carries the `-app` suffix so it does not collide with the
+# `grayline-wefax` protocol library; the binary keeps the product's own name.
+[[bin]]
+name = "grayline-wefax"
+path = "src/main.rs"
+
+[dependencies]
+directories.workspace = true
+eframe.workspace = true
+egui.workspace = true
+fluent-bundle.workspace = true
+fontdb.workspace = true
+hound.workspace = true
+image.workspace = true
+jiff.workspace = true
+grayline-audio = { path = "../../crates/audio" }
+grayline-shell = { path = "../../crates/shell" }
+grayline-wefax = { path = "../../crates/wefax", features = ["std"] }
+thiserror.workspace = true
+toml_edit.workspace = true
+unic-langid.workspace = true
+
+# muda drives the platform menu bar, which needs a native window handle it can
+# own. The other platforms use the in-window menu bar for the reasons recorded
+# beside the SSTV application's own manifest.
+[target.'cfg(target_os = "windows")'.dependencies]
+muda.workspace = true
+raw-window-handle.workspace = true
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true
+rstest.workspace = true
+
+# `cargo deb -p grayline-wefax-app` builds the Debian package from this. Asset
+# sources are relative to this directory, except target/release/ paths, which
+# cargo-deb resolves against the workspace target directory.
+[package.metadata.deb]
+name = "grayline-wefax"
+section = "hamradio"
+priority = "optional"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+Weather fax reception for amateur radio: decodes HF radiofax charts from a \
+capture device, following the transmission's own start, phasing, and stop \
+signals, and correcting the line clock from the picture as it arrives."""
+# $auto covers what the binary links (glibc, ALSA, gcc-s); the graphics and
+# keyboard libraries are dlopen'd at runtime, which dpkg-shlibdeps cannot see,
+# so they are named explicitly.
+depends = ["$auto", "libxkbcommon0", "libxkbcommon-x11-0", "libegl1", "libgl1"]
+recommends = ["xdg-utils", "fonts-noto-cjk"]
+suggests = ["fonts-dejavu-core"]
+assets = [
+    ["target/release/grayline-wefax", "usr/bin/", "755"],
+    ["assets/grayline-wefax.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/512x512/apps/grayline-wefax.png", "644"],
+]

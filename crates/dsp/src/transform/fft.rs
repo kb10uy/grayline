@@ -73,10 +73,7 @@ impl Mul for Complex {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Self::new(
-            self.re * rhs.re - self.im * rhs.im,
-            self.re * rhs.im + self.im * rhs.re,
-        )
+        Self::new(self.re * rhs.re - self.im * rhs.im, self.re * rhs.im + self.im * rhs.re)
     }
 }
 
@@ -141,11 +138,7 @@ impl Fft {
     }
 
     /// Transforms `buffer` in place.
-    pub fn transform(
-        &self,
-        buffer: &mut [Complex],
-        direction: FftDirection,
-    ) -> Result<(), DspError> {
+    pub fn transform(&self, buffer: &mut [Complex], direction: FftDirection) -> Result<(), DspError> {
         if buffer.len() != self.length {
             return Err(DspError::InvalidBufferLength);
         }
@@ -217,9 +210,7 @@ impl RealSpectrum {
         let fft = Fft::new(length)?;
         Ok(Self {
             fft,
-            window: (0..length)
-                .map(|index| window.weight(index, length))
-                .collect(),
+            window: (0..length).map(|index| window.weight(index, length)).collect(),
             buffer: vec![Complex::ZERO; length],
         })
     }
@@ -252,8 +243,7 @@ impl RealSpectrum {
         for ((slot, &sample), &weight) in self.buffer.iter_mut().zip(samples).zip(&self.window) {
             *slot = Complex::real(sample * weight);
         }
-        self.fft
-            .transform(&mut self.buffer, FftDirection::Forward)?;
+        self.fft.transform(&mut self.buffer, FftDirection::Forward)?;
         Ok(&self.buffer[..self.fft.len() / 2 + 1])
     }
 }
@@ -266,13 +256,10 @@ mod tests {
     fn discrete_transform(input: &[Complex]) -> Vec<Complex> {
         (0..input.len())
             .map(|bin| {
-                input
-                    .iter()
-                    .enumerate()
-                    .fold(Complex::ZERO, |sum, (index, value)| {
-                        let angle = -TAU * bin as f64 * index as f64 / input.len() as f64;
-                        sum + *value * Complex::new(libm::cos(angle), libm::sin(angle))
-                    })
+                input.iter().enumerate().fold(Complex::ZERO, |sum, (index, value)| {
+                    let angle = -TAU * bin as f64 * index as f64 / input.len() as f64;
+                    sum + *value * Complex::new(libm::cos(angle), libm::sin(angle))
+                })
             })
             .collect()
     }
@@ -283,12 +270,7 @@ mod tests {
     #[case(64)]
     fn matches_the_direct_transform(#[case] length: usize) {
         let input: Vec<_> = (0..length)
-            .map(|index| {
-                Complex::new(
-                    libm::sin(index as f64 * 0.7) + 0.25,
-                    libm::cos(index as f64),
-                )
-            })
+            .map(|index| Complex::new(libm::sin(index as f64 * 0.7) + 0.25, libm::cos(index as f64)))
             .collect();
         let expected = discrete_transform(&input);
         let mut actual = input;
@@ -322,19 +304,14 @@ mod tests {
     #[case(1)]
     #[case(6)]
     fn invalid_transform_lengths_are_rejected(#[case] length: usize) {
-        assert_eq!(
-            Fft::new(length).err(),
-            Some(DspError::InvalidTransformLength)
-        );
+        assert_eq!(Fft::new(length).err(), Some(DspError::InvalidTransformLength));
     }
 
     #[test]
     fn buffer_length_must_match_the_plan() {
         let mut buffer = [Complex::ZERO; 3];
         assert_eq!(
-            Fft::new(4)
-                .unwrap()
-                .transform(&mut buffer, FftDirection::Forward),
+            Fft::new(4).unwrap().transform(&mut buffer, FftDirection::Forward),
             Err(DspError::InvalidBufferLength)
         );
     }
@@ -358,9 +335,7 @@ mod tests {
             .map(|(index, _)| index)
             .unwrap();
         assert_eq!(peak, bin);
-        assert!(
-            (spectrum.bin_frequency_hz(peak, sample_rate_hz) - frequency_hz).abs() < f64::EPSILON
-        );
+        assert!((spectrum.bin_frequency_hz(peak, sample_rate_hz) - frequency_hz).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -381,9 +356,6 @@ mod tests {
     #[test]
     fn real_spectrum_rejects_a_mismatched_input_length() {
         let mut spectrum = RealSpectrum::new(8, SpectrumWindow::Rectangular).unwrap();
-        assert_eq!(
-            spectrum.transform(&[0.0; 7]),
-            Err(DspError::InvalidBufferLength)
-        );
+        assert_eq!(spectrum.transform(&[0.0; 7]), Err(DspError::InvalidBufferLength));
     }
 }

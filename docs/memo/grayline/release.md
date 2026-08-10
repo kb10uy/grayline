@@ -1,19 +1,41 @@
 # Continuous Integration and Releases
 
-Three workflows in `.github/workflows/` cover the repository: `ci.yml` checks
-every change, `release.yml` builds and publishes what a tag names, and
-`deploy.yml` publishes the browser demo.
+Five workflows in `.github/workflows/` cover the repository: `ci.yml` checks
+every change, `release-sstv.yml` and `release-wefax.yml` publish what a tag
+names by calling the shared `release-app.yml`, and `deploy.yml` publishes the
+browser demo.
 
 ## CI
 
-`ci.yml` runs on pushes to `master` and on pull requests, in four jobs.
+`ci.yml` runs on pushes to `master` and on pull requests, in six jobs that
+between them run the commands `AGENTS.md` requires before a change is
+complete. The jobs are split along the lines the work actually divides on,
+which is what lets them run at the same time rather than one after another.
 
-`check` runs the commands `AGENTS.md` requires before a change is complete:
-`cargo fmt --all --check`, `cargo clippy --workspace --all-targets` with
-warnings denied, `cargo test --workspace`, `cargo build --workspace`, and
-`cargo build -p grayline-sstv --no-default-features`.
+`format` runs `cargo fmt --all --check` and nothing else. It needs neither the
+system packages nor the compiled dependencies the other jobs wait for, so a
+misformatted change is reported in under a minute instead of behind a build.
 
-It runs on Linux alone. That is a deliberate asymmetry rather than full
+`core` runs Clippy with warnings denied, the tests, and a build over the
+workspace with the two applications excluded, followed by the `no_std` builds.
+The exclusion list is named once in the job's environment and reused by the
+three commands, so a member that leaves the core cannot be dropped from one of
+them alone. The browser demo stays in this job: its host build is cheap,
+because it depends on the SSTV crates and `wasm-bindgen` and not on the
+graphics stack, and the `wasm` job below is what actually holds it to its own
+target.
+
+`app` is a matrix over `grayline-sstv-app` and `grayline-wefax-app`, running
+Clippy, the tests, and a build for one package each. Each application is a long
+tail of its own, and the run used to wait for both of them in turn behind the
+core; running the three beside each other trades runner minutes for wall clock,
+and a failure now names which application broke rather than which command did.
+Each matrix leg keys its own cache: the two dependency graphs meet at eframe —
+which `crates/shell` already pulls in, so the core compiles it too — and
+diverge after it, and one key over both would have each run overwriting the
+other's entry.
+
+These three run on Linux alone. That is a deliberate asymmetry rather than full
 coverage: Linux selects `platform/other.rs` and the in-window menu bar, which
 is the configuration least likely to be exercised during development on
 Windows, so CI covers the side the author does not. macOS compiles nowhere
@@ -22,7 +44,8 @@ unchecked.
 
 Only ALSA needs a system package to build. The window, the graphics context,
 and the Wayland and X11 clients are all opened at run time rather than linked,
-so `libasound2-dev` is the whole list.
+so `libasound2-dev` is the whole list. `mold` is beside it because
+`.cargo/config.toml` names it as the linker for every Linux build of this tree.
 
 `licenses` checks the dependency graph rather than the code: `cargo deny check
 licenses` against `deny.toml`, `cargo deny check advisories` against the
@@ -35,16 +58,16 @@ An advisory published against a dependency turns CI red on changes that have
 nothing to do with it. That is the intended behavior: the alternative is
 learning about it when a release is already being cut.
 
-`manual` renders `docs/help/` with pandoc, for the same reason: the archives
-carry the manual, so a source or template that cannot be rendered should fail
-on the change that broke it.
+`manual` renders `docs/help/` with pandoc, for the same reason: the SSTV
+archives carry the manual, so a source or template that cannot be rendered
+should fail on the change that broke it.
 
 `wasm` builds `apps/web-demo` for `wasm32-unknown-unknown` and runs Clippy against
-that target, then builds the page with `wasm-pack`. It is separate from `check`
-for the reason the no-std jobs are: the host build compiles the JavaScript
-bindings to stubs nothing calls, so it proves nothing about the target the demo
-ships to. Building the page rather than only the crate is what keeps a broken
-deploy from reaching `master`.
+that target, then builds the page with `wasm-pack`. It is separate for the
+reason the no-std steps are: the host build compiles the JavaScript bindings to
+stubs nothing calls, so it proves nothing about the target the demo ships to.
+Building the page rather than only the crate is what keeps a broken deploy from
+reaching `master`.
 
 ## Deploying the demo
 
@@ -71,25 +94,40 @@ from a local directory and from a Worker subdomain without rewriting.
 
 ## Releases
 
-`release.yml` runs on a pushed tag matching `v*`, and can be dispatched
-manually with the tag to build. Cutting a release is:
+Each application is released on its own, under a tag that names which one:
 
 ```text
-git tag v0.1.0
-git push origin v0.1.0
+git tag sstv-v0.3.1
+git push origin sstv-v0.3.1
+
+git tag wefax-v0.1.0
+git push origin wefax-v0.1.0
 ```
 
-`prepare` resolves the tag and refuses to continue unless it matches the
-workspace version, because the executables carry the version compiled into
-them and Windows records it in the resource. Bump `version` in the workspace
-`Cargo.toml` before tagging.
+`apps/sstv/` and `apps/wefax/` carry their own `version` rather than the
+workspace's, which is what makes that possible: a shared number would move one
+application's version every time the other shipped, and would have given WEFAX
+a first release numbered from how far SSTV had already got. The libraries under
+`crates/` keep `version.workspace = true`; nothing publishes them separately,
+and the number they carry is the workspace's own.
 
-It also renders the manual and uploads it as an artifact the three build jobs
-take. The manual is the same text on all three platforms, unlike the license
-page below, so building it once is both cheaper and the only way the three
-archives are guaranteed to carry the same pages; the alternative is installing
-pandoc on a Windows and a macOS runner to produce a copy that should be
-identical anyway.
+`release-sstv.yml` and `release-wefax.yml` are the two entry points. Each runs
+on its own tag pattern, can be dispatched manually with the tag to build, and
+does nothing but call `release-app.yml` with what makes that application
+itself: the directory under `apps/`, the product name the release is titled
+with, whether the archives carry the manual and the templates, and the release
+notes. A third application is a third caller rather than a copy of the build.
+
+`release-app.yml` holds everything the applications share, in three jobs.
+
+`prepare` resolves the tag and refuses to continue unless it matches the
+version of that application's package, because the executable carries the
+version compiled into it and Windows records it in the resource. Bump `version`
+in `apps/<app>/Cargo.toml` before tagging. It also renders the manual and
+uploads it as an artifact the three build jobs take, for the callers that ask
+for one. The manual is the same text on all three platforms, unlike the license
+page below, so building it once is both cheaper and the only way the archives
+are guaranteed to carry the same pages.
 
 `build` is a matrix of three targets, each on its own runner:
 
@@ -97,21 +135,44 @@ identical anyway.
 | --- | --- | --- |
 | `x86_64-pc-windows-msvc` | `windows-latest` | `.zip` |
 | `x86_64-unknown-linux-gnu` | `ubuntu-latest` | `.tar.gz` |
-| `aarch64-apple-darwin` | `macos-latest` | `.tar.gz` |
+| `aarch64-apple-darwin` | `macos-latest` | `.dmg` |
 
-Each builds `grayline-sstv`, `encode-wav`, and `decode-wav` with `--locked`, so a
-release is built from the committed `Cargo.lock` and not from whatever resolves
-that day.
+Each builds the one application with `--locked`, so a release is built from the
+committed `Cargo.lock` and not from whatever resolves that day. The archives are
+named `grayline-<app>-v<version>-<target>`, after the version rather than the
+tag, so the application's name appears once instead of twice.
 
-Each archive holds the three executables, `LICENSE`, `README.md`, the manual as
-`help/`, `templates/`, and a `licenses.html` generated on that platform. The
+Every archive holds the executable, `LICENSE`, a `licenses.html` generated on
+that platform, and the application's own `README.md` if it has one. The
 development documentation under `docs/memo/` is not archived: it answers to this
 repository's code rather than to the operator, and a release that carried it
-would be handing out notes on an implementation instead of a manual. The page is
-generated per platform rather than once for all three because the dependency
-graph differs by target: a page built on Linux would list neither `muda` nor
-`windows-sys`. The Linux archive also carries `assets/grayline-sstv.desktop` and
-`assets/icon.png`, which a Wayland compositor needs to find the window icon.
+would be handing out notes on an implementation instead of a manual. The license
+page is generated per platform rather than once for all three because the
+dependency graph differs by target: a page built on Linux would list neither
+`muda` nor `windows-sys`. The Linux archive also carries the desktop entry and
+the icon from `apps/<app>/assets/`, which a Wayland compositor needs to find the
+window icon.
+
+What the two applications ship beyond that differs, and is what the callers
+decide:
+
+| | SSTV | WEFAX |
+| --- | --- | --- |
+| Manual as `help/` | yes | no |
+| `templates/` | yes | no |
+| `README.md` | yes | no |
+
+WEFAX carries no manual because `docs/help/` is the SSTV one: it describes
+transmit, templates, and rig control, none of which that application has.
+Writing a WEFAX manual is what turns `manual: false` in `release-wefax.yml`
+into `true`.
+
+macOS gets a bundle in a disk image rather than an archive of bare files.
+`package/build-app.sh` stages it, taking the application as its first argument
+and the manual and templates directories as optional ones; the bundle name, the
+identifier, and the microphone permission text come from a case over the
+application, because a bundled process that opens a capture device without that
+text is killed by the system.
 
 ## The Windows C runtime
 
@@ -126,18 +187,20 @@ fails in the loader before the program can report anything.
 
 Statically linking takes the UCRT along with it, so a CRT fix now arrives by
 rebuilding rather than through Windows Update. That is the accepted cost. The
-alternative of shipping `VCRUNTIME140.dll` beside the executables has the same
+alternative of shipping `VCRUNTIME140.dll` beside the executable has the same
 servicing property, since an application-local copy is not updated either, and
 adds a way to break: an executable copied out of the extracted directory stops
 starting.
 
-Statically linked executables import operating system libraries alone, which is
-worth checking after a dependency that brings C code is added. The archived
-`encode-wav.exe` imports four.
+The build job checks the invariant rather than trusting it, because `RUSTFLAGS`
+in the environment replaces the flag in `.cargo/config.toml` without a word
+about it.
 
 `release` collects the archives, writes `SHA256SUMS` over them, and publishes
 a GitHub release. Re-running a tag that was already released replaces its
-archives rather than failing, so a rebuild is a re-run.
+archives rather than failing, so a rebuild is a re-run. The notes come from the
+caller with `@VERSION@` where the version goes, so the prose that describes what
+an archive holds sits beside the inputs that decided it.
 
 Nothing is code signed. A macOS user has to clear the quarantine attribute
 before the first run, and the release notes say so.

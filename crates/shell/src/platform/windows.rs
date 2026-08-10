@@ -12,35 +12,27 @@ use egui::IconData;
 
 use crate::Identity;
 use windows_sys::Win32::{
-    Foundation::{
-        CloseHandle, ERROR_ALREADY_EXISTS, FreeLibrary, GetLastError, HANDLE, HWND,
-        INVALID_HANDLE_VALUE,
-    },
+    Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, FreeLibrary, GetLastError, HANDLE, HWND, INVALID_HANDLE_VALUE},
     Graphics::Gdi::{
-        BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC,
-        GetDIBits, GetObjectW, HBITMAP, ReleaseDC,
+        BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW,
+        HBITMAP, ReleaseDC,
     },
     System::{
         LibraryLoader::{
-            GetModuleHandleA, GetModuleHandleW, GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32,
-            LoadLibraryExA,
+            GetModuleHandleA, GetModuleHandleW, GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExA,
         },
         Memory::{
-            CreateFileMappingW, FILE_MAP_READ, FILE_MAP_WRITE, MEMORY_MAPPED_VIEW_ADDRESS,
-            MapViewOfFile, OpenFileMappingW, PAGE_READWRITE, UnmapViewOfFile,
+            CreateFileMappingW, FILE_MAP_READ, FILE_MAP_WRITE, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+            OpenFileMappingW, PAGE_READWRITE, UnmapViewOfFile,
         },
-        Power::{
-            ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, EXECUTION_STATE,
-            SetThreadExecutionState,
-        },
+        Power::{ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, EXECUTION_STATE, SetThreadExecutionState},
         Threading::CreateMutexW,
     },
     UI::{
         Shell::SetCurrentProcessExplicitAppUserModelID,
         WindowsAndMessaging::{
-            DestroyIcon, GetIconInfo, HICON, ICONINFO, IMAGE_ICON, IsIconic, IsWindow,
-            LR_DEFAULTCOLOR, LoadImageW, SW_HIDE, SW_RESTORE, SW_SHOW, SetForegroundWindow,
-            ShowWindow,
+            DestroyIcon, GetIconInfo, HICON, ICONINFO, IMAGE_ICON, IsIconic, IsWindow, LR_DEFAULTCOLOR, LoadImageW,
+            SW_HIDE, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
         },
     },
 };
@@ -109,9 +101,7 @@ impl super::Platform for Host {
         let state: EXECUTION_STATE = match activity {
             super::Activity::Idle => ES_CONTINUOUS,
             super::Activity::Receiving => ES_CONTINUOUS | ES_SYSTEM_REQUIRED,
-            super::Activity::Transmitting => {
-                ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
-            }
+            super::Activity::Transmitting => ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED,
         };
         unsafe { SetThreadExecutionState(state) };
     }
@@ -233,9 +223,7 @@ impl Drop for Claim {
     fn drop(&mut self) {
         unsafe {
             if !self.published.is_null() {
-                UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS {
-                    Value: self.published,
-                });
+                UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS { Value: self.published });
             }
             for handle in [self.mapping, self.mutex] {
                 if !handle.is_null() {
@@ -410,9 +398,7 @@ fn allow_dark_mode_for_window(hwnd: isize) {
         if module.is_null() {
             return;
         }
-        if let Some(function) =
-            GetProcAddress(module, ALLOW_DARK_MODE_FOR_WINDOW_ORDINAL as *const u8)
-        {
+        if let Some(function) = GetProcAddress(module, ALLOW_DARK_MODE_FOR_WINDOW_ORDINAL as *const u8) {
             let allow: AllowDarkModeForWindow = mem::transmute(function);
             allow(hwnd as HWND, true);
         }

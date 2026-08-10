@@ -14,12 +14,7 @@ pub const FILE_MANAGER: Option<&str> = Some("open");
 /// `Contents/MacOS` directory the executable runs from.
 pub fn manual_fallback(_identity: &Identity) -> Option<PathBuf> {
     let executable = std::env::current_exe().ok()?;
-    Some(
-        executable
-            .parent()?
-            .parent()?
-            .join("Resources/help/index.html"),
-    )
+    Some(executable.parent()?.parent()?.join("Resources/help/index.html"))
 }
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";

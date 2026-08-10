@@ -127,11 +127,7 @@ impl Demodulator {
 
         let mut detected = None;
         let mut first_sample = self.next_sample;
-        let mut frequency_hz = Vec::with_capacity(if self.mode.is_some() {
-            samples.len()
-        } else {
-            0
-        });
+        let mut frequency_hz = Vec::with_capacity(if self.mode.is_some() { samples.len() } else { 0 });
         let mut sync_strength = Vec::with_capacity(frequency_hz.capacity());
         let mut fsk_ids = Vec::new();
         let mut fsk_numbers = Vec::new();
@@ -309,10 +305,7 @@ impl DemodulatedAudio {
 }
 
 /// Demodulates normalized mono PCM and detects its conventional VIS mode.
-pub fn demodulate(
-    samples: &[f32],
-    sample_rate_hz: u32,
-) -> Result<DemodulatedAudio, DemodulatorError> {
+pub fn demodulate(samples: &[f32], sample_rate_hz: u32) -> Result<DemodulatedAudio, DemodulatorError> {
     let mut demodulator = Demodulator::new(sample_rate_hz)?;
     let output = demodulator.process(samples)?;
     let mode = demodulator.finish()?;

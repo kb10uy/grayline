@@ -9,11 +9,13 @@
 
 extern crate alloc;
 
+/// Envelope detection of narrow-band tones.
+pub mod detector;
 /// Errors reported while validating DSP configurations.
 pub mod error;
 /// Finite and infinite impulse response filters, and narrow-band resonators.
 pub mod filter;
-/// Zero-crossing and phase-locked frequency measurement.
+/// Zero-crossing, phase-locked, and Hilbert phase-difference frequency measurement.
 pub mod frequency;
 /// Oscillators and voltage-controlled oscillators.
 pub mod oscillator;

@@ -141,11 +141,7 @@ impl RxDecoder {
     }
 
     /// Validates inputs and constructs a decoder with explicit receive options.
-    pub fn with_config(
-        mode: Mode,
-        sample_rate_hz: u32,
-        config: RxConfig,
-    ) -> Result<Self, SstvError> {
+    pub fn with_config(mode: Mode, sample_rate_hz: u32, config: RxConfig) -> Result<Self, SstvError> {
         if sample_rate_hz == 0 {
             return Err(SstvError::InvalidSampleRate);
         }
@@ -201,9 +197,7 @@ impl RxDecoder {
 
     /// Returns the acquired effective sample rate, if available.
     pub fn effective_sample_rate_hz(&self) -> Option<f64> {
-        self.decode
-            .clock
-            .map(|clock| clock.effective_sample_rate_hz())
+        self.decode.clock.map(|clock| clock.effective_sample_rate_hz())
     }
 
     /// Returns the immutable physical sample rate supplied at construction.
@@ -235,10 +229,7 @@ impl RxDecoder {
     /// raster, so nothing here would ever score a bad line. An already
     /// finished reception is left as it is.
     pub fn stop(&mut self, reason: StopReason) {
-        if matches!(
-            self.decode.state,
-            RxState::Complete | RxState::Stopped { .. }
-        ) {
+        if matches!(self.decode.state, RxState::Complete | RxState::Stopped { .. }) {
             return;
         }
         self.decode.state = RxState::Stopped {
@@ -254,10 +245,7 @@ impl RxDecoder {
     /// returns an event. Once [`RxState::Complete`] is reached, further non-empty
     /// input is rejected. If processing fails after consuming a prefix, the
     /// returned [`RxProcessError`] reports that prefix so it is not resent.
-    pub fn process(
-        &mut self,
-        block: DemodulatedBlock<'_>,
-    ) -> Result<RxProcessResult, RxProcessError> {
+    pub fn process(&mut self, block: DemodulatedBlock<'_>) -> Result<RxProcessResult, RxProcessError> {
         let expected = self.next_sample;
         self.process_inner(block).map_err(|error| {
             let consumed = if expected.is_none_or(|sample| sample == block.first_sample()) {
@@ -283,10 +271,7 @@ impl RxDecoder {
         if let Some(event) = self.poll_event() {
             return Ok(RxProcessResult::new(0, Some(event)));
         }
-        if matches!(
-            self.decode.state,
-            RxState::Complete | RxState::Stopped { .. }
-        ) {
+        if matches!(self.decode.state, RxState::Complete | RxState::Stopped { .. }) {
             return if block.frequency_hz().is_empty() {
                 Ok(RxProcessResult::new(0, None))
             } else {
@@ -405,8 +390,7 @@ impl RxDecoder {
             }
             let required_end = self.required_end()?;
             let available_end = self.input.as_ref().expect("input initialized").end();
-            let needed =
-                usize::try_from(required_end.saturating_sub(available_end)).unwrap_or(usize::MAX);
+            let needed = usize::try_from(required_end.saturating_sub(available_end)).unwrap_or(usize::MAX);
             let take = needed.max(1).min(remaining);
             self.append(block, consumed, take)?;
             consumed += take;
@@ -439,12 +423,8 @@ impl RxDecoder {
     /// be worse than growing. Twice the raster leaves room for the trailing
     /// audio a refinement is fitted against.
     fn staging_reservation(&self, max_samples: usize) -> usize {
-        let raster = self
-            .profile
-            .period_ps
-            .saturating_mul(self.raster_units() as u64);
-        let samples =
-            SstvDuration::from_picos(raster).to_samples_ceil(self.sample_rate_hz) as usize;
+        let raster = self.profile.period_ps.saturating_mul(self.raster_units() as u64);
+        let samples = SstvDuration::from_picos(raster).to_samples_ceil(self.sample_rate_hz) as usize;
         max_samples.min(samples.saturating_mul(2))
     }
 
@@ -491,11 +471,7 @@ impl RxDecoder {
             .checked_mul(unit as u64)
             .ok_or(SstvError::TimeOverflow)?;
         let edge = |offset_ps: u64| -> Result<u64, SstvError> {
-            clock.sample_from(
-                unit_start
-                    .checked_add(offset_ps)
-                    .ok_or(SstvError::TimeOverflow)?,
-            )
+            clock.sample_from(unit_start.checked_add(offset_ps).ok_or(SstvError::TimeOverflow)?)
         };
         let first = edge(start_ps)?;
         let last = edge(end_ps)?;
@@ -546,12 +522,7 @@ impl RxDecoder {
 
     /// Takes `count` samples of `block` from `offset` into the working window,
     /// and into staging when a refit may need to read them again.
-    fn append(
-        &mut self,
-        block: DemodulatedBlock<'_>,
-        offset: usize,
-        count: usize,
-    ) -> Result<(), SstvError> {
+    fn append(&mut self, block: DemodulatedBlock<'_>, offset: usize, count: usize) -> Result<(), SstvError> {
         block.validate_range(offset, count)?;
         let first = block
             .first_sample()
@@ -564,21 +535,12 @@ impl RxDecoder {
         );
         if let Staging::Memory { max_samples } = self.config.staging {
             let staged_len = self.staged.as_ref().map_or(0, SampleBuffer::len);
-            if staged_len
-                .checked_add(count)
-                .is_none_or(|len| len > max_samples)
-            {
+            if staged_len.checked_add(count).is_none_or(|len| len > max_samples) {
                 return Err(SstvError::StagingCapacityExceeded { max_samples });
             }
-            self.staged
-                .as_mut()
-                .expect("staging initialized")
-                .append(part, count);
+            self.staged.as_mut().expect("staging initialized").append(part, count);
         }
-        self.input
-            .as_mut()
-            .expect("input initialized")
-            .append(part, count);
+        self.input.as_mut().expect("input initialized").append(part, count);
         self.next_sample = Some(
             first
                 .checked_add(count as u64)
@@ -695,19 +657,15 @@ impl RxDecoder {
         // One period of margin stays behind the current unit so that a live
         // phase correction, which may move the raster backwards, still reaches
         // the samples of the unit it corrects.
-        let discard =
-            self.decode.clock.expect("clock acquired").sample_at(
-                self.profile.period_ps * self.decode.raster_unit.saturating_sub(1) as u64,
-            )?;
+        let discard = self
+            .decode
+            .clock
+            .expect("clock acquired")
+            .sample_at(self.profile.period_ps * self.decode.raster_unit.saturating_sub(1) as u64)?;
         if !rebuilding {
-            self.input
-                .as_mut()
-                .expect("input initialized")
-                .discard_before(discard);
+            self.input.as_mut().expect("input initialized").discard_before(discard);
         }
-        Ok(Some(
-            unit * self.mode.spec().rows_per_raster_unit() as usize,
-        ))
+        Ok(Some(unit * self.mode.spec().rows_per_raster_unit() as usize))
     }
 
     fn frequency_at(&self, sample: u64) -> Result<f32, SstvError> {
@@ -789,10 +747,7 @@ impl RxDecoder {
 
     /// Returns the next queued event without requiring an empty input block.
     pub fn poll_event(&mut self) -> Option<RxEvent> {
-        self.decode
-            .pending_events
-            .pop_front()
-            .map(|event| self.emit(event))
+        self.decode.pending_events.pop_front().map(|event| self.emit(event))
     }
 
     fn emit(&mut self, event: RxEvent) -> RxEvent {

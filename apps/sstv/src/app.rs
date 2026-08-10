@@ -37,10 +37,7 @@ use crate::{
         compose::{ComposeRequest, Composer},
         receive::{Frame, RxProgress},
         rig::{Reading, RigSnapshot, RigState, RigWorker, script},
-        transmit::{
-            Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot,
-            TxWorker,
-        },
+        transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
     },
 };
 
@@ -497,25 +494,16 @@ impl App {
     /// A name that no longer exists leaves the selection the library scan
     /// already made, so a deleted file does not empty the panel.
     fn restore_selection(&mut self, settings: &Settings) {
-        self.library.template = index_of(&self.library.templates, settings.template.as_deref())
-            .or(self.library.template);
-        self.library.stock =
-            index_of(&self.library.stocks, settings.stock.as_deref()).or(self.library.stock);
+        self.library.template =
+            index_of(&self.library.templates, settings.template.as_deref()).or(self.library.template);
+        self.library.stock = index_of(&self.library.stocks, settings.stock.as_deref()).or(self.library.stock);
     }
 
     fn settings(&self) -> Settings {
         Settings {
             locale: self.i18n.locale(),
-            input_device: self
-                .audio
-                .device
-                .as_ref()
-                .map(|device| device.name().to_owned()),
-            output_device: self
-                .audio
-                .output_device
-                .as_ref()
-                .map(|device| device.name().to_owned()),
+            input_device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
+            output_device: self.audio.output_device.as_ref().map(|device| device.name().to_owned()),
             station_callsign: self.station.callsign.clone(),
             station_qth: self.station.qth.clone(),
             station_grid: self.station.grid.clone(),
@@ -579,13 +567,7 @@ impl App {
     }
 
     pub fn select_device_named(&mut self, name: &str) {
-        if let Some(device) = self
-            .audio
-            .devices
-            .iter()
-            .find(|device| device.name() == name)
-            .cloned()
-        {
+        if let Some(device) = self.audio.devices.iter().find(|device| device.name() == name).cloned() {
             self.select_device(device);
         }
     }
@@ -824,11 +806,7 @@ impl App {
     fn adopt_library_scan(&mut self, scan: LibraryScan) {
         let mut errors = Vec::new();
         match scan.templates {
-            Ok(entries) => replace_entries(
-                &mut self.library.templates,
-                &mut self.library.template,
-                entries,
-            ),
+            Ok(entries) => replace_entries(&mut self.library.templates, &mut self.library.template, entries),
             Err(error) => errors.push(error.to_string()),
         }
         match scan.stocks {
@@ -891,11 +869,7 @@ impl App {
 
     fn load_templates(&mut self) -> io::Result<()> {
         let entries = template_entries(self.paths.templates_dir())?;
-        replace_entries(
-            &mut self.library.templates,
-            &mut self.library.template,
-            entries,
-        );
+        replace_entries(&mut self.library.templates, &mut self.library.template, entries);
         Ok(())
     }
 
@@ -989,8 +963,7 @@ impl App {
         // it is the picture being sent. Derived from the phase rather than
         // switched at either end of a transmission, so a tone, a picture, and a
         // transmission that failed all release it the same way.
-        self.audio
-            .set_muted_for_transmit(self.tx_snapshot.phase.is_active());
+        self.audio.set_muted_for_transmit(self.tx_snapshot.phase.is_active());
         self.refresh_timed_composition();
         self.refresh_tuned_composition();
         self.report_activity();
@@ -1004,8 +977,7 @@ impl App {
     fn poll_rig(&mut self) {
         match (self.rig.enabled, self.rig_worker.is_some()) {
             (true, false) => {
-                let worker =
-                    RigWorker::spawn(&self.rig, self.paths.config_dir(), Arc::clone(&self.bands));
+                let worker = RigWorker::spawn(&self.rig, self.paths.config_dir(), Arc::clone(&self.bands));
                 self.rig_worker = Some(worker);
                 self.rig_snapshot = RigSnapshot::default();
             }
@@ -1078,8 +1050,7 @@ impl App {
     pub fn stepped_frequency(&self, steps: i64) -> Option<u64> {
         let frequency_hz = self.rig_snapshot.reading.as_ref()?.frequency_hz;
         let band = self.tuned_band()?;
-        let moved = i64::try_from(frequency_hz).ok()?
-            + steps.checked_mul(i64::try_from(band.step_hz()?).ok()?)?;
+        let moved = i64::try_from(frequency_hz).ok()? + steps.checked_mul(i64::try_from(band.step_hz()?).ok()?)?;
         let moved = u64::try_from(moved).ok()?;
         band.contains(moved).then_some(moved)
     }
@@ -1126,10 +1097,10 @@ impl App {
     fn report_written(&mut self, written: io::Result<PathBuf>) {
         match written {
             Ok(path) => {
-                self.notice = Some(self.i18n.text_with(
-                    "rig-script-written",
-                    &[("path", owned(path.display().to_string()))],
-                ));
+                self.notice = Some(
+                    self.i18n
+                        .text_with("rig-script-written", &[("path", owned(path.display().to_string()))]),
+                );
                 self.library.error = None;
                 self.reveal(Folder::Config);
             }
@@ -1369,9 +1340,7 @@ impl App {
             self.library
                 .template
                 .and_then(|index| self.library.templates.get(index)),
-            self.library
-                .stock
-                .and_then(|index| self.library.stocks.get(index)),
+            self.library.stock.and_then(|index| self.library.stocks.get(index)),
         ) else {
             self.composition.frame = None;
             return;
@@ -1419,8 +1388,7 @@ impl App {
     /// frequency has no reason to be composed again every time the operator
     /// turns the dial.
     fn refresh_tuned_composition(&mut self) {
-        if self.composition.shows_frequency && self.rig_snapshot.reading != self.composition.reading
-        {
+        if self.composition.shows_frequency && self.rig_snapshot.reading != self.composition.reading {
             self.request_composition();
         }
     }
@@ -1474,10 +1442,7 @@ impl App {
         }
         let should_start = !self.tx.is_started()
             && self.rig_ready_to_send()
-            && matches!(
-                self.tx_snapshot.phase,
-                TxPhase::Producing | TxPhase::Draining
-            );
+            && matches!(self.tx_snapshot.phase, TxPhase::Producing | TxPhase::Draining);
         if should_start && let Err(error) = self.tx.start_playback() {
             self.tx_error = Some(error.to_string());
             self.stop_transmit_with(TxPhase::Failed);
@@ -1509,10 +1474,10 @@ impl App {
         // names it. The rest is about this transmission; this is about being
         // allowed to make one at all.
         if let Err(error) = FskId::new(self.station.callsign.trim()) {
-            return Some(self.i18n.text_with(
-                "error-invalid-station-call",
-                &[("error", owned(error.to_string()))],
-            ));
+            return Some(
+                self.i18n
+                    .text_with("error-invalid-station-call", &[("error", owned(error.to_string()))]),
+            );
         }
         if self.composition.frame.is_none() {
             return Some(self.i18n.text("error-no-transmit-frame"));
@@ -1544,8 +1509,7 @@ impl App {
     }
 
     fn station_id(&self) -> Option<Result<FskId, grayline_sstv_fskid::FskIdError>> {
-        self.send_fskid
-            .then(|| FskId::new(self.station.callsign.trim()))
+        self.send_fskid.then(|| FskId::new(self.station.callsign.trim()))
     }
 
     /// Returns the contest number that identifier would carry, if any.
@@ -1712,9 +1676,7 @@ impl App {
         if !self.tx_snapshot.phase.is_active() {
             return TxProgress::Idle;
         }
-        self.tx_snapshot
-            .raster
-            .progress_at(self.tx.played_samples())
+        self.tx_snapshot.raster.progress_at(self.tx.played_samples())
     }
 
     pub fn output_sample_rate_hz(&self) -> Option<u32> {
@@ -1757,9 +1719,7 @@ fn manual_path() -> Option<PathBuf> {
         .ok()
         .and_then(|executable| Some(executable.parent()?.join("help").join("index.html")))
         .filter(|manual| manual.is_file());
-    beside.or_else(|| {
-        platform::manual_fallback(&crate::identity::IDENTITY).filter(|manual| manual.is_file())
-    })
+    beside.or_else(|| platform::manual_fallback(&crate::identity::IDENTITY).filter(|manual| manual.is_file()))
 }
 
 fn modes(support: fn(Mode) -> Support) -> Vec<Mode> {

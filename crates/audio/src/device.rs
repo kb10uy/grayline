@@ -103,10 +103,7 @@ pub(crate) fn describe(device: &cpal::Device) -> Option<Described> {
 /// card is enumerated once per PCM and per plugin, and every one of those
 /// entries is named after the card.
 pub(crate) fn named(described: Vec<Described>) -> impl Iterator<Item = (cpal::DeviceId, String)> {
-    let labels: Vec<_> = described
-        .iter()
-        .map(|device| device.label.clone())
-        .collect();
+    let labels: Vec<_> = described.iter().map(|device| device.label.clone()).collect();
     let names = distinguish(&labels);
     described.into_iter().map(|device| device.id).zip(names)
 }
@@ -130,9 +127,7 @@ fn distinguish(labels: &[Label]) -> Vec<String> {
     let mut names: Vec<String> = labels
         .iter()
         .map(|label| match &label.qualifier {
-            Some(qualifier)
-                if shared[label.name.as_str()] > 1 && qualifier.as_str() != label.name =>
-            {
+            Some(qualifier) if shared[label.name.as_str()] > 1 && qualifier.as_str() != label.name => {
                 format!("{} ({qualifier})", label.name)
             }
             _ => label.name.clone(),
@@ -166,14 +161,9 @@ pub(crate) fn preferred_rate(device: &cpal::Device, fallback: u32) -> u32 {
         return fallback;
     };
     let supported = configs.into_iter().any(|range| {
-        range.min_sample_rate() <= PREFERRED_SAMPLE_RATE_HZ
-            && PREFERRED_SAMPLE_RATE_HZ <= range.max_sample_rate()
+        range.min_sample_rate() <= PREFERRED_SAMPLE_RATE_HZ && PREFERRED_SAMPLE_RATE_HZ <= range.max_sample_rate()
     });
-    if supported {
-        PREFERRED_SAMPLE_RATE_HZ
-    } else {
-        fallback
-    }
+    if supported { PREFERRED_SAMPLE_RATE_HZ } else { fallback }
 }
 
 pub(crate) fn preferred_output_rate(
@@ -191,11 +181,7 @@ pub(crate) fn preferred_output_rate(
             && range.min_sample_rate() <= PREFERRED_SAMPLE_RATE_HZ
             && PREFERRED_SAMPLE_RATE_HZ <= range.max_sample_rate()
     });
-    if supported {
-        PREFERRED_SAMPLE_RATE_HZ
-    } else {
-        fallback
-    }
+    if supported { PREFERRED_SAMPLE_RATE_HZ } else { fallback }
 }
 
 /// Asks the device for [`OUTPUT_BUFFER_MS`] of audio, within what it accepts.
@@ -294,10 +280,7 @@ mod tests {
             label("USB Audio CODEC", Some("hw:CARD=1,DEV=0")),
         ];
 
-        assert_eq!(
-            distinguish(&labels),
-            ["PipeWire Sound Server", "USB Audio CODEC"]
-        );
+        assert_eq!(distinguish(&labels), ["PipeWire Sound Server", "USB Audio CODEC"]);
     }
 
     /// A device the host cannot tell apart still has to be reachable, because
@@ -310,10 +293,7 @@ mod tests {
             label("Line In", Some("Line In")),
         ];
 
-        assert_eq!(
-            distinguish(&labels),
-            ["Line In #1", "Line In #2", "Line In #3"]
-        );
+        assert_eq!(distinguish(&labels), ["Line In #1", "Line In #2", "Line In #3"]);
     }
 
     /// Numbering is the last resort, so it may not touch the devices an
@@ -342,10 +322,7 @@ mod tests {
         #[case] sample_rate_hz: u32,
         #[case] expected: BufferSize,
     ) {
-        let supported = SupportedBufferSize::Range {
-            min: 1,
-            max: 65_536,
-        };
+        let supported = SupportedBufferSize::Range { min: 1, max: 65_536 };
 
         assert_eq!(bounded_buffer_size(&supported, sample_rate_hz), expected);
     }
@@ -377,10 +354,7 @@ mod tests {
     /// repeated inside its own parentheses says nothing.
     #[test]
     fn an_identifier_is_not_repeated_after_the_name_it_matches() {
-        let labels = [
-            label("default", Some("default")),
-            label("default", Some("sysdefault")),
-        ];
+        let labels = [label("default", Some("default")), label("default", Some("sysdefault"))];
 
         assert_eq!(distinguish(&labels), ["default", "default (sysdefault)"]);
     }

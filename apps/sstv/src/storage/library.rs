@@ -33,11 +33,7 @@ impl Entry {
             .unwrap_or(path.as_os_str())
             .to_string_lossy()
             .into_owned();
-        Self {
-            name,
-            geometry,
-            path,
-        }
+        Self { name, geometry, path }
     }
 }
 
@@ -63,10 +59,7 @@ pub(crate) fn stock_entries(directory: &Path) -> io::Result<Vec<Entry>> {
     })
 }
 
-fn directory_entries(
-    directory: &Path,
-    load: impl Fn(&Path) -> Option<Entry>,
-) -> io::Result<Vec<Entry>> {
+fn directory_entries(directory: &Path, load: impl Fn(&Path) -> Option<Entry>) -> io::Result<Vec<Entry>> {
     let mut entries = Vec::new();
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();

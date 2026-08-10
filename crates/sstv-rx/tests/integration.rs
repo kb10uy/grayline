@@ -13,8 +13,7 @@ use grayline_sstv::{
     time::SstvDuration,
 };
 use grayline_sstv_rx::{
-    Demodulator, DemodulatorError, PipelineOptions, ReceivePipeline, demodulate,
-    sync_detector_delay,
+    Demodulator, DemodulatorError, PipelineOptions, ReceivePipeline, demodulate, sync_detector_delay,
 };
 use rstest::rstest;
 
@@ -37,11 +36,7 @@ fn vis_signal(mode: Mode, rate: u32, offset: f64) -> Vec<f32> {
     tone(&mut samples, rate, 1_200.0 + offset, 0.03, &mut phase);
     let raw = mode.spec().raw_vis().unwrap();
     for bit in 0..8 {
-        let frequency = if raw & (1 << bit) == 0 {
-            1_300.0
-        } else {
-            1_100.0
-        };
+        let frequency = if raw & (1 << bit) == 0 { 1_300.0 } else { 1_100.0 };
         tone(&mut samples, rate, frequency + offset, 0.03, &mut phase);
     }
     tone(&mut samples, rate, 1_200.0 + offset, 0.03, &mut phase);
@@ -55,11 +50,7 @@ fn fsk_id_signal(samples: &mut Vec<f32>, rate: u32, phase: &mut f64) {
     tone(samples, rate, 1_900.0, 0.022, phase);
     for symbol in SYMBOLS {
         for bit in 0..6 {
-            let frequency = if symbol & (1 << bit) == 0 {
-                2_100.0
-            } else {
-                1_900.0
-            };
+            let frequency = if symbol & (1 << bit) == 0 { 2_100.0 } else { 1_900.0 };
             tone(samples, rate, frequency, 0.022, phase);
         }
     }
@@ -108,8 +99,7 @@ fn a_transmitted_edge_decodes_where_it_was_sent(#[case] mode: Mode, #[case] rate
         let deadline = timed.until().to_samples(rate);
         while written < deadline && written < stop_sample {
             samples.push((phase.sin() * 0.8) as f32);
-            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate))
-                .rem_euclid(TAU);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
             written += 1;
         }
         if written >= stop_sample {
@@ -166,8 +156,7 @@ fn raster_epoch_error_ms(mode: Mode, rate: u32) -> f64 {
         let deadline = timed.until().to_samples(rate);
         while written < deadline && written < stop_sample {
             samples.push((phase.sin() * 0.8) as f32);
-            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate))
-                .rem_euclid(TAU);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
             written += 1;
         }
         if written >= stop_sample {
@@ -213,10 +202,7 @@ fn raster_epoch_error_ms(mode: Mode, rate: u32) -> f64 {
 #[case(Mode::Martin2, 8_000)]
 #[case(Mode::Scottie2, 8_000)]
 #[case(Mode::Robot36, 48_000)]
-fn a_header_reception_decodes_its_first_row_without_buffering_periods(
-    #[case] mode: Mode,
-    #[case] rate: u32,
-) {
+fn a_header_reception_decodes_its_first_row_without_buffering_periods(#[case] mode: Mode, #[case] rate: u32) {
     let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
     let image = RgbImage::new(size, Rgb8::new(128, 128, 128));
     let leading_ps = mode
@@ -235,8 +221,7 @@ fn a_header_reception_decodes_its_first_row_without_buffering_periods(
         let deadline = timed.until().to_samples(rate);
         while written < deadline && written < stop_sample {
             samples.push((phase.sin() * 0.8) as f32);
-            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate))
-                .rem_euclid(TAU);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
             written += 1;
         }
         if written >= stop_sample {
@@ -269,8 +254,7 @@ fn a_header_reception_decodes_its_first_row_without_buffering_periods(
         }
     }
     let header_end = SstvDuration::from_picos(header_ps).to_samples(rate) as usize;
-    let period =
-        SstvDuration::from_picos(mode.spec().period().as_picos()).to_samples(rate) as usize;
+    let period = SstvDuration::from_picos(mode.spec().period().as_picos()).to_samples(rate) as usize;
     assert!(
         first_row_end.is_some_and(|end| end < header_end + 2 * period),
         "{mode:?} @{rate}: row 0 arrived by sample {first_row_end:?}, header ends at {header_end}, period {period}"
@@ -291,11 +275,7 @@ fn vis_bits_signal(mode: Mode, rate: u32) -> Vec<f32> {
     tone(&mut samples, rate, 1_200.0, 0.03, &mut phase);
     let raw = mode.spec().raw_vis().unwrap();
     for bit in 0..8 {
-        let frequency = if raw & (1 << bit) == 0 {
-            1_300.0
-        } else {
-            1_100.0
-        };
+        let frequency = if raw & (1 << bit) == 0 { 1_300.0 } else { 1_100.0 };
         tone(&mut samples, rate, frequency, 0.03, &mut phase);
     }
     tone(&mut samples, rate, 1_200.0, 0.03, &mut phase);
@@ -317,16 +297,12 @@ fn strict_detection_requires_the_leaders() {
     let rate = 8_000;
     let mut with_leaders = Demodulator::new(rate).unwrap();
     with_leaders.set_vis_detection(grayline_sstv_rx::VisDetection::Strict);
-    with_leaders
-        .process(&vis_signal(Mode::Scottie2, rate, 0.0))
-        .unwrap();
+    with_leaders.process(&vis_signal(Mode::Scottie2, rate, 0.0)).unwrap();
     assert_eq!(with_leaders.mode(), Some(Mode::Scottie2));
 
     let mut without_leaders = Demodulator::new(rate).unwrap();
     without_leaders.set_vis_detection(grayline_sstv_rx::VisDetection::Strict);
-    without_leaders
-        .process(&vis_bits_signal(Mode::Scottie2, rate))
-        .unwrap();
+    without_leaders.process(&vis_bits_signal(Mode::Scottie2, rate)).unwrap();
     assert_eq!(without_leaders.mode(), None);
 }
 
@@ -338,9 +314,7 @@ fn detects_a_header_through_noise() {
     let rate = 8_000;
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
     let mut noise = || {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1);
+        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
         ((state >> 33) as f32 / 2_147_483_648.0 - 0.5) * 2.0
     };
     let mut samples = vis_signal(Mode::Martin1, rate, 0.0);
@@ -422,11 +396,8 @@ fn a_picture_does_not_restart_the_reception(#[case] mode: Mode) {
     for row in 0..size.height() {
         for x in 0..size.width() {
             let luminance = (x * 255 / size.width()) as u8;
-            *image.row_mut(row).unwrap().get_mut(x).unwrap() = Rgb8::new(
-                luminance,
-                (row * 255 / size.height()) as u8,
-                255 - luminance / 2,
-            );
+            *image.row_mut(row).unwrap().get_mut(x).unwrap() =
+                Rgb8::new(luminance, (row * 255 / size.height()) as u8, 255 - luminance / 2);
         }
     }
     // Noise the picture survives but the VIS detectors have to read through:
@@ -436,9 +407,7 @@ fn a_picture_does_not_restart_the_reception(#[case] mode: Mode) {
     // the most noise reaching the detectors.
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
     let mut noise = move || {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1);
+        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
         ((state >> 33) as f32 / 2_147_483_648.0 - 0.5) * 2.0
     };
     let mut samples = Vec::new();
@@ -450,8 +419,7 @@ fn a_picture_does_not_restart_the_reception(#[case] mode: Mode) {
         while written < deadline {
             let fade = 0.55 + 0.45 * (TAU * written as f64 / f64::from(rate) / 3.7).sin();
             samples.push((phase.sin() * 0.8 * fade) as f32 + noise());
-            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate))
-                .rem_euclid(TAU);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
             written += 1;
         }
         if written >= limit {
@@ -465,10 +433,7 @@ fn a_picture_does_not_restart_the_reception(#[case] mode: Mode) {
     for packet in samples.chunks(4_096) {
         let output = demodulator.process(packet).unwrap();
         if let Some(detected_mode) = output.detected_mode() {
-            detected.push((
-                detected_mode,
-                output.first_sample() as f64 / f64::from(rate),
-            ));
+            detected.push((detected_mode, output.first_sample() as f64 / f64::from(rate)));
         }
     }
 

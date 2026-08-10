@@ -1,21 +1,20 @@
 use std::{env, error::Error, fs, io, path::Path};
 
 use grayline_sstv::image::{ImageSize, Rgb8, RgbImage};
-use grayline_sstv_template::{
-    FileAssetProvider, RenderContext, RenderSize, Renderer, Template, Variables, composite,
-};
+use grayline_sstv_template::{FileAssetProvider, RenderContext, RenderSize, Renderer, Template, Variables, composite};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let [template_path, background_path, output_path] = env::args()
-        .skip(1)
-        .collect::<Vec<_>>()
-        .try_into()
-        .map_err(|_: Vec<String>| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "usage: compose <template.kdl> <background-image> <output-image>",
-            )
-        })?;
+    let [template_path, background_path, output_path] =
+        env::args()
+            .skip(1)
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_: Vec<String>| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: compose <template.kdl> <background-image> <output-image>",
+                )
+            })?;
 
     let template = Template::parse(&fs::read_to_string(template_path)?)?;
     let background = load_rgb_image(Path::new(&background_path))?;
@@ -47,13 +46,12 @@ fn load_rgb_image(path: &Path) -> Result<RgbImage, Box<dyn Error>> {
 fn save_rgb_image(image: &RgbImage, path: &Path) -> Result<(), Box<dyn Error>> {
     let width = u32::try_from(image.size().width())?;
     let height = u32::try_from(image.size().height())?;
-    let output =
-        image::RgbImage::from_raw(width, height, image.to_rgb_bytes()).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "composed image dimensions do not match its pixels",
-            )
-        })?;
+    let output = image::RgbImage::from_raw(width, height, image.to_rgb_bytes()).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "composed image dimensions do not match its pixels",
+        )
+    })?;
     output.save(path)?;
     Ok(())
 }
