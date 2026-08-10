@@ -110,8 +110,13 @@ impl FirDesign {
 
 #[derive(Clone, Debug)]
 /// An owned streaming FIR filter with a circular delay line.
+///
+/// The delay line is stored twice over, each sample written to both halves,
+/// so the taps always read one contiguous slice regardless of where the ring
+/// currently starts.
 pub struct Fir {
     coefficients: Vec<f64>,
+    reversed_coefficients: Vec<f64>,
     delay: Vec<f64>,
     write_index: usize,
 }
@@ -125,9 +130,11 @@ impl Fir {
         if coefficients.iter().any(|value| !value.is_finite()) {
             return Err(DspError::InvalidCoefficient);
         }
-        let delay = vec![0.0; coefficients.len()];
+        let delay = vec![0.0; coefficients.len() * 2];
+        let reversed_coefficients = coefficients.iter().rev().copied().collect();
         Ok(Self {
             coefficients,
+            reversed_coefficients,
             delay,
             write_index: 0,
         })
@@ -155,21 +162,16 @@ impl Fir {
 
     /// Processes one sample without allocating.
     pub fn process_sample(&mut self, sample: f64) -> f64 {
+        let length = self.coefficients.len();
         self.delay[self.write_index] = sample;
-        let mut delay_index = self.write_index;
-        let mut output = 0.0;
-        // Coefficient zero multiplies the newest sample. Walking the ring
-        // backwards avoids shifting the complete delay line for every sample.
-        for coefficient in &self.coefficients {
-            output += coefficient * self.delay[delay_index];
-            delay_index = if delay_index == 0 {
-                self.delay.len() - 1
-            } else {
-                delay_index - 1
-            };
-        }
+        self.delay[self.write_index + length] = sample;
+        // The mirrored halves make this window contiguous: it ends on the
+        // sample just written and runs oldest first, matching the reversed
+        // coefficients.
+        let window = &self.delay[self.write_index + 1..self.write_index + 1 + length];
+        let output = dot(&self.reversed_coefficients, window);
         self.write_index += 1;
-        if self.write_index == self.delay.len() {
+        if self.write_index == length {
             self.write_index = 0;
         }
         output
@@ -192,6 +194,8 @@ impl Fir {
         }
         // Keeping the delay line allows seamless switching between equal-order
         // receive filters without introducing a fresh startup transient.
+        self.reversed_coefficients.clear();
+        self.reversed_coefficients.extend(coefficients.iter().rev());
         self.coefficients = coefficients;
         Ok(())
     }
@@ -203,13 +207,34 @@ impl Fir {
     }
 
     pub(crate) fn delayed_sample(&self, delay: usize) -> f64 {
+        let length = self.coefficients.len();
         let newest = if self.write_index == 0 {
-            self.delay.len() - 1
+            length - 1
         } else {
             self.write_index - 1
         };
-        self.delay[(newest + self.delay.len() - delay % self.delay.len()) % self.delay.len()]
+        self.delay[newest + length - delay % length]
     }
+}
+
+/// Four independent accumulators break the serial addition chain, which is
+/// what lets the compiler vectorize the products; the summation order is
+/// fixed, just no longer strictly front to back.
+fn dot(coefficients: &[f64], window: &[f64]) -> f64 {
+    let mut sums = [0.0; 4];
+    let mut coefficient_chunks = coefficients.chunks_exact(4);
+    let mut window_chunks = window.chunks_exact(4);
+    for (coefficients, window) in (&mut coefficient_chunks).zip(&mut window_chunks) {
+        sums[0] += coefficients[0] * window[0];
+        sums[1] += coefficients[1] * window[1];
+        sums[2] += coefficients[2] * window[2];
+        sums[3] += coefficients[3] * window[3];
+    }
+    let mut output = (sums[0] + sums[1]) + (sums[2] + sums[3]);
+    for (coefficient, sample) in coefficient_chunks.remainder().iter().zip(window_chunks.remainder()) {
+        output += coefficient * sample;
+    }
+    output
 }
 
 fn validate_fir_design(design: FirDesign) -> Result<(), DspError> {
