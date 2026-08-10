@@ -13,6 +13,7 @@ repository = "https://github.com/kb10uy/grayline"
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 console_error_panic_hook = "0.1"
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 directories = "6.0"
 eframe = "0.35"
 embed-resource = "3.0"

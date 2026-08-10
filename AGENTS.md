@@ -151,6 +151,10 @@ This repository uses a Cargo workspace. Run commands from the workspace root.
   bindings compile to stubs nothing calls, so the crate can stop building for
   wasm without any workspace command noticing.
 - Run Clippy with `cargo clippy --workspace --all-targets`.
+- Run performance benchmarks with `cargo bench -p <crate>`. The core crates
+  carry Criterion benches; compare against a stored baseline with
+  `cargo bench -p <crate> -- --baseline <name>` and store one with
+  `--save-baseline <name>`.
 - Check formatting with `cargo fmt --all --check`.
 - Apply formatting with `cargo fmt --all` when needed.
 
