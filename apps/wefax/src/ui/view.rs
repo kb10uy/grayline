@@ -49,13 +49,25 @@ fn controls(ui: &mut Ui, app: &mut App) {
 
 /// Everything a reception is worked with, in groups that stay together.
 fn settings_row(ui: &mut Ui, app: &mut App) {
+    // Every control on the bar is given the same height, rounded to a whole
+    // point. Left to their own, a combo box, a button and a check box come out
+    // a fraction of a point apart, and a combo box lays itself out from the
+    // top of whatever room it is given rather than centring in it, so the two
+    // differences add up and it sits visibly above its neighbours. The height
+    // is worked out from the font rather than measured, so it does not depend
+    // on what the last frame happened to draw.
+    let padding = ui.spacing().button_padding.y;
+    let natural = ui.text_style_height(&egui::TextStyle::Button) + padding * 2.0;
+    let common = ui.spacing().interact_size.y.max(natural).ceil();
+    ui.spacing_mut().interact_size.y = common;
+
     ui.horizontal_wrapped(|ui| {
-        block(ui, "geometry", |ui| geometry(ui, app));
-        block(ui, "flags", |ui| flags(ui, app));
-        block(ui, "actions", |ui| actions(ui, app));
-        block(ui, "phase", |ui| phase(ui, app));
-        block(ui, "slant", |ui| slant(ui, app));
-        block(ui, "save", |ui| save(ui, app));
+        group(ui, "geometry", |ui| geometry(ui, app));
+        group(ui, "flags", |ui| flags(ui, app));
+        group(ui, "actions", |ui| actions(ui, app));
+        group(ui, "phase", |ui| phase(ui, app));
+        group(ui, "slant", |ui| slant(ui, app));
+        group(ui, "save", |ui| save(ui, app));
     });
 }
 
@@ -67,25 +79,35 @@ fn settings_row(ui: &mut Ui, app: &mut App) {
 /// breaks between the things it is given, so each group is given to it whole,
 /// as one allocation the width of what that group needed last time.
 ///
+/// The height is the one every control on the bar was normalized to, so no
+/// group is given less room than it needs. A group given less lays its
+/// contents out against the smaller height and is clipped to it, which puts a
+/// combo box above its row and makes the extra pixel a hovered button is
+/// painted with show below and not above.
+///
 /// A group whose width has changed since — a different language, a longer
 /// reading — draws at the old width for one frame and is measured again. The
 /// frame that follows is asked for straight away, so the wrong one is never on
 /// screen long enough to be seen.
-fn block<R>(ui: &mut Ui, salt: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
-    let id = Id::new("wefax-control-block").with(salt);
-    let remembered = ui
+fn group(ui: &mut Ui, salt: &str, add: impl FnOnce(&mut Ui)) {
+    let id = group_id(salt);
+    let width = ui
         .ctx()
         .memory(|memory| memory.data.get_temp::<f32>(id))
         .unwrap_or_default();
-    let desired = Vec2::new(remembered, ui.spacing().interact_size.y);
+    let desired = Vec2::new(width, ui.spacing().interact_size.y);
     let inner = ui.allocate_ui_with_layout(desired, Layout::left_to_right(Align::Center), add);
 
     let measured = inner.response.rect.width();
-    if measured != remembered {
+    if measured != width {
         ui.ctx().memory_mut(|memory| memory.data.insert_temp(id, measured));
         ui.ctx().request_repaint();
     }
-    inner.inner
+}
+
+/// Where a group's measured width is kept between frames.
+fn group_id(salt: &str) -> Id {
+    Id::new("wefax-control-group").with(salt)
 }
 
 /// What a reception is told about itself before it starts.

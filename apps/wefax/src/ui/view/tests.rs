@@ -2,7 +2,10 @@
 //! runtime, so every locale is rendered here rather than only in front of an
 //! operator.
 
-use egui_kittest::{Harness, kittest::Queryable};
+use egui_kittest::{
+    Harness,
+    kittest::{Queryable, by},
+};
 use grayline_shell::i18n::Locale;
 use grayline_wefax::Format;
 use rstest::rstest;
@@ -16,6 +19,20 @@ fn render(app: &mut App) -> Harness<'_> {
         view(ui, app, &model, menu::is_in_window());
     });
     harness.run();
+    harness
+}
+
+/// Draws the window with the fonts the application installs for itself.
+///
+/// The metrics of a system font are not egui's own, and the bar's alignment
+/// answers to them.
+fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
+    let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
+        let model = menu::model(app);
+        view(ui, app, &model, menu::is_in_window());
+    });
+    crate::install_fonts(&harness.ctx);
+    harness.run_steps(8);
     harness
 }
 
@@ -97,23 +114,47 @@ fn a_narrow_window_keeps_every_control() {
     );
 }
 
-/// The groups are what the bar breaks between, so each is laid out as one
-/// item rather than as the widgets inside it.
+/// Every control on the bar has to sit on the same line as its neighbours.
 ///
-/// Their widths are what makes that work, and a group is measured from what it
-/// drew, so a width of nothing means the group never reached the layout.
+/// Drawn with the fonts the application actually installs, because that is
+/// where the differences show: a combo box, a button and a check box come out
+/// a fraction of a point apart under a system font, and a combo box lays
+/// itself out from the top of the room it is given rather than centring in it,
+/// so the two differences add up.
 #[test]
-fn every_group_is_measured_as_one_item() {
+fn every_control_on_a_row_shares_its_centre() {
     let mut app = App::headless();
-    let harness = render_sized(&mut app, egui::vec2(1_280.0, 500.0));
-    for salt in ["geometry", "flags", "actions", "phase", "slant", "save"] {
-        let id = egui::Id::new("wefax-control-block").with(salt);
-        let width = harness
-            .ctx
-            .memory(|memory| memory.data.get_temp::<f32>(id))
-            .unwrap_or_default();
-        assert!(width > 0.0, "the {salt} group was never measured");
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+    let harness = render_as_installed(&mut app, egui::vec2(1_280.0, 500.0));
+
+    // A combo box carries its selection as a value rather than as a label.
+    let button = |label: &str| harness.get_by_label(label).rect().center().y;
+    let combo = |text: &str| harness.get(by().value(text)).rect().center().y;
+    let reference = button(&i18n.text("action-start"));
+    for (name, found) in [
+        ("IOC 576", combo("IOC 576")),
+        ("120 LPM", combo("120 LPM")),
+        ("Auto start", button(&i18n.text("action-auto-start"))),
+        ("Clear", button(&i18n.text("action-clear"))),
+        ("Save", button(&i18n.text("action-save"))),
+    ] {
+        assert!(
+            (found - reference).abs() < 0.01,
+            "{name} sits {} points off the row",
+            found - reference
+        );
     }
+}
+
+/// The bar has to settle. A frame is drawn whenever the pointer moves, so a
+/// layout still being measured steps about under the pointer.
+#[test]
+fn the_bar_settles_and_stops_asking_for_frames() {
+    let mut app = App::headless();
+    let mut harness = render_as_installed(&mut app, egui::vec2(1_280.0, 500.0));
+    // `run` gives up after a few steps if frames keep being asked for, which
+    // is the assertion: by now nothing should be.
+    harness.run();
 }
 
 /// The picture takes whatever the control bar leaves, and drawing it must not
