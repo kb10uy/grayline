@@ -14,6 +14,13 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Only a run on master writes a cache entry; every other run reads one and
+  # writes nothing. A pull request's entry is visible to that request alone, so
+  # each run of each job pays to upload a copy of a target directory that no
+  # other run will ever read, while the entry a pull request actually restores
+  # from — master's — is the same either way. Named once here because the four
+  # jobs below have to agree on it.
+  SAVE_CACHE: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   # On its own because it needs neither the system packages nor the compiled
@@ -58,9 +65,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # `shared-key` rather than `key` throughout this file: `key` is added to a
+      # hash of the job's name, which keeps the entry to this job whatever it
+      # is called, while `shared-key` replaces that hash and so names an entry
+      # any job asking for the same one reads.
       - uses: Swatinem/rust-cache@v2
         with:
-          key: core
+          shared-key: core
+          save-if: ${{ env.SAVE_CACHE }}
 
       - name: Run Clippy
         run: cargo clippy $SCOPE --all-targets -- -D warnings
@@ -87,9 +99,7 @@ jobs:
           cargo build -p grayline-sstv-rx
 
   # One job per application, so the two compile at the same time and a failure
-  # names which one broke rather than which command did. Each keeps its own
-  # cache: the two dependency graphs meet at eframe and diverge after it, and
-  # one key over both would have each run overwriting the other's entry.
+  # names which one broke rather than which command did.
   app:
     name: App (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -113,9 +123,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # One entry for both applications rather than one each. The two graphs
+      # meet at eframe, and what SSTV adds past it — mlua, the template stack,
+      # the extra image formats — is what WEFAX does without, so everything the
+      # WEFAX job compiles apart from its own two crates is already in what the
+      # SSTV job builds. Only SSTV writes the entry: two jobs reserving one key
+      # in the same run have one of them lose the reservation and cache
+      # nothing, and it is the larger of the two that is worth keeping.
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.package }}
+          shared-key: app
+          save-if: ${{ env.SAVE_CACHE == 'true' && matrix.package == 'grayline-sstv-app' }}
 
       - name: Run Clippy
         run: cargo clippy -p ${{ matrix.package }} --all-targets -- -D warnings
@@ -137,7 +155,14 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
           components: clippy
+      # The deploy workflow reads this entry rather than keeping one of its
+      # own: it runs the same wasm-pack command over the same target directory,
+      # and this job does more with that directory — the Clippy build below —
+      # so this is the copy of it worth keeping.
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm
+          save-if: ${{ env.SAVE_CACHE }}
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
@@ -156,6 +181,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+
+      # Nothing here is compiled, so the entry holds no target directory: what
+      # the three commands below spend their time on is the registry index, the
+      # crate sources `cargo about` reads the license texts out of, and the
+      # advisory database, which `cargo deny` clones from scratch on a runner
+      # that has none. It still fetches on every run, so a cached copy is the
+      # starting point of that fetch rather than a substitute for it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: licenses
+          cache-targets: false
+          cache-directories: ~/.cargo/advisory-dbs
+          save-if: ${{ env.SAVE_CACHE }}
+
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny,cargo-about

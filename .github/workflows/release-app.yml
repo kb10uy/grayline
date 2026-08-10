@@ -130,12 +130,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libasound2-dev mold
 
+      # No compilation cache here, unlike the CI workflow. A cache entry
+      # belongs to the ref that wrote it, and every release is a new tag, so an
+      # entry written here is read by a re-run of the same tag and by nothing
+      # else — a copy of a release target directory kept, at the repository's
+      # expense, against a rebuild that usually never comes.
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ inputs.app }}-${{ matrix.target }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-about

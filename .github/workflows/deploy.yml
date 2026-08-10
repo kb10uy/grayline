@@ -26,7 +26,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      # The entry the CI workflow's WebAssembly job writes, read rather than
+      # written: that job runs the same wasm-pack command over a target
+      # directory that also holds its Clippy build, so its copy is the fuller
+      # one. Both workflows answer the same push, so what this restores is what
+      # the previous push left rather than what is being built beside it.
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm
+          save-if: false
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
