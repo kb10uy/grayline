@@ -1,8 +1,10 @@
 //! The encoder for one image: conventional VIS framing and the raster.
 
+use alloc::vec::Vec;
+
 use crate::{
     SstvError,
-    color::rgb_to_y_cr_cb,
+    color::{YCrCb8, rgb_to_y_cr_cb},
     image::{ImageSize, RgbImage},
     mode::{Mode, ScanChannel, ScanContent, Support},
     signal::{Frequency, LEADER_HZ, SYNC_HZ, TimedTone, TxComponent, VIS_MARK_HZ, VIS_SPACE_HZ},
@@ -27,6 +29,7 @@ pub struct TxEncoder {
     segment: usize,
     pixel: usize,
     segment_start_ps: u64,
+    converted_row: Option<(usize, Vec<YCrCb8>)>,
 }
 
 impl TxEncoder {
@@ -54,6 +57,7 @@ impl TxEncoder {
             segment: 0,
             pixel: 0,
             segment_start_ps: VIS_END_PS,
+            converted_row: None,
         })
     }
 
@@ -101,17 +105,35 @@ impl TxEncoder {
         spec.active_rows() as usize / spec.rows_per_raster_unit() as usize
     }
 
-    fn pixel_level(&self, channel: ScanChannel, row_offset: u8, x: usize) -> u8 {
+    fn pixel_level(&mut self, channel: ScanChannel, row_offset: u8, x: usize) -> u8 {
         let row = self.unit * self.mode.spec().rows_per_raster_unit() as usize + row_offset as usize;
-        let pixel = self.image.get(x, row).expect("validated image coordinates");
         match channel {
-            ScanChannel::Red => pixel.r,
-            ScanChannel::Green => pixel.g,
-            ScanChannel::Blue => pixel.b,
-            ScanChannel::Luminance => rgb_to_y_cr_cb(pixel).y,
-            ScanChannel::RedDifference => rgb_to_y_cr_cb(pixel).cr,
-            ScanChannel::BlueDifference => rgb_to_y_cr_cb(pixel).cb,
+            ScanChannel::Red => self.image.get(x, row).expect("validated image coordinates").r,
+            ScanChannel::Green => self.image.get(x, row).expect("validated image coordinates").g,
+            ScanChannel::Blue => self.image.get(x, row).expect("validated image coordinates").b,
+            ScanChannel::Luminance => self.converted(row, x).y,
+            ScanChannel::RedDifference => self.converted(row, x).cr,
+            ScanChannel::BlueDifference => self.converted(row, x).cb,
         }
+    }
+
+    /// Returns one converted pixel through a single-row cache.
+    ///
+    /// The YCrCb families read the same row once per channel, so converting
+    /// it whole on first touch serves the following channels from the cache
+    /// instead of converting every pixel again for each of them.
+    fn converted(&mut self, row: usize, x: usize) -> YCrCb8 {
+        if self.converted_row.as_ref().is_none_or(|(cached, _)| *cached != row) {
+            let converted = self
+                .image
+                .row(row)
+                .expect("validated image coordinates")
+                .iter()
+                .map(|&pixel| rgb_to_y_cr_cb(pixel))
+                .collect();
+            self.converted_row = Some((row, converted));
+        }
+        self.converted_row.as_ref().expect("cached above").1[x]
     }
 }
 

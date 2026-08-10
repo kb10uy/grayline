@@ -91,7 +91,7 @@ fn store_frequency(hertz: f32) -> u16 {
     (hertz.clamp(0.0, FREQUENCY_CEILING) * FREQUENCY_SCALE + 0.5) as u16
 }
 
-fn load_frequency(stored: u16) -> f32 {
+pub(super) fn load_frequency(stored: u16) -> f32 {
     f32::from(stored) / FREQUENCY_SCALE
 }
 
@@ -99,8 +99,18 @@ fn store_sync(strength: f32) -> u8 {
     (strength.clamp(0.0, 1.0) * f32::from(u8::MAX) + 0.5) as u8
 }
 
-fn load_sync(stored: u8) -> f32 {
+pub(super) fn load_sync(stored: u8) -> f32 {
     f32::from(stored) / f32::from(u8::MAX)
+}
+
+fn split_runs<'a, T>(head: &'a [T], tail: &'a [T], start: usize, stop: usize) -> [&'a [T]; 2] {
+    if stop <= head.len() {
+        [&head[start..stop], &[]]
+    } else if start >= head.len() {
+        [&tail[start - head.len()..stop - head.len()], &[]]
+    } else {
+        [&head[start..], &tail[..stop - head.len()]]
+    }
 }
 
 /// Demodulated samples at contiguous absolute positions, in a retained form.
@@ -170,18 +180,52 @@ impl SampleBuffer {
         self.sync.len()
     }
 
-    /// Returns one retained synchronization strength by position.
-    ///
-    /// Positional rather than by sample position, because acquisition walks the
-    /// whole retained run looking for pulses rather than asking about a sample
-    /// it has already located.
-    pub(super) fn sync_at(&self, index: usize) -> Option<f32> {
-        self.sync.get(index).copied().map(load_sync)
-    }
-
+    #[cfg(test)]
     pub(super) fn sync(&self, sample: u64) -> Option<f32> {
         let index = usize::try_from(sample.checked_sub(self.first)?).ok()?;
         self.sync.get(index).copied().map(load_sync)
+    }
+
+    /// Returns the retained raw frequencies covering `[first, end)`, oldest
+    /// first, as the at most two runs the ring holds them in.
+    ///
+    /// Reading a range this way replaces one bounds check and index
+    /// translation per sample with one per range, which is what the per-unit
+    /// averaging and scanning loops spend their time on otherwise.
+    pub(super) fn frequency_runs(&self, first: u64, end: u64) -> Option<[&[u16]; 2]> {
+        let (start, stop) = self.range_indices(first, end)?;
+        let (head, tail) = self.frequency.as_slices();
+        Some(split_runs(head, tail, start, stop))
+    }
+
+    /// Returns the retained raw synchronization strengths covering `[first, end)`.
+    pub(super) fn sync_runs(&self, first: u64, end: u64) -> Option<[&[u8]; 2]> {
+        let (start, stop) = self.range_indices(first, end)?;
+        let (head, tail) = self.sync.as_slices();
+        Some(split_runs(head, tail, start, stop))
+    }
+
+    /// Sums the retained frequencies over `[first, end)`, in hertz.
+    ///
+    /// The stored form is integral, so the sum is exact: dividing it once by
+    /// the count reads back identically to loading and adding every sample.
+    pub(super) fn frequency_sum(&self, first: u64, end: u64) -> Option<f64> {
+        let runs = self.frequency_runs(first, end)?;
+        let sum = runs
+            .iter()
+            .flat_map(|run| run.iter())
+            .map(|&stored| u64::from(stored))
+            .sum::<u64>();
+        Some(sum as f64 / f64::from(FREQUENCY_SCALE))
+    }
+
+    fn range_indices(&self, first: u64, end: u64) -> Option<(usize, usize)> {
+        if first < self.first || end < first || end > self.end() {
+            return None;
+        }
+        let start = usize::try_from(first - self.first).ok()?;
+        let stop = usize::try_from(end - self.first).ok()?;
+        Some((start, stop))
     }
 
     /// Copies the samples at `sample` and later into a new buffer.
@@ -193,10 +237,18 @@ impl SampleBuffer {
         let skip = usize::try_from(sample.saturating_sub(self.first))
             .unwrap_or(usize::MAX)
             .min(self.len());
+        fn tail_of<T: Copy>(source: &VecDeque<T>, skip: usize) -> VecDeque<T> {
+            let (head, tail) = source.as_slices();
+            let head_skip = skip.min(head.len());
+            let mut copied = VecDeque::with_capacity(source.len() - skip);
+            copied.extend(head[head_skip..].iter().copied());
+            copied.extend(tail[skip - head_skip..].iter().copied());
+            copied
+        }
         Self {
             first: self.first + skip as u64,
-            frequency: self.frequency.iter().skip(skip).copied().collect(),
-            sync: self.sync.iter().skip(skip).copied().collect(),
+            frequency: tail_of(&self.frequency, skip),
+            sync: tail_of(&self.sync, skip),
         }
     }
 
@@ -210,6 +262,8 @@ impl SampleBuffer {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use rstest::rstest;
 
     use super::*;
@@ -264,7 +318,6 @@ mod tests {
             (read - strength).abs() <= 1.0 / f32::from(u8::MAX),
             "{strength} read back as {read}"
         );
-        assert_eq!(buffer.sync_at(0), Some(read));
     }
 
     #[test]
@@ -273,7 +326,49 @@ mod tests {
         assert_eq!(buffer.len(), 0);
         assert_eq!(buffer.first(), 64);
         assert_eq!(buffer.sync_len(), 0);
-        assert_eq!(buffer.sync_at(0), None);
+        assert!(buffer.sync_runs(64, 65).is_none());
+    }
+
+    /// Bulk range reads have to agree with per-sample reads wherever the two
+    /// retained runs happen to sit in the ring, including across the seam.
+    #[test]
+    fn range_reads_match_per_sample_reads_across_the_ring_seam() {
+        let mut buffer = SampleBuffer::with_capacity(0, 128);
+        let frequency: Vec<f32> = (0..96).map(|index| 1_500.0 + index as f32).collect();
+        let sync: Vec<f32> = (0..96).map(|index| (index % 5) as f32 / 4.0).collect();
+        buffer.append(DemodulatedBlock::new(0, &frequency, &sync), 96);
+        buffer.discard_before(64);
+        let frequency: Vec<f32> = (96..160).map(|index| 1_500.0 + index as f32).collect();
+        let sync: Vec<f32> = (96..160).map(|index| (index % 7) as f32 / 6.0).collect();
+        buffer.append(DemodulatedBlock::new(96, &frequency, &sync), 64);
+
+        for (first, end) in [(64, 160), (70, 90), (130, 160), (100, 140)] {
+            let runs = buffer.frequency_runs(first, end).unwrap();
+            let bulk: Vec<f32> = runs
+                .iter()
+                .flat_map(|run| run.iter())
+                .map(|&stored| load_frequency(stored))
+                .collect();
+            let direct: Vec<f32> = (first..end).map(|sample| buffer.frequency(sample).unwrap()).collect();
+            assert_eq!(bulk, direct, "frequencies over {first}..{end}");
+
+            let sum = buffer.frequency_sum(first, end).unwrap();
+            let expected: f64 = direct.iter().map(|&value| f64::from(value)).sum();
+            assert_eq!(sum, expected, "sum over {first}..{end}");
+
+            let runs = buffer.sync_runs(first, end).unwrap();
+            let bulk: Vec<f32> = runs
+                .iter()
+                .flat_map(|run| run.iter())
+                .map(|&stored| load_sync(stored))
+                .collect();
+            let direct: Vec<f32> = (first..end).map(|sample| buffer.sync(sample).unwrap()).collect();
+            assert_eq!(bulk, direct, "sync over {first}..{end}");
+        }
+
+        assert!(buffer.frequency_runs(60, 80).is_none());
+        assert!(buffer.frequency_runs(150, 170).is_none());
+        assert!(buffer.frequency_sum(150, 140).is_none());
     }
 
     /// Copying a tail carries the retained values, not the ones they came from.

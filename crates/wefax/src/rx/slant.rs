@@ -144,12 +144,7 @@ fn displacement(early: &[u8], late: &[u8]) -> Option<f64> {
     let mut best = 0;
     for index in 0..SHIFTS {
         let shift = index as i64 - MAX_SHIFT;
-        let mut sum = 0_u64;
-        for (offset, level) in early.iter().enumerate() {
-            let other = (offset as i64 + shift).rem_euclid(width as i64) as usize;
-            sum += u64::from(level.abs_diff(late[other]));
-        }
-        scores[index] = sum as f64;
+        scores[index] = shifted_difference(early, late, shift) as f64;
         if scores[index] < scores[best] {
             best = index;
         }
@@ -171,6 +166,33 @@ fn displacement(early: &[u8], late: &[u8]) -> Option<f64> {
         0.0
     };
     Some((best as i64 - MAX_SHIFT) as f64 + refinement)
+}
+
+/// Sums `|early[i] - late[(i + shift) mod width]|` over the row.
+///
+/// The wrap touches only `|shift|` pixels, so the comparison splits into a
+/// long straight run and a short wrapped one, neither indexed through a
+/// remainder.
+fn shifted_difference(early: &[u8], late: &[u8], shift: i64) -> u64 {
+    let width = early.len();
+    if shift >= 0 {
+        let shift = shift as usize;
+        absolute_difference(&early[..width - shift], &late[shift..])
+            + absolute_difference(&early[width - shift..], &late[..shift])
+    } else {
+        let shift = shift.unsigned_abs() as usize;
+        absolute_difference(&early[shift..], &late[..width - shift])
+            + absolute_difference(&early[..shift], &late[width - shift..])
+    }
+}
+
+fn absolute_difference(left: &[u8], right: &[u8]) -> u64 {
+    u64::from(
+        left.iter()
+            .zip(right)
+            .map(|(left, right)| u32::from(left.abs_diff(*right)))
+            .sum::<u32>(),
+    )
 }
 
 fn median(values: &mut [f64]) -> f64 {

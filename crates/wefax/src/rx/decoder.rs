@@ -563,11 +563,14 @@ impl WefaxDecoder {
             .as_mut()
             .and_then(|raster| raster.row_mut(line))
             .ok_or(WefaxError::NotImaging)?;
+        // The right edge of one pixel is the left edge of the next, so each
+        // boundary is computed once and carried over.
+        let mut left = clock.position_at(line, 0.0);
         for (pixel, target) in row.iter_mut().enumerate() {
-            let left = clock.position_at(line, pixel as f64 / width as f64);
             let right = clock.position_at(line, (pixel + 1) as f64 / width as f64);
             let level = band.level(window.pixel_mean(left, right)?);
             *target = if inverted { u8::MAX - level } else { level };
+            left = right;
         }
 
         self.next_line += 1;
@@ -628,13 +631,37 @@ impl SampleWindow {
         let end = libm::ceil(right - guard).max(0.0) as u64;
         if end > first {
             let mut sum = 0.0;
-            for sample in first..end {
-                sum += f64::from(self.get(sample)?);
+            for run in self.runs(first, end)? {
+                for &value in run {
+                    sum += f64::from(value);
+                }
             }
             return Ok(sum / (end - first) as f64);
         }
         let center = libm::ceil((left + right) * 0.5 - 0.5).max(0.0) as u64;
         Ok(f64::from(self.get(center)?))
+    }
+
+    /// Returns the retained samples covering `[first, end)` as the at most two
+    /// runs the ring holds them in, translating and bounds-checking the range
+    /// once rather than every sample.
+    fn runs(&self, first: u64, end: u64) -> Result<[&[f32]; 2], WefaxError> {
+        if first < self.first_sample {
+            return Err(WefaxError::SampleDiscarded { sample: first });
+        }
+        if end > self.end() {
+            return Err(WefaxError::SampleDiscarded { sample: self.end() });
+        }
+        let start = (first - self.first_sample) as usize;
+        let stop = (end - self.first_sample) as usize;
+        let (head, tail) = self.frequency_hz.as_slices();
+        Ok(if stop <= head.len() {
+            [&head[start..stop], &[]]
+        } else if start >= head.len() {
+            [&tail[start - head.len()..stop - head.len()], &[]]
+        } else {
+            [&head[start..], &tail[..stop - head.len()]]
+        })
     }
 
     fn get(&self, sample: u64) -> Result<f32, WefaxError> {

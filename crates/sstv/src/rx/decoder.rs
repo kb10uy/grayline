@@ -668,27 +668,26 @@ impl RxDecoder {
         Ok(Some(unit * self.mode.spec().rows_per_raster_unit() as usize))
     }
 
-    fn frequency_at(&self, sample: u64) -> Result<f32, SstvError> {
-        self.input
-            .as_ref()
-            .expect("input initialized")
-            .frequency(sample)
-            .ok_or(if self.rebuilding {
-                SstvError::InsufficientStagedData {
-                    required_sample: sample,
-                }
-            } else {
-                SstvError::SampleDiscarded { sample }
-            })
-    }
-
     fn mean_frequency(&self, range: (u64, u64)) -> Result<f64, SstvError> {
         let (first, end) = range;
-        let mut sum = 0.0_f64;
-        for sample in first..end {
-            sum += f64::from(self.frequency_at(sample)?);
+        let input = self.input.as_ref().expect("input initialized");
+        match input.frequency_sum(first, end) {
+            Some(sum) => Ok(sum / (end - first) as f64),
+            None => {
+                let sample = if first < input.first() {
+                    first
+                } else {
+                    first.max(input.end())
+                };
+                Err(if self.rebuilding {
+                    SstvError::InsufficientStagedData {
+                        required_sample: sample,
+                    }
+                } else {
+                    SstvError::SampleDiscarded { sample }
+                })
+            }
         }
-        Ok(sum / (end - first) as f64)
     }
 
     fn level_at(&self, unit: usize, segment: PixelSegment, x: usize) -> Result<u8, SstvError> {

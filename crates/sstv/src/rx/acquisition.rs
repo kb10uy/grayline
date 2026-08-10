@@ -5,7 +5,7 @@ use crate::{SstvError, time::SstvDuration};
 use super::{
     clock::RasterClock,
     config::sync_detector_delay_samples,
-    input::SampleBuffer,
+    input::{SampleBuffer, load_sync},
     raster::RasterProfile,
     sync::{RUN_THRESHOLD, refine_center},
 };
@@ -94,38 +94,39 @@ fn acquire_inner(
         .max_samples
         .and_then(|count| usize::try_from(count).ok())
         .map_or(retained, |count| count.min(retained));
-    let strength = |index: usize| input.sync_at(index).unwrap_or(0.0);
-    let mut index = 0;
-    while index < sync_len {
-        if strength(index) < RUN_THRESHOLD {
+    let runs = input
+        .sync_runs(input.first(), input.first() + sync_len as u64)
+        .unwrap_or([&[], &[]]);
+    // A pulse the window cuts short has no usable center: both its envelope
+    // and its frequency span end early, which would pull the fit forward.
+    // Leaving the final run open when the samples end drops it.
+    let mut open_run: Option<(usize, f64, f64)> = None;
+    let mut index = 0_usize;
+    for run in runs {
+        for &stored in run {
+            let value = load_sync(stored);
+            if value >= RUN_THRESHOLD {
+                let (_, weighted, total) = open_run.get_or_insert((index, 0.0, 0.0));
+                *weighted += index as f64 * f64::from(value);
+                *total += f64::from(value);
+            } else if let Some((start, weighted, total)) = open_run.take() {
+                let relative = if total > 0.0 {
+                    (weighted / total + 0.5) as u64
+                } else {
+                    ((start + index) / 2) as u64
+                };
+                let envelope_center = input.first() + relative;
+                centers.push(
+                    refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay).unwrap_or_else(
+                        || {
+                            (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay))
+                                .max(0.0) as u64
+                        },
+                    ),
+                );
+            }
             index += 1;
-            continue;
         }
-        let start = index;
-        let mut weighted = 0.0_f64;
-        let mut total = 0.0_f64;
-        while index < sync_len && strength(index) >= RUN_THRESHOLD {
-            weighted += index as f64 * f64::from(strength(index));
-            total += f64::from(strength(index));
-            index += 1;
-        }
-        // A pulse the window cuts short has no usable center: both its envelope
-        // and its frequency span end early, which would pull the fit forward.
-        if index == sync_len {
-            break;
-        }
-        let relative = if total > 0.0 {
-            (weighted / total + 0.5) as u64
-        } else {
-            ((start + index) / 2) as u64
-        };
-        let envelope_center = input.first() + relative;
-        centers.push(
-            refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay).unwrap_or_else(|| {
-                (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay)).max(0.0)
-                    as u64
-            }),
-        );
     }
 
     let nominal = profile.period_ps as f64 * f64::from(sample_rate_hz) / 1_000_000_000_000.0;

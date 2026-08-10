@@ -1,9 +1,9 @@
-use core::f64::consts::{PI, TAU};
+use core::f64::consts::TAU;
 
 use crate::{
     DspError,
     filter::{Iir, IirLowPassDesign, IirResponse},
-    transform::HilbertTransformer,
+    transform::{AnalyticSample, HilbertTransformer},
 };
 
 /// Largest phase difference the discriminator measures over, in samples.
@@ -46,14 +46,14 @@ pub struct HilbertDiscriminatorDesign {
 #[derive(Clone, Debug)]
 pub struct HilbertDiscriminator {
     transformer: HilbertTransformer,
-    sample_rate_hz: f64,
     minimum_hz: f64,
     maximum_hz: f64,
     initial_hz: f64,
-    phase_history: [f64; MAXIMUM_PHASE_LAG],
-    phase_history_len: usize,
-    next_phase: usize,
+    analytic_history: [AnalyticSample; MAXIMUM_PHASE_LAG],
+    history_len: usize,
+    next_index: usize,
     phase_lag: usize,
+    frequency_scale: f64,
     output_filter: Iir,
     held_frequency: f64,
 }
@@ -73,14 +73,17 @@ impl HilbertDiscriminator {
         let upper_frequency_hz = sample_rate_hz * 0.5 - HILBERT_MARGIN_HZ;
         Ok(Self {
             transformer: HilbertTransformer::new(sample_rate_hz, order, HILBERT_MARGIN_HZ, upper_frequency_hz)?,
-            sample_rate_hz,
             minimum_hz: design.minimum_hz,
             maximum_hz: design.maximum_hz,
             initial_hz: design.initial_hz,
-            phase_history: [0.0; MAXIMUM_PHASE_LAG],
-            phase_history_len: 0,
-            next_phase: 0,
+            analytic_history: [AnalyticSample {
+                in_phase: 0.0,
+                quadrature: 0.0,
+            }; MAXIMUM_PHASE_LAG],
+            history_len: 0,
+            next_index: 0,
             phase_lag,
+            frequency_scale: sample_rate_hz / (TAU * phase_lag as f64),
             output_filter: Iir::from_low_pass(IirLowPassDesign {
                 order: 3,
                 sample_rate_hz,
@@ -98,18 +101,24 @@ impl HilbertDiscriminator {
     /// the last tone rather than as an excursion.
     pub fn process_sample(&mut self, sample: f64) -> f64 {
         let analytic = self.transformer.process_sample(sample);
-        let magnitude = libm::hypot(analytic.in_phase, analytic.quadrature);
-        let phase = libm::atan2(analytic.quadrature, analytic.in_phase);
-        let previous = (self.phase_history_len == self.phase_lag).then_some(self.phase_history[self.next_phase]);
-        self.phase_history[self.next_phase] = phase;
-        self.next_phase = (self.next_phase + 1) % self.phase_lag;
-        self.phase_history_len = (self.phase_history_len + 1).min(self.phase_lag);
+        let previous = (self.history_len == self.phase_lag).then_some(self.analytic_history[self.next_index]);
+        self.analytic_history[self.next_index] = analytic;
+        self.next_index += 1;
+        if self.next_index == self.phase_lag {
+            self.next_index = 0;
+        }
+        self.history_len = (self.history_len + 1).min(self.phase_lag);
+        let magnitude_squared = analytic.in_phase * analytic.in_phase + analytic.quadrature * analytic.quadrature;
         if let Some(previous) = previous
-            && magnitude > MAGNITUDE_FLOOR
+            && magnitude_squared > MAGNITUDE_FLOOR * MAGNITUDE_FLOOR
         {
-            let delta = wrap_phase(phase - previous);
-            self.held_frequency = (delta.abs() * self.sample_rate_hz / (TAU * self.phase_lag as f64))
-                .clamp(self.minimum_hz, self.maximum_hz);
+            // The conjugate product against the lagged sample carries the
+            // phase advance directly, so the difference arrives already
+            // wrapped into -PI..PI without either phase being measured.
+            let dot = analytic.in_phase * previous.in_phase + analytic.quadrature * previous.quadrature;
+            let cross = analytic.quadrature * previous.in_phase - analytic.in_phase * previous.quadrature;
+            let delta = libm::atan2(cross, dot);
+            self.held_frequency = (delta.abs() * self.frequency_scale).clamp(self.minimum_hz, self.maximum_hz);
         }
         self.output_filter.process_sample(self.held_frequency)
     }
@@ -130,20 +139,14 @@ impl HilbertDiscriminator {
     pub fn reset(&mut self) {
         self.transformer.reset();
         self.output_filter.reset();
-        self.phase_history = [0.0; MAXIMUM_PHASE_LAG];
-        self.phase_history_len = 0;
-        self.next_phase = 0;
+        self.analytic_history = [AnalyticSample {
+            in_phase: 0.0,
+            quadrature: 0.0,
+        }; MAXIMUM_PHASE_LAG];
+        self.history_len = 0;
+        self.next_index = 0;
         self.held_frequency = self.initial_hz;
     }
-}
-
-/// Wraps a phase difference into `-PI..PI`.
-fn wrap_phase(difference: f64) -> f64 {
-    let mut wrapped = libm::fmod(difference + PI, TAU);
-    if wrapped < 0.0 {
-        wrapped += TAU;
-    }
-    wrapped - PI
 }
 
 fn validate(design: &HilbertDiscriminatorDesign) -> Result<(), DspError> {

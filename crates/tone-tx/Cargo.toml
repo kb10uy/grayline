@@ -5,10 +5,18 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[lib]
+bench = false
+
 [dependencies]
 grayline-dsp = { path = "../dsp" }
 grayline-sstv = { path = "../sstv" }
 thiserror = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+criterion.workspace = true
 rstest.workspace = true
+
+[[bench]]
+name = "modulate"
+harness = false

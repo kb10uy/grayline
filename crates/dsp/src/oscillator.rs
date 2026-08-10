@@ -11,6 +11,7 @@ pub struct Vco {
     sample_rate_hz: f64,
     free_frequency_hz: f64,
     control_gain_hz: f64,
+    free_phase_step: f64,
     phase: f64,
     sine_table: Vec<f64>,
 }
@@ -31,6 +32,7 @@ impl Vco {
             sample_rate_hz,
             free_frequency_hz,
             control_gain_hz,
+            free_phase_step: free_frequency_hz / sample_rate_hz,
             phase: 0.0,
             sine_table,
         })
@@ -55,6 +57,7 @@ impl Vco {
     pub fn set_free_frequency(&mut self, frequency_hz: f64) -> Result<(), DspError> {
         validate_free_frequency(self.sample_rate_hz, frequency_hz)?;
         self.free_frequency_hz = frequency_hz;
+        self.free_phase_step = frequency_hz / self.sample_rate_hz;
         Ok(())
     }
 
@@ -82,19 +85,36 @@ impl Vco {
         Ok(self.sine_at_phase(self.phase))
     }
 
+    /// Advances at the free-running frequency and returns one sine sample.
+    ///
+    /// This is [`Vco::process_sample`] with a zero control: the free-running
+    /// frequency was validated when it was set, so a caller synthesizing plain
+    /// tones has no per-sample validation to pay for or error to handle.
+    pub fn free_running_sample(&mut self) -> f64 {
+        self.phase += self.free_phase_step;
+        self.phase -= libm::floor(self.phase);
+        self.sine_at_phase(self.phase)
+    }
+
     /// Resets phase to zero without changing oscillator frequencies.
     pub fn reset_phase(&mut self) {
         self.phase = 0.0;
     }
 
+    /// Interpolates the table at `phase`, which the callers keep in `[0, 1)`.
     fn sine_at_phase(&self, phase: f64) -> f64 {
         let position = phase * self.sine_table.len() as f64;
-        let lower_index = position as usize % self.sine_table.len();
-        let upper_index = (lower_index + 1) % self.sine_table.len();
-        let fraction = position - libm::floor(position);
+        let lower_index = position as usize;
+        let fraction = position - lower_index as f64;
+        let lower = self.sine_table[lower_index];
+        let upper = if lower_index + 1 == self.sine_table.len() {
+            self.sine_table[0]
+        } else {
+            self.sine_table[lower_index + 1]
+        };
         // Linear interpolation favors spectral quality over bit compatibility
         // with MMSSTV's truncated table lookup.
-        self.sine_table[lower_index] + fraction * (self.sine_table[upper_index] - self.sine_table[lower_index])
+        lower + fraction * (upper - lower)
     }
 }
 

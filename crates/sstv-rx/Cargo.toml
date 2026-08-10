@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[lib]
+bench = false
+
 [dependencies]
 grayline-dsp = { path = "../dsp" }
 grayline-sstv-fskid = { path = "../sstv-fskid" }
@@ -12,4 +15,10 @@ grayline-sstv = { path = "../sstv" }
 thiserror = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+criterion.workspace = true
+grayline-tone-tx = { path = "../tone-tx" }
 rstest.workspace = true
+
+[[bench]]
+name = "receive"
+harness = false
