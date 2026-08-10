@@ -1,6 +1,11 @@
 use alloc::{collections::VecDeque, vec::Vec};
 
-use super::{clock::RasterClock, config::sync_detector_delay_samples, input::SampleBuffer, raster::RasterProfile};
+use super::{
+    clock::RasterClock,
+    config::sync_detector_delay_samples,
+    input::{SampleBuffer, load_frequency, load_sync},
+    raster::RasterProfile,
+};
 use crate::time::SstvDuration;
 
 pub(super) const HISTORY_LEN: usize = 16;
@@ -53,30 +58,37 @@ pub(super) fn observe(
         return None;
     }
 
+    let runs = input.sync_runs(start, end)?;
     let mut peak = 0.0_f32;
     let mut peak_sample = start;
     let mut sum = 0.0_f64;
-    let mut count = 0_u64;
-    for sample in start..end {
-        let value = input.sync(sample)?;
-        sum += f64::from(value);
-        count += 1;
-        if value > peak {
-            peak = value;
-            peak_sample = sample;
+    let mut position = start;
+    for run in runs {
+        for &stored in run {
+            let value = load_sync(stored);
+            sum += f64::from(value);
+            if value > peak {
+                peak = value;
+                peak_sample = position;
+            }
+            position += 1;
         }
     }
-    let background = (sum / count as f64) as f32;
+    let background = (sum / (end - start) as f64) as f32;
     let contrast = (peak - background).max(0.0);
     let threshold = background + contrast * 0.5;
     let mut weighted = 0.0_f64;
     let mut weight = 0.0_f64;
-    for sample in start..end {
-        let value = input.sync(sample)?;
-        if value >= threshold {
-            let relative = f64::from(value - threshold);
-            weighted += sample as f64 * relative;
-            weight += relative;
+    let mut position = start;
+    for run in runs {
+        for &stored in run {
+            let value = load_sync(stored);
+            if value >= threshold {
+                let relative = f64::from(value - threshold);
+                weighted += position as f64 * relative;
+                weight += relative;
+            }
+            position += 1;
         }
     }
     let envelope_center = if weight > 0.0 {
@@ -144,10 +156,15 @@ pub(super) fn refine_center(
     if (end - start) as usize <= length {
         return None;
     }
+    let runs = input.frequency_runs(start, end)?;
     let mut prefix = Vec::with_capacity((end - start) as usize + 1);
     prefix.push(0.0_f64);
-    for sample in start..end {
-        prefix.push(prefix[prefix.len() - 1] + f64::from(input.frequency(sample)?));
+    let mut running = 0.0_f64;
+    for run in runs {
+        for &stored in run {
+            running += f64::from(load_frequency(stored));
+            prefix.push(running);
+        }
     }
     let cost: Vec<_> = (0..prefix.len() - length)
         .map(|offset| prefix[offset + length] - prefix[offset])
