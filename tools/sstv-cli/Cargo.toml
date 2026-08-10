@@ -1,18 +1,25 @@
 [package]
-name = "grayline-decode-wav"
+name = "grayline-sstv-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "decode-wav"
+name = "gl-sstv"
 path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
 hound.workspace = true
 image.workspace = true
+jiff.workspace = true
 grayline-sstv-rx = { path = "../../crates/sstv-rx" }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
+grayline-tone-tx = { path = "../../crates/tone-tx" }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
+grayline-sstv-template = { path = "../../crates/sstv-template" }
+
+[dev-dependencies]
+rstest.workspace = true

@@ -176,7 +176,7 @@ mod tests {
         let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
         let source = RgbImage::new(size, Rgb8::new(80, 140, 200));
         let sample_rate = 8_000_u32;
-        let unique = format!("decode-wav-{}", std::process::id());
+        let unique = format!("gl-sstv-decode-{}", std::process::id());
         let input = std::env::temp_dir().join(format!("{unique}.wav"));
         let mut writer = WavWriter::create(
             &input,

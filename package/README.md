@@ -9,7 +9,7 @@ install:
 - `/usr/share/doc/grayline-sstv/help/` — the operator's manual, which the Help menu
   falls back to when no `help/` directory sits beside the executable
 
-Not packaged: the `encode-wav` and `decode-wav` command-line tools, and the
+Not packaged: the `gl-sstv` command-line tool, and the
 MMSSTV templates in [assets/templates/](../assets/templates) — copy those into
 `~/.local/share/grayline/sstv/templates` yourself. Installing them under
 `/usr/share/grayline-sstv/templates` is a possible follow-up.

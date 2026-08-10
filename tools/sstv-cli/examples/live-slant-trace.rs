@@ -1,21 +1,19 @@
 //! Traces the receive events the application's configuration produces.
 //!
-//! `decode-wav` decodes offline, with one precise fit after the transmission
-//! ends. The application decodes live instead, correcting the raster while the
-//! picture arrives, so its failures do not reproduce through the binary. This
-//! drives that configuration over a recording and prints every clock decision.
+//! `gl-sstv decode` decodes offline, with one precise fit after the
+//! transmission ends. The application decodes live instead, correcting the
+//! raster while the picture arrives, so its failures do not reproduce through
+//! the binary. This drives that configuration over a recording and prints every
+//! clock decision.
 //!
 //! ```text
-//! cargo run -p decode-wav --example live-slant-trace -- RECORDING.wav [OPTIONS]
-//!
-//!   --no-slant       decode with live slant tracking off
-//!   --rate HZ        resample first, as playing into a capture device does
-//!   --skew PPM       stretch the recording against the rate, which is slant
+//! cargo run -p grayline-sstv-cli --example live-slant-trace -- RECORDING.wav [OPTIONS]
 //! ```
 
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
+use clap::Parser;
 use grayline_sstv::{
     RxDecoder,
     rx::{RxEvent, RxState},
@@ -26,37 +24,25 @@ use hound::{SampleFormat, WavReader};
 /// Matches the application's receive worker.
 const STAGING_SECONDS: usize = 300;
 
+/// Traces the receive events the application's configuration produces.
+#[derive(Debug, Parser)]
+#[command(name = "live-slant-trace", about, long_about = None)]
 struct Options {
-    input: PathBuf,
+    /// Decode with live slant tracking off.
+    #[arg(long = "no-slant", action = clap::ArgAction::SetFalse)]
     live_slant: bool,
-    rate: Option<u32>,
-    skew_ppm: f64,
-}
 
-fn parse_options() -> Result<Options> {
-    let mut arguments = env::args().skip(1);
-    let mut options = Options {
-        input: PathBuf::new(),
-        live_slant: true,
-        rate: None,
-        skew_ppm: 0.0,
-    };
-    let mut input = None;
-    while let Some(argument) = arguments.next() {
-        match argument.as_str() {
-            "--no-slant" => options.live_slant = false,
-            "--rate" => {
-                options.rate = Some(arguments.next().context("--rate needs a value")?.parse()?);
-            }
-            "--skew" => {
-                options.skew_ppm = arguments.next().context("--skew needs a value")?.parse()?;
-            }
-            value if value.starts_with("--") => bail!("unknown option {value}"),
-            value => input = Some(PathBuf::from(value)),
-        }
-    }
-    options.input = input.context("usage: live-slant-trace <RECORDING.wav> [OPTIONS]")?;
-    Ok(options)
+    /// Resample first, as playing into a capture device does.
+    #[arg(long, value_name = "HZ")]
+    rate: Option<u32>,
+
+    /// Stretch the recording against the rate, which is slant.
+    #[arg(long = "skew", value_name = "PPM", default_value_t = 0.0)]
+    skew_ppm: f64,
+
+    /// Recording to trace.
+    #[arg(value_name = "RECORDING.wav")]
+    input: PathBuf,
 }
 
 fn read_mono(reader: &mut WavReader<std::io::BufReader<std::fs::File>>) -> Result<Vec<f32>> {
@@ -94,7 +80,7 @@ fn resample(samples: &[f32], ratio: f64) -> Vec<f32> {
 }
 
 fn main() -> Result<()> {
-    let options = parse_options()?;
+    let options = Options::parse();
     let mut reader = WavReader::open(&options.input)?;
     let source_rate = reader.spec().sample_rate;
     let samples = read_mono(&mut reader)?;
@@ -121,7 +107,7 @@ fn main() -> Result<()> {
     )?;
     let mut rows = 0_usize;
     let mut announced = None;
-    for packet in samples.chunks(grayline_decode_wav::DEFAULT_PCM_PACKET_SIZE) {
+    for packet in samples.chunks(grayline_sstv_cli::decode::DEFAULT_PCM_PACKET_SIZE) {
         pipeline.process(packet, |event| match event {
             RxEvent::RowDecoded { .. } => rows += 1,
             RxEvent::SlantAdjusted {

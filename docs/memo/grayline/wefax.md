@@ -361,5 +361,5 @@ There are no recorded fixtures. Every signal is built in the test that needs
 it, from a phase-continuous oscillator, exactly as the SSTV front end's own
 integration test does.
 
-`tools/decode-fax-wav` decodes a WAV recording to a grayscale image and is the
-way to try the path against something real.
+`tools/wefax-cli` decodes a WAV recording to a grayscale image with
+`gl-wefax decode`, and is the way to try the path against something real.
