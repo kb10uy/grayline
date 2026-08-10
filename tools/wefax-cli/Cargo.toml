@@ -1,16 +1,17 @@
 [package]
-name = "grayline-decode-fax-wav"
+name = "grayline-wefax-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "decode-fax-wav"
+name = "gl-wefax"
 path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
 hound.workspace = true
 image.workspace = true
 grayline-wefax = { path = "../../crates/wefax", features = ["std"] }

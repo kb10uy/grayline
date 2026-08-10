@@ -26,7 +26,9 @@ running at <https://rssstv.kb10uy.dev/>.
 - `apps/` — one directory per application, plus the browser demo.
 - `crates/` — the libraries. Directory names carry no prefix; the packages
   they hold are named `grayline-*`.
-- `tools/` — development command-line tools that are not shipped.
+- `tools/` — development command-line tools that are not shipped. One
+  directory per mode, named `<mode>-cli`, holding the package
+  `grayline-<mode>-cli` and the binary `gl-<mode>`.
 - `assets/` — data shipped outside any one crate, such as the ported MMSSTV
   templates under `assets/templates/`.
 - `docs/memo/` — development documentation, divided by subject and indexed by

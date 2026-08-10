@@ -52,7 +52,7 @@ platform integration, and application behavior.
 | Audio adapters | Platform-specific input and output streams | `grayline-audio`; capture and playback implemented |
 | Rig transport | How a rig is reached: a `rigctld` socket | `grayline-rig`; implemented |
 | Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-sstv` |
-| Integration | Composition of core stages for a particular environment | `decode-wav`, `encode-wav`, and `web-demo` |
+| Integration | Composition of core stages for a particular environment | `gl-sstv`, `gl-wefax`, and `web-demo` |
 | Template composition | KDL scene parsing, variables, RGBA overlay rendering, and RGB composition | `grayline-sstv-template` |
 | Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv` receive interface; designed in [gui-design.md](gui-design.md) |
 
@@ -89,7 +89,7 @@ buffer sizes and scheduling without changing protocol behavior.
 ### Current Receive Flow
 
 The complete receive integration currently available is the offline
-`decode-wav` path:
+`gl-sstv decode` path:
 
 ```text
 WAV file
@@ -104,7 +104,7 @@ WAV file
 A live receive path also exists in `grayline-sstv`, where the same stages run on a
 worker thread fed by `grayline-audio` instead of a WAV reader.
 
-`decode-wav` reads and processes PCM packets without retaining the complete WAV
+`gl-sstv decode` reads and processes PCM packets without retaining the complete WAV
 or a separate complete demodulated array. Its packet size defaults to 1024 mono
 samples and is configurable with `--packet-size`. Demodulation and raster
 decoding run sequentially in one thread, while bounded staging may retain
@@ -113,7 +113,7 @@ live audio source yet.
 
 ### Current Transmit Flow
 
-The complete offline transmit integration is the `encode-wav` path:
+The complete offline transmit integration is the `gl-sstv encode` path:
 
 ```text
 background BMP/JPEG/PNG
@@ -278,10 +278,11 @@ The implementation is divided by responsibility:
 - `grayline-sstv-rx` reuses its existing AFC-adjusted 1900 and 2100 Hz
   resonators and converts their normalized envelopes to mark, space, or
   ambiguous samples.
-- `decode-wav` carries validated identifiers in `DecodeReport` and writes each
-  one to stdout as `fskid: CALLSIGN`.
+- `gl-sstv decode` carries validated identifiers in `DecodeReport` and writes
+  each one to stdout as `fskid: CALLSIGN`.
 - `grayline-sstv::TransmissionEncoder` places encoded FSKID events after the
-  conventional image footer, and `encode-wav` supplies its normalized callsign.
+  conventional image footer, and `gl-sstv encode` supplies its normalized
+  callsign.
 
 The core accepts classified detector samples rather than audio amplitudes. It is
 therefore independent of audio backends and detector scaling, while preserving
@@ -357,13 +358,13 @@ The workspace currently contains fifteen packages:
 | `grayline-tone-tx` | Timed-tone PCM modulation | Streaming phase-continuous modulation implemented |
 | `grayline-sstv-rx` | Receive front end | Incremental conventional-VIS demodulation implemented |
 | `grayline-sstv-template` | Portable application-support layer | KDL parsing and SVG-backed RGBA rendering implemented |
-| `decode-wav` | Offline receive integration | Implemented |
-| `encode-wav` | Template-to-WAV transmit integration | Implemented |
+| `grayline-sstv-cli` | Offline receive and transmit integration, as `gl-sstv` | Implemented |
 | `web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
+| `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
-| `decode-fax-wav` | Offline WEFAX receive integration | Implemented |
+| `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
@@ -377,7 +378,7 @@ grayline-sstv-rx ----+
 grayline-sstv-fskid ----------+
 grayline-sstv -----------+-> grayline-tone-tx
 grayline-sstv-fskid ---------+-> grayline-sstv-rx --+
-grayline-sstv ----------+                       +-> decode-wav
+grayline-sstv ----------+                       +-> grayline-sstv-cli
 grayline-sstv-fskid ----------------------------------+
 grayline-audio ----------+
 grayline-sstv-rx ----+
@@ -385,7 +386,7 @@ grayline-sstv-fskid ----------+
 grayline-sstv -----------+-> grayline-sstv-template
 grayline-sstv-fskid ----------+
 grayline-tone-tx ------+
-grayline-sstv -----------+-> encode-wav
+grayline-sstv -----------+-> grayline-sstv-cli
 grayline-sstv-template -------+
 grayline-sstv-rx ----+
 grayline-sstv-fskid ----------+
@@ -399,7 +400,7 @@ grayline-rig ------------+-> grayline-sstv-app
 grayline-sstv -----------+
 grayline-sstv-template -------+
 
-grayline-dsp ------------> grayline-wefax --> decode-fax-wav
+grayline-dsp ------------> grayline-wefax --> grayline-wefax-cli
 
 grayline-audio ----------+
 grayline-shell ----------+-> grayline-wefax-app
@@ -434,7 +435,7 @@ in [rig-control.md](rig-control.md).
 
 `grayline-dsp`, `grayline-sstv`, and `grayline-wefax` build as allocation-backed
 `no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
-remain in `decode-wav` and `encode-wav`, outside the portable core.
+remain in `grayline-sstv-cli` and `grayline-wefax-cli`, outside the portable core.
 `grayline-sstv-template` is a
 standard-library application-support crate: it depends on `grayline-sstv` only at
 the received-image and final RGB composition boundaries. It does not expose
@@ -515,7 +516,7 @@ is a deterministic anti-noise reconstruction policy rather than a downsampled
 intermediate stream. Live phase correction adjusts the raster clock without
 inserting or deleting demodulated samples.
 
-`decode-wav` composes the existing receive stages packet by packet. It uses the
+`gl-sstv decode` composes the existing receive stages packet by packet. It uses the
 first WAV channel, enables live raster synchronization and bounded in-memory
 staging, performs global slant refinement, and saves BMP, JPEG, or PNG according
 to the output extension.
@@ -531,7 +532,7 @@ rate/epoch refinement at completion. Disabling it during a reception suppresses
 that refinement; enabling it after reception has started cannot reconstruct the
 missing unstaged prefix and therefore takes effect on the next reception.
 
-`encode-wav` prepares the background at the selected mode's transport size,
+`gl-sstv encode` prepares the background at the selected mode's transport size,
 renders the template with `${station.callsign}` and the background available as
 `rximage`, and streams a complete framed transmission through
 `grayline-tone-tx` into `hound::WavWriter`. It uses bounded 1024-sample PCM

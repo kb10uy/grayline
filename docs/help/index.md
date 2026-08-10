@@ -14,15 +14,11 @@ Grayline SSTV は、アマチュア無線の SSTV(Slow Scan Television)を送受
 | 名前 | 内容 |
 | --- | --- |
 | `grayline-sstv` | 本体。このマニュアルが説明するアプリケーション |
-| `encode-wav` | テンプレートを重ねた画像を SSTV の WAV に書き出すコマンド |
-| `decode-wav` | SSTV の WAV から画像を復元するコマンド |
 | `templates/` | MMSSTV 付属の 5 つのテンプレートを KDL 形式に移植したもの |
 | `help/` | このマニュアル |
 | `licenses.html` | 依存ライブラリのライセンス一覧 |
 | `LICENSE` | 本体のライセンス |
-
-`encode-wav` と `decode-wav` はコマンドラインツールです。使い方は同梱の
-`README.md` を参照してください。
+| `README.md` | 導入と補足 |
 
 ## 起動する
 

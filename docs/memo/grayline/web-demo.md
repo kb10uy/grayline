@@ -14,7 +14,7 @@ uses neither channels nor randomness. Nothing in it reaches a facility
 `wasm32-unknown-unknown` lacks, so the crate adds no signal processing of its
 own and changes nothing in the core. It is a `wasm-bindgen` surface over
 [`ReceivePipeline`](../../../grayline-sstv-rx/src/pipeline.rs), which is the
-same wiring `decode-wav` uses.
+same wiring `gl-sstv decode` uses.
 
 `grayline-sstv-rx` is not itself `no_std`, and it does not need to be. Its
 uses of the standard library are `VecDeque`, `core::f64` constants reached
@@ -69,18 +69,19 @@ decoding a 48 kHz WAV into a 48 kHz context returns about half of its samples
 off by a fraction of a least significant bit. That is inaudible and very nearly
 invisible — it moved 27 of a Robot 36 picture's 76,800 pixels, by at most 2 of
 255, all of them on hard chroma edges — but it means the demo cannot be checked
-against `decode-wav` for equality, which is the only cheap way to know the
+against `gl-sstv decode` for equality, which is the only cheap way to know the
 decode is right.
 
-Reading the chunks directly is some forty lines, matches `decode-wav`'s scaling
-exactly, accepts the rates below 8 kHz that the API will not open a context at,
-and makes the pictures identical. `decodeAudioData` remains the fallback for
-formats that are not PCM WAV, where the page says so in its log.
+Reading the chunks directly is some forty lines, matches the scaling of
+`gl-sstv decode` exactly, accepts the rates below 8 kHz that the API will not
+open a context at, and makes the pictures identical. `decodeAudioData` remains
+the fallback for formats that are not PCM WAV, where the page says so in its
+log.
 
 ## Staging and memory
 
 Staged samples cost three bytes each, and the file path states the recording's
-length, as `decode-wav` does. The bound is not an allocation: `RxDecoder`
+length, as `gl-sstv decode` does. The bound is not an allocation: `RxDecoder`
 reserves `max_samples` capped at twice the detected mode's raster, so a
 generous figure costs nothing until a long mode is actually detected.
 
@@ -141,9 +142,9 @@ HTTPS or localhost.
 
 ## What is verified
 
-Pictures encoded by `encode-wav` and decoded by `decode-wav` are the reference.
+Pictures encoded and decoded by `gl-sstv` are the reference.
 Robot 36, Scottie 1, and PD120 at 48 kHz, and Robot 36 decimated to 16 kHz, all
-decode in the browser to images identical to `decode-wav`'s, with the same
+decode in the browser to images identical to `gl-sstv decode`'s, with the same
 detected mode, AFC offset, fitted raster rate, row count, and FSKID. A 4 kHz
 file is refused by the constructor, and audio with no VIS reports that nothing
 was detected without disturbing the picture already on screen.

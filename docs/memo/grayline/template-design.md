@@ -563,11 +563,11 @@ directory, explicitly loads system fonts, and supplies an opaque white image for
 every `rximage` layer. It supplies no text variables, so a template containing a
 `${...}` expression fails with the normal missing-variable error.
 
-The `encode-wav` integration instead renders at the selected SSTV mode's
+The `gl-sstv encode` integration instead renders at the selected SSTV mode's
 transport dimensions:
 
 ```text
-cargo run -p encode-wav -- --callsign N0CALL template.kdl background.png robot36 output.wav
+cargo run -p grayline-sstv-cli -- encode --callsign N0CALL template.kdl background.png robot36 output.wav
 ```
 
 It cover-resizes and center-crops the background, supplies that prepared image

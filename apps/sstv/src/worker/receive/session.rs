@@ -396,7 +396,7 @@ impl Session {
     ///
     /// A refit raster reaches slightly past the samples decoded live, so the
     /// tail has to be staged before refinement can succeed. This mirrors what
-    /// the offline `decode-wav` integration does at end of file.
+    /// the offline `gl-sstv decode` integration does at end of file.
     fn stage_tail(&mut self, decoder: &mut RxDecoder, block: DemodulatedBlock<'_>) {
         if !matches!(self.refinement, Refinement::Waiting) {
             return;

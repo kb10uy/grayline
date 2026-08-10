@@ -260,7 +260,7 @@ mod tests {
     fn packet_sizes_preserve_stereo_wav_decode() {
         let format = Format::MARINE;
         let sample_rate = 11_025_u32;
-        let unique = format!("decode-fax-wav-{}", std::process::id());
+        let unique = format!("gl-wefax-decode-{}", std::process::id());
         let input = std::env::temp_dir().join(format!("{unique}.wav"));
         write_transmission(&input, sample_rate, format);
 
@@ -291,7 +291,7 @@ mod tests {
             lines_per_minute: grayline_wefax::LinesPerMinute::L120,
         };
         let sample_rate = 11_025_u32;
-        let unique = format!("decode-fax-wav-manual-{}", std::process::id());
+        let unique = format!("gl-wefax-decode-manual-{}", std::process::id());
         let input = std::env::temp_dir().join(format!("{unique}.wav"));
         let output = std::env::temp_dir().join(format!("{unique}.png"));
         write_transmission(&input, sample_rate, format);

@@ -20,7 +20,12 @@ The repository contains:
   needs and no mode decides: platform integration, the localization machinery,
   and the log. An application supplies what makes it itself through
   `grayline_shell::Identity` and an `i18n::Catalog`.
-- `tools/`: development command-line tools that are not shipped.
+- `tools/`: development command-line tools that are not shipped. One directory
+  per mode, named `<mode>-cli`, holding the package `grayline-<mode>-cli` and
+  the binary `gl-<mode>`; `gl-sstv` encodes and decodes WAV files and
+  `gl-wefax` decodes them. Each binary parses its command line with clap's
+  derive interface and reaches the work through its own library, so a
+  subcommand stays a thin layer over a tested function.
 - `assets/`: data the repository ships outside any one crate, such as the
   ported MMSSTV templates under `assets/templates/`.
 - `docs/reference/mmsstv/`: the original MMSSTV source code, included as a Git

@@ -192,8 +192,9 @@ fn template_variables(callsign: &str) -> Variables {
 mod tests {
     use std::fs;
 
-    use grayline_decode_wav::{DecodeStatus, decode_file};
     use rstest::rstest;
+
+    use crate::decode::{DecodeStatus, decode_file};
 
     use super::*;
 
@@ -234,7 +235,7 @@ mod tests {
 
     #[test]
     fn generated_wav_round_trips_with_callsign() {
-        let unique = format!("encode-wav-{}", std::process::id());
+        let unique = format!("gl-sstv-encode-{}", std::process::id());
         let directory = std::env::temp_dir().join(unique);
         fs::create_dir_all(&directory).unwrap();
         let template = directory.join("template.kdl");

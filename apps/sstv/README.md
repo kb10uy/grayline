@@ -68,13 +68,20 @@ ships, ported to the KDL format. Copy the ones you want into the application's
 templates directory; each file records in a comment what its original did that
 this format cannot.
 
-## Encode WAV
+## Command-line tools
 
-`encode-wav` renders a KDL template over a background image and writes a
+`gl-sstv` encodes and decodes WAV files without starting the application. It is
+a development tool and is not shipped in the release archives; run it from the
+checkout, or install it with `cargo install --path tools/sstv-cli`. Every
+subcommand describes itself under `--help`.
+
+### Encode
+
+`gl-sstv encode` renders a KDL template over a background image and writes a
 complete SSTV transmission as streaming 48 kHz mono 16-bit PCM:
 
 ```text
-cargo run -p grayline-encode-wav -- [--callsign CALLSIGN] <TEMPLATE.kdl> <BACKGROUND_IMAGE> <MODE> <OUTPUT.wav>
+cargo run -p grayline-sstv-cli -- encode [--callsign CALLSIGN] <TEMPLATE.kdl> <BACKGROUND_IMAGE> <MODE> <OUTPUT.wav>
 ```
 
 The callsign defaults to `N0CALL`, is uppercased, replaces `${station.callsign}`
@@ -88,11 +95,14 @@ Supported transmit modes are Robot 36/72, Scottie 1/2/DX, Martin 1/2, and
 PD50/90/120/160/180/240/290. Mode arguments ignore ASCII case, spaces, hyphens,
 and underscores.
 
-## Decode WAV
+### Decode
 
 ```text
-cargo run -p grayline-decode-wav -- [--packet-size SAMPLES] <INPUT.wav> <OUTPUT_IMAGE>
+cargo run -p grayline-sstv-cli -- decode [--packet-size SAMPLES] <INPUT.wav> <OUTPUT_IMAGE>
 ```
+
+A decode that saved less than a whole picture exits 3, a misused command line
+exits 2, and any other failure exits 1.
 
 ## Web demo
 
@@ -100,7 +110,7 @@ The receive path also builds for WebAssembly, and
 <https://rssstv.kb10uy.dev/> runs it in the browser: drop a recording on the
 page, or point a microphone at a receiver, and the picture is decoded by the
 same Rust the desktop application uses. Its images are identical to the ones
-`decode-wav` produces from the same files. Pushing to `master` deploys it.
+`gl-sstv decode` produces from the same files. Pushing to `master` deploys it.
 
 ```text
 rustup target add wasm32-unknown-unknown

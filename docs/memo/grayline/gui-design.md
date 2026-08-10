@@ -162,8 +162,8 @@ interface. Namesakes that even that cannot separate are numbered.
 `grayline-audio` is a new crate. It owns device enumeration, stream formats, and
 callback scheduling, and exposes only normalized mono `f32` blocks with sample
 positions. Keeping it separate preserves the rule that platform types must not
-appear in reusable core APIs, and lets the offline `decode-wav` and
-`encode-wav` integrations remain unaffected.
+appear in reusable core APIs, and lets the offline `gl-sstv` integrations
+remain unaffected.
 
 The interface depends on `grayline-audio`, `grayline-sstv`, `grayline-sstv-rx`,
 `grayline-tone-tx`, `grayline-sstv-fskid`, and `grayline-sstv-template`. No core crate gains
@@ -204,7 +204,7 @@ Three properties follow from this split:
 
 The receive worker owns one `Demodulator` and, after VIS detection, one
 `RxDecoder`. It reproduces the composition already proven in
-`decode-wav`, with two differences: input
+`gl-sstv decode`, with two differences: input
 arrives from a live queue instead of a WAV reader, and the worker publishes
 intermediate snapshots instead of only a final result.
 
@@ -398,7 +398,7 @@ background. What it produces is the transmit image outright: there is no
 separate preview to confirm, so choosing a template or a stock changes what the
 transmit tab shows and what TX would send in one step. The transmit worker
 builds a `TransmissionEncoder` from that frame and streams PCM through
-`Modulator` into the playback queue, mirroring `encode-wav`.
+`Modulator` into the playback queue, mirroring `gl-sstv encode`.
 Template rendering through `resvg` is not real-time and runs before the
 transmission starts, not inside the streaming loop.
 
