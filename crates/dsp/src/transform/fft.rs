@@ -147,6 +147,12 @@ impl Fft {
                 buffer.swap(index, target);
             }
         }
+        // Conjugation as a sign carried into the butterfly keeps the direction
+        // choice out of the innermost loop.
+        let imaginary_sign = match direction {
+            FftDirection::Forward => 1.0,
+            FftDirection::Inverse => -1.0,
+        };
         let mut half = 1;
         while half < self.length {
             // Twiddles are stored for the largest stage, so a stride selects
@@ -155,10 +161,7 @@ impl Fft {
             for start in (0..self.length).step_by(half * 2) {
                 for offset in 0..half {
                     let twiddle = self.twiddles[offset * stride];
-                    let twiddle = match direction {
-                        FftDirection::Forward => twiddle,
-                        FftDirection::Inverse => twiddle.conjugate(),
-                    };
+                    let twiddle = Complex::new(twiddle.re, twiddle.im * imaginary_sign);
                     let even = buffer[start + offset];
                     let odd = buffer[start + offset + half] * twiddle;
                     buffer[start + offset] = even + odd;

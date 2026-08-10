@@ -278,6 +278,9 @@ fn record_played(state: &PlaybackState, count: usize) {
     state.played.fetch_add(count as u64, Ordering::Release);
 }
 
+/// Mono frames moved out of the ring per batch on the audio thread.
+const RENDER_BATCH_FRAMES: usize = 64;
+
 fn render<T>(output: &mut [T], channels: usize, consumer: &mut HeapCons<f32>, state: &PlaybackState)
 where
     T: Sample + FromSample<f32>,
@@ -292,21 +295,36 @@ where
         output.fill(T::from_sample(0.0));
         return;
     }
-    for frame in output.chunks_mut(channels) {
-        let sample = match consumer.try_pop() {
-            Some(sample) => {
-                record_played(state, 1);
-                sample
-            }
-            None => {
-                if !state.finished.load(Ordering::Acquire) && !state.cancelled.load(Ordering::Acquire) {
-                    state.underrun.fetch_add(1, Ordering::Relaxed);
-                }
-                0.0
-            }
-        };
-        let converted = T::from_sample(sample);
-        frame.fill(converted);
+    // Batching keeps the per-frame atomics off the audio thread: one pop and
+    // one counter update move a whole batch, where popping frame by frame
+    // costs an index handshake and a shared-counter write each.
+    let mut scratch = [0.0_f32; RENDER_BATCH_FRAMES];
+    let mut remaining = output.len() / channels;
+    let mut frames = output.chunks_mut(channels);
+    let mut played = 0_usize;
+    let mut missing = 0_usize;
+    while remaining > 0 {
+        let want = remaining.min(RENDER_BATCH_FRAMES);
+        let got = consumer.pop_slice(&mut scratch[..want]);
+        for &sample in &scratch[..got] {
+            let converted = T::from_sample(sample);
+            frames.next().expect("frames match the counted budget").fill(converted);
+        }
+        for _ in got..want {
+            frames
+                .next()
+                .expect("frames match the counted budget")
+                .fill(T::from_sample(0.0));
+        }
+        played += got;
+        missing += want - got;
+        remaining -= want;
+    }
+    if played > 0 {
+        record_played(state, played);
+    }
+    if missing > 0 && !state.finished.load(Ordering::Acquire) && !state.cancelled.load(Ordering::Acquire) {
+        state.underrun.fetch_add(missing as u64, Ordering::Relaxed);
     }
 }
 

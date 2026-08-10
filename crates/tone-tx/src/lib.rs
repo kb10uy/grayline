@@ -97,10 +97,7 @@ where
                 block.fill(0.0);
             } else {
                 for sample in block {
-                    *sample = self
-                        .oscillator
-                        .process_sample(0.0)
-                        .map_err(|_| ModulatorError::InvalidFrequency)? as f32;
+                    *sample = self.oscillator.free_running_sample() as f32;
                 }
             }
             self.sample_position = self
