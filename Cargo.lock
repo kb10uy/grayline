@@ -603,9 +603,9 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f7dc094d718f2e1c1559ad110e27eeaae14a5465d3d56dd6dbd793079fbd530"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
 dependencies = [
  "memchr",
  "serde_core",
@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-audio"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "cpal",
  "ringbuf",
@@ -1974,7 +1974,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-dsp"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "criterion",
  "libm",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rig"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rstest",
  "thiserror 2.0.20",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-shell"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "criterion",
  "grayline-sstv-fskid",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-app"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2056,7 +2056,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2073,7 +2073,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-fskid"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rstest",
  "thiserror 2.0.20",
@@ -2081,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-rx"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-template"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "grayline-sstv",
  "image",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-tone-tx"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-web-demo"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "console_error_panic_hook",
  "grayline-sstv",
@@ -2130,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2141,7 +2141,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2166,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -6014,9 +6014,9 @@ dependencies = [
 
 [[package]]
 name = "zcheapstr"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "769381976ea05c1f0abde0ca527b02e415bccbdbad148534a2b0c1901c9ab934"
+checksum = "d1afec51604565183aeb5c54c20aeab286120d4e4460f7f76e3e8bb8c0d99473"
 dependencies = [
  "serde",
 ]

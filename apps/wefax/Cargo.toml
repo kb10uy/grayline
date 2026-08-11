@@ -4,7 +4,7 @@ description = "Weather fax reception for amateur radio"
 # Versioned on its own for the reason recorded beside the SSTV application's
 # own manifest. This one starts at 0.1.0 rather than inheriting the number
 # the SSTV application had reached before it existed.
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
