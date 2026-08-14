@@ -70,11 +70,9 @@ egui_kittest.workspace = true
 hound.workspace = true
 rstest.workspace = true
 
-# `cargo deb -p grayline-sstv-app` builds the Debian package from this. The
-# manual under target/help has to be rendered first; package/build-deb.sh does
-# both in order. Asset sources are relative to this directory, except
-# target/release/ paths, which cargo-deb resolves against the workspace target
-# directory.
+# `cargo deb -p grayline-sstv-app` builds the Debian package from this. Asset
+# sources are relative to this directory, except target/release/ paths, which
+# cargo-deb resolves against the workspace target directory.
 [package.metadata.deb]
 name = "grayline-sstv"
 section = "hamradio"
@@ -84,7 +82,7 @@ extended-description = """\
 Slow-scan television for amateur radio: receives and decodes SSTV \
 transmissions from a capture device, and composes and transmits pictures \
 from KDL templates, with optional rig control through Hamlib's rigctld. \
-The operator's manual is installed under /usr/share/doc/grayline-sstv/help."""
+The operator's manual is published at https://grayline.jl1his.radio/sstv/."""
 # $auto covers what the binary links (glibc, ALSA, gcc-s); the graphics and
 # keyboard libraries are dlopen'd at runtime, which dpkg-shlibdeps cannot see,
 # so they are named explicitly.
@@ -95,5 +93,4 @@ assets = [
     ["target/release/grayline-sstv", "usr/bin/", "755"],
     ["assets/grayline-sstv.desktop", "usr/share/applications/", "644"],
     ["assets/icon.png", "usr/share/icons/hicolor/512x512/apps/grayline-sstv.png", "644"],
-    ["../../target/help/*", "usr/share/doc/grayline-sstv/help/", "644"],
 ]

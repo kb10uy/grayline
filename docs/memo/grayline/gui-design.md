@@ -38,15 +38,18 @@ those directories are defined by, so a new one cannot be added without also
 being reachable. The application stores nothing of its own to save or reopen,
 so there is nothing else for the menu to offer.
 
-The Help menu opens `help/index.html`, which the release archive puts beside
-the executable, through the same platform call a directory goes through: every
-platform's file manager is also its shell opener, so HTML reaches the browser
-without a second mechanism. The manual is found beside the executable rather
-than under the application's directories because it belongs to the copy that
-was extracted — two versions on one machine each answer with their own, and
-nothing has to install it anywhere. A build run from the source tree has no
-manual beside it and the entry says so, since an entry that reports nothing
-cannot be told from one that is broken.
+The Help menu opens the operator's manual, which is published on the web at
+`https://grayline.jl1his.radio/<app>/` rather than carried beside the
+executable. It goes out through the same platform call a directory goes
+through: every platform's file manager is also its shell opener, so an address
+reaches the browser without a second mechanism. Published rather than bundled
+because the manual is corrected far more often than the application is
+released, and a copy in an archive is a copy that goes stale in the operator's
+hands with nothing to tell them so; it also spares every archive, package, and
+bundle a documentation tree of its own. The address is a field of `Identity`,
+so each application answers with its own pages, and
+`grayline_shell::manual_url` lets `GRAYLINE_MANUAL_URL` replace it — the one
+way to read a page before it is published.
 
 ## Platform Integration
 

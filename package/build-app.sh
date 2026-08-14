@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # Stages an application bundle with an ad-hoc signature and wraps it in a
 # drag-and-drop disk image. macOS only: sips, iconutil, codesign, and hdiutil.
-# The last two arguments may be empty, which leaves that part out.
-# Usage: build-app.sh <app> <binary> <licenses.html> <output.dmg> [help] [templates]
+# The last argument may be empty, which leaves that part out.
+# Usage: build-app.sh <app> <binary> <licenses.html> <output.dmg> [templates]
 set -euo pipefail
 
 app="$1"
 binary="$2"
 licenses="$3"
 dmg="$4"
-help="${5:-}"
-templates="${6:-}"
+templates="${5:-}"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/apps/$app/Cargo.toml" | head -n 1)"
@@ -92,9 +91,6 @@ cat > "$contents/Info.plist" <<PLIST
 PLIST
 
 install -m 755 "$binary" "$contents/MacOS/$executable"
-if [ -n "$help" ]; then
-  cp -R "$help" "$contents/Resources/help"
-fi
 cp "$root/LICENSE" "$licenses" "$contents/Resources/"
 codesign --force -s - "$app_dir"
 

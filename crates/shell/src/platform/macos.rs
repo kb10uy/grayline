@@ -1,7 +1,5 @@
 //! macOS integration.
 
-use std::path::PathBuf;
-
 use egui::IconData;
 
 use crate::Identity;
@@ -9,13 +7,6 @@ use crate::Identity;
 pub const UI_FONTS: [&str; 2] = ["Hiragino Sans", "Helvetica Neue"];
 
 pub const FILE_MANAGER: Option<&str> = Some("open");
-
-/// The bundle keeps the manual under `Contents/Resources`, a sibling of the
-/// `Contents/MacOS` directory the executable runs from.
-pub fn manual_fallback(_identity: &Identity) -> Option<PathBuf> {
-    let executable = std::env::current_exe().ok()?;
-    Some(executable.parent()?.parent()?.join("Resources/help/index.html"))
-}
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";
 

@@ -16,6 +16,7 @@ use crate::worker::receive::StripUpdate;
 struct RecordingPlatform {
     activities: Arc<Mutex<Vec<Activity>>>,
     opened: Arc<Mutex<Vec<PathBuf>>>,
+    visited: Arc<Mutex<Vec<String>>>,
 }
 
 impl Platform for RecordingPlatform {
@@ -25,6 +26,11 @@ impl Platform for RecordingPlatform {
 
     fn open_path(&mut self, path: &Path) -> io::Result<()> {
         self.opened.lock().unwrap().push(path.to_path_buf());
+        Ok(())
+    }
+
+    fn open_url(&mut self, url: &str) -> io::Result<()> {
+        self.visited.lock().unwrap().push(url.to_owned());
         Ok(())
     }
 }
@@ -162,16 +168,19 @@ fn opening_a_folder_reaches_the_platform() {
     assert_eq!(opened.lock().unwrap().len(), 2);
 }
 
-/// A build run from the source tree has no manual beside it, and the operator
-/// has to be told rather than left with a menu entry that does nothing.
+/// The manual this application opens has to be its own pages: the site
+/// carries one set per application, and the SSTV pages describe equipment
+/// this one has nothing to do with.
 #[test]
-fn a_missing_manual_is_reported() {
-    let mut app = App::headless();
+fn the_manual_opens_at_this_application_s_own_address() {
+    let platform = RecordingPlatform::default();
+    let visited = Arc::clone(&platform.visited);
+    let mut app = App::headless_on(Box::new(platform));
+
     app.open_manual();
-    assert_eq!(
-        app.notice.as_deref(),
-        Some(app.i18n.text("error-manual-missing").as_str())
-    );
+
+    assert_eq!(visited.lock().unwrap().as_slice(), [crate::identity::MANUAL_URL]);
+    assert_eq!(app.notice, None);
 }
 
 /// Nothing changed means nothing written: the settings file is the operator's,

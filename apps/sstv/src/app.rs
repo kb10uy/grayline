@@ -647,19 +647,16 @@ impl App {
         self.library.error = opened.err().map(|error| error.to_string());
     }
 
-    /// Opens the bundled manual.
+    /// Opens the operator's manual.
     ///
-    /// The pages are HTML and go to the browser rather than to a viewer of the
-    /// application's own, which would be a worse browser reachable from one
-    /// program. A build run from the source tree has no manual beside it, so
-    /// the interface says so instead of opening nothing.
+    /// The manual is published on the web and goes to the operator's browser
+    /// rather than to a viewer of the application's own, which would be a
+    /// worse browser reachable from one program.
     pub fn open_manual(&mut self) {
-        let Some(manual) = manual_path() else {
-            self.library.error = Some(self.i18n.text("error-manual-missing"));
-            return;
-        };
-        let opened = self.platform.open_path(&manual);
-        self.library.error = opened.err().map(|error| error.to_string());
+        let url = grayline_shell::manual_url(&crate::identity::IDENTITY);
+        let message = self.i18n.text("error-open-manual");
+        let opened = self.platform.open_url(&url);
+        self.library.error = opened.err().map(|error| format!("{message}: {error}"));
     }
 
     pub fn normalize_call(&mut self) {
@@ -1705,21 +1702,6 @@ fn trim_in_place(text: &mut String) -> bool {
 /// field, so it follows the same instant in every zone and needs no calendar.
 fn current_minute() -> i64 {
     Timestamp::now().as_second().div_euclid(60)
-}
-
-/// The manual's first page.
-///
-/// Looked for beside the executable first, which is where a release archive
-/// puts it, so two extracted versions on one machine each answer with their
-/// own copy. An installed copy puts the binary where nothing sits beside it,
-/// so the platform's installed location is the fallback. `None` when neither
-/// is there, which is every build run from the source tree.
-fn manual_path() -> Option<PathBuf> {
-    let beside = std::env::current_exe()
-        .ok()
-        .and_then(|executable| Some(executable.parent()?.join("help").join("index.html")))
-        .filter(|manual| manual.is_file());
-    beside.or_else(|| platform::manual_fallback(&crate::identity::IDENTITY).filter(|manual| manual.is_file()))
 }
 
 fn modes(support: fn(Mode) -> Support) -> Vec<Mode> {

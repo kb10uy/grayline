@@ -11,6 +11,7 @@
 //! shared model rather than between operating systems.
 
 use std::{
+    ffi::OsStr,
     io,
     path::Path,
     process::{Command, Stdio},
@@ -47,15 +48,6 @@ pub use imp::UI_FONTS;
 /// spells these lowercase, while the other two show them to the operator and
 /// nest vendor before product.
 pub use imp::FAMILY_DIRECTORY;
-
-/// Where an installed copy keeps the manual's first page, when the platform
-/// has one.
-///
-/// A release archive carries the manual beside the executable, but an
-/// installed copy puts the binary where nothing sits beside it: a Linux
-/// package keeps the pages under `/usr/share/doc`, and the macOS bundle keeps
-/// them in its own `Resources` directory.
-pub use imp::manual_fallback;
 
 /// Prepares the process before any window exists.
 ///
@@ -136,6 +128,15 @@ pub trait Platform {
     fn open_path(&mut self, path: &Path) -> io::Result<()> {
         open_path(path)
     }
+
+    /// Opens `url` in the operator's browser.
+    ///
+    /// Reached through the platform for the same reason as [`open_path`]: the
+    /// Help menu is exercised by the suite, and a test that took this at its
+    /// word would open a browser window every time it ran.
+    fn open_url(&mut self, url: &str) -> io::Result<()> {
+        open_url(url)
+    }
 }
 
 /// Returns the platform the application is running on.
@@ -174,6 +175,10 @@ impl Platform for QuietPlatform {
     fn set_activity(&mut self, _activity: Activity) {}
 
     fn open_path(&mut self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn open_url(&mut self, _url: &str) -> io::Result<()> {
         Ok(())
     }
 }
@@ -244,6 +249,21 @@ fn lock_file_claim(identity: &Identity) -> Option<FileLock> {
 }
 
 /// Opens `path` with whatever the platform opens it with.
+pub fn open_path(path: &Path) -> io::Result<()> {
+    hand_to_shell(path.as_os_str())
+}
+
+/// Opens `url` with whatever the platform opens it with.
+///
+/// The manual is a page on the web, and the operator's browser is the program
+/// that reads one. Which browser that is belongs to them, so the address is
+/// handed to the same opener a directory goes through rather than to a
+/// program named here.
+pub fn open_url(url: &str) -> io::Result<()> {
+    hand_to_shell(url.as_ref())
+}
+
+/// Hands `argument` to the platform's shell opener.
 ///
 /// A directory reaches the file manager and the manual reaches the browser
 /// through one command, because each platform's file manager is also its shell
@@ -252,16 +272,16 @@ fn lock_file_claim(identity: &Identity) -> Option<FileLock> {
 /// The child is waited on by a detached thread rather than left unclaimed, so
 /// a long-lived session does not accumulate zombies on the platforms that
 /// create them.
-pub fn open_path(path: &Path) -> io::Result<()> {
+fn hand_to_shell(argument: &OsStr) -> io::Result<()> {
     let Some(program) = imp::FILE_MANAGER else {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "opening a directory is not supported on this platform",
+            "this platform has no program to open things with",
         ));
     };
 
     let mut child = Command::new(program)
-        .arg(path)
+        .arg(argument)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

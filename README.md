@@ -33,7 +33,6 @@ running at <https://rssstv.kb10uy.dev/>.
   templates under `assets/templates/`.
 - `docs/memo/` — development documentation, divided by subject and indexed by
   [docs/memo/README.md](docs/memo/README.md).
-- `docs/help/` — the operator's manual the release archives carry.
 - `docs/reference/mmsstv/` — the original MMSSTV source, a submodule kept as
   the behavioral reference.
 

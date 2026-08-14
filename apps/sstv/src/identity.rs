@@ -32,6 +32,14 @@ pub const PROCESS_NAME: &str = "grayline-sstv";
 /// picture one level further down is a picture they have to go looking for.
 pub const PICTURES_DIRECTORY: &str = "Grayline SSTV";
 
+/// Where the operator's manual is published.
+///
+/// The manual is a site rather than pages carried beside the executable, so
+/// what the Help menu opens is the current text instead of the one the
+/// operator's archive was cut with, and a correction reaches every copy
+/// without a release.
+pub const MANUAL_URL: &str = "https://grayline.jl1his.radio/sstv/";
+
 /// The namespace the receive metadata is written in.
 ///
 /// An XMP namespace is an identifier and not an address, so it is not required
@@ -44,6 +52,7 @@ pub const IDENTITY: grayline_shell::Identity = grayline_shell::Identity {
     display_name: DISPLAY_NAME,
     process_name: PROCESS_NAME,
     pictures_directory: PICTURES_DIRECTORY,
+    manual_url: MANUAL_URL,
     app_user_model_id: "kb10uy.GraylineSSTV",
     icon_png: include_bytes!("../assets/icon.png"),
 };

@@ -40,8 +40,6 @@ The repository contains:
     its DSP implementation and where it departs from published descriptions.
   - `docs/memo/grayline/`: this project — target architecture, the desktop
     application, and the transmit overlay format.
-- `docs/help/`: the manual the release archives carry, written for the operator
-  rather than for this repository.
 
 Put a new development document under the directory matching what it is about. A
 protocol description answers to the on-air signal, a description of MMSSTV
@@ -121,17 +119,16 @@ in the original DSP classes.
 ## Documentation
 
 - Write documentation under `docs/memo/` in English.
-- The manual under `docs/help/` is written in Japanese, for the operator. It
-  describes what the application does, not how it is built, and names controls
-  by the labels `apps/sstv/locales/ja.ftl` gives them.
-- `docs/help/build.sh` renders the manual with pandoc into `target/help`, which
-  is what a release archive carries as `help/`. Add a page by writing its
-  Markdown source, listing it in the script, and linking it from the navigation
-  in `docs/help/template.html`.
+- The operator's manual is not in this repository. It is published per
+  application at <https://grayline.jl1his.radio/sstv/> and
+  <https://grayline.jl1his.radio/wefax/>, which each application's Help menu
+  opens through `grayline_shell::manual_url`; the addresses are the
+  `manual_url` field of each `identity::IDENTITY`.
 - When a new implementation or fix changes behavior, APIs, architecture, mode
   support, limitations, or any other documented area, update the relevant
   documentation in the same change. A change to what the operator sees or does
-  belongs in the manual as well.
+  belongs in the published manual as well, which is a change made where that
+  site is written rather than here.
 
 ## Build and Test
 

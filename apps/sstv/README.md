@@ -5,9 +5,9 @@ protocol, DSP, template-rendering, and WAV components this repository holds.
 
 Development documentation is in [docs/memo/](../../docs/memo/README.md),
 divided into the SSTV protocols themselves, the behavior of the original
-MMSSTV, and this project. [docs/help/](../../docs/help/index.md) is the
-operator's manual the release archives carry, rendered to HTML by
-`docs/help/build.sh`.
+MMSSTV, and this project. The operator's manual is published separately, at
+<https://grayline.jl1his.radio/sstv/>, which the application's Help menu
+opens.
 
 ## Application
 
@@ -59,9 +59,7 @@ update-desktop-database ~/.local/share/applications
 
 The entry's `Exec=grayline-sstv` expects the executable on `PATH`, which
 `cargo install --path apps/sstv` arranges; point it at the build directory
-instead if you are running from `cargo run`. Distribution packages that
-install all of this — binary, entry, icon, and manual — are described in
-[package/](../../package/README.md), for Arch Linux and Debian/Ubuntu.
+instead if you are running from `cargo run`.
 
 [assets/templates/](../../assets/templates) holds the five templates MMSSTV
 ships, ported to the KDL format. Copy the ones you want into the application's

@@ -19,10 +19,6 @@ on:
         description: The tag to build, such as sstv-v0.3.1
         required: true
         type: string
-      manual:
-        description: Whether the archives carry the manual as help/
-        type: boolean
-        default: false
       templates:
         description: Whether the archives carry assets/templates/
         type: boolean
@@ -68,28 +64,6 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      # Rendered once for every archive, unlike the license page: the manual is
-      # the same text on all three platforms, and pandoc is a package the two
-      # other runners would have to install to produce a byte-identical copy.
-      - name: Install pandoc
-        if: inputs.manual
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y pandoc
-
-      - name: Build the manual
-        if: inputs.manual
-        env:
-          GRAYLINE_VERSION: v${{ steps.resolve.outputs.version }}
-        run: bash docs/help/build.sh
-
-      - uses: actions/upload-artifact@v4
-        if: inputs.manual
-        with:
-          name: manual
-          path: target/help
-          if-no-files-found: error
-
   build:
     name: Build ${{ matrix.target }}
     needs: prepare
@@ -117,7 +91,6 @@ jobs:
       ARCHIVE: grayline-${{ inputs.app }}-v${{ needs.prepare.outputs.version }}-${{ matrix.target }}
       # Empty when the application does not carry them, which is what the
       # bundle script reads as "leave this out".
-      HELP: ${{ inputs.manual && 'manual' || '' }}
       TEMPLATES: ${{ inputs.templates && 'assets/templates' || '' }}
     steps:
       - uses: actions/checkout@v5
@@ -166,12 +139,6 @@ jobs:
       - name: Generate the dependency license page
         run: cargo about generate about.hbs --output-file licenses.html
 
-      - uses: actions/download-artifact@v4
-        if: inputs.manual
-        with:
-          name: manual
-          path: manual
-
       - name: Stage the archive contents
         if: runner.os != 'macOS'
         run: |
@@ -188,9 +155,6 @@ jobs:
           # than to the operator.
           if [ -f "apps/$APP/README.md" ]; then
             cp "apps/$APP/README.md" "$root/"
-          fi
-          if [ -n "$HELP" ]; then
-            cp -r "$HELP" "$root/help"
           fi
           if [ -n "$TEMPLATES" ]; then
             cp -r "$TEMPLATES" "$root/"
@@ -213,7 +177,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           bash package/build-app.sh "$APP" "target/$TARGET/release/$BINARY" \
-            licenses.html "$ARCHIVE.dmg" "$HELP" "$TEMPLATES"
+            licenses.html "$ARCHIVE.dmg" "$TEMPLATES"
 
       - name: Create the tar archive
         if: runner.os == 'Linux'

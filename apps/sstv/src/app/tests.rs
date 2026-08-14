@@ -399,6 +399,33 @@ impl Platform for RecordingPlatform {
     }
 }
 
+/// A platform that records the addresses the interface asked it to open.
+#[derive(Clone, Default)]
+struct RecordingBrowser(Rc<RefCell<Vec<String>>>);
+
+impl Platform for RecordingBrowser {
+    fn set_activity(&mut self, _activity: Activity) {}
+
+    fn open_url(&mut self, url: &str) -> io::Result<()> {
+        self.0.borrow_mut().push(url.to_owned());
+        Ok(())
+    }
+}
+
+/// The manual this application opens has to be its own pages: the site
+/// carries one set per application, and the WEFAX pages describe a mode this
+/// one does not receive.
+#[test]
+fn the_manual_opens_at_this_application_s_own_address() {
+    let browser = RecordingBrowser::default();
+    let mut app = App::headless_on(Box::new(browser.clone()));
+
+    app.open_manual();
+
+    assert_eq!(browser.0.take(), vec![crate::identity::MANUAL_URL.to_owned()]);
+    assert_eq!(app.library.error, None);
+}
+
 /// Sleep has to be held off for the whole of a reception and released
 /// again when it ends, or a long picture is cut short by an idle timer.
 #[test]

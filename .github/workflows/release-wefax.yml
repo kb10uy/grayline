@@ -25,14 +25,12 @@ jobs:
       app: wefax
       title: Grayline WEFAX
       ref: ${{ inputs.tag || github.ref_name }}
-      # The manual under docs/help/ is the SSTV one — it describes transmit,
-      # templates, and rig control, none of which this application has — so
-      # the archives carry no help/ until a WEFAX manual is written.
-      manual: false
       templates: false
       notes: |
         Each download holds the `grayline-wefax` application, this project's
-        license, and the licenses of its dependencies as `licenses.html`.
+        license, and the licenses of its dependencies as `licenses.html`. The
+        manual is on the web, at <https://grayline.jl1his.radio/wefax/>, which
+        the Help menu opens.
 
         | Platform | Download |
         | --- | --- |

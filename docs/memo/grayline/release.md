@@ -58,10 +58,6 @@ An advisory published against a dependency turns CI red on changes that have
 nothing to do with it. That is the intended behavior: the alternative is
 learning about it when a release is already being cut.
 
-`manual` renders `docs/help/` with pandoc, for the same reason: the SSTV
-archives carry the manual, so a source or template that cannot be rendered
-should fail on the change that broke it.
-
 `wasm` builds `apps/web-demo` for `wasm32-unknown-unknown` and runs Clippy against
 that target, then builds the page with `wasm-pack`. It is separate for the
 reason the no-std steps are: the host build compiles the JavaScript bindings to
@@ -115,19 +111,15 @@ and the number they carry is the workspace's own.
 on its own tag pattern, can be dispatched manually with the tag to build, and
 does nothing but call `release-app.yml` with what makes that application
 itself: the directory under `apps/`, the product name the release is titled
-with, whether the archives carry the manual and the templates, and the release
-notes. A third application is a third caller rather than a copy of the build.
+with, whether the archives carry the templates, and the release notes. A third
+application is a third caller rather than a copy of the build.
 
 `release-app.yml` holds everything the applications share, in three jobs.
 
 `prepare` resolves the tag and refuses to continue unless it matches the
 version of that application's package, because the executable carries the
 version compiled into it and Windows records it in the resource. Bump `version`
-in `apps/<app>/Cargo.toml` before tagging. It also renders the manual and
-uploads it as an artifact the three build jobs take, for the callers that ask
-for one. The manual is the same text on all three platforms, unlike the license
-page below, so building it once is both cheaper and the only way the archives
-are guaranteed to carry the same pages.
+in `apps/<app>/Cargo.toml` before tagging.
 
 `build` is a matrix of three targets, each on its own runner:
 
@@ -144,10 +136,14 @@ tag, so the application's name appears once instead of twice.
 
 Every archive holds the executable, `LICENSE`, a `licenses.html` generated on
 that platform, and the application's own `README.md` if it has one. The
-development documentation under `docs/memo/` is not archived: it answers to this
-repository's code rather than to the operator, and a release that carried it
-would be handing out notes on an implementation instead of a manual. The license
-page is generated per platform rather than once for all three because the
+operator's manual is not among them: it is published at
+`https://grayline.jl1his.radio/<app>/`, which the Help menu opens, so a
+correction reaches every copy without a release and an archive does not carry a
+manual that has since been rewritten. The development documentation under
+`docs/memo/` is not archived either: it answers to this repository's code
+rather than to the operator, and a release that carried it would be handing out
+notes on an implementation instead of a manual. The license page is generated
+per platform rather than once for all three because the
 dependency graph differs by target: a page built on Linux would list neither
 `muda` nor `windows-sys`. The Linux archive also carries the desktop entry and
 the icon from `apps/<app>/assets/`, which a Wayland compositor needs to find the
@@ -158,18 +154,12 @@ decide:
 
 | | SSTV | WEFAX |
 | --- | --- | --- |
-| Manual as `help/` | yes | no |
 | `templates/` | yes | no |
 | `README.md` | yes | no |
 
-WEFAX carries no manual because `docs/help/` is the SSTV one: it describes
-transmit, templates, and rig control, none of which that application has.
-Writing a WEFAX manual is what turns `manual: false` in `release-wefax.yml`
-into `true`.
-
 macOS gets a bundle in a disk image rather than an archive of bare files.
 `package/build-app.sh` stages it, taking the application as its first argument
-and the manual and templates directories as optional ones; the bundle name, the
+and the templates directory as an optional one; the bundle name, the
 identifier, and the microphone permission text come from a case over the
 application, because a bundled process that opens a capture device without that
 text is killed by the system.

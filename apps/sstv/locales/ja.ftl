@@ -124,7 +124,7 @@ error-transmit-active = 送信中です
 error-no-output-device = 出力デバイスを選択してください
 error-invalid-station-call = 自局コールが不正です: { $error }
 error-rig-unavailable = リグコントロールが使用できません: { $error }
-error-manual-missing = マニュアルが見つかりません。リリースアーカイブの help フォルダーを実行ファイルと同じ場所に置いてください。
+error-open-manual = マニュアルをブラウザーで開けませんでした
 
 geometry = { $mode } · { $width }×{ $height }
 

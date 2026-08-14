@@ -29,10 +29,6 @@ use crate::{
     },
 };
 
-/// Where the manual is looked for, relative to the executable.
-const MANUAL_DIRECTORY: &str = "help";
-const MANUAL_INDEX: &str = "index.html";
-
 /// How far one press of the phase controls moves the picture, in pixels.
 pub const PHASE_STEP_PIXELS: i64 = 16;
 /// How far the coarse phase controls move it.
@@ -377,14 +373,12 @@ impl App {
         }
     }
 
-    /// Opens the manual the release archive carries beside the executable.
+    /// Opens the operator's manual, which is published on the web rather than
+    /// carried beside the executable.
     pub fn open_manual(&mut self) {
-        let Some(path) = manual_path() else {
-            self.notice = Some(self.i18n.text("error-manual-missing"));
-            return;
-        };
-        if let Err(error) = self.platform.open_path(&path) {
-            let message = self.i18n.text("error-manual-missing");
+        let url = grayline_shell::manual_url(&crate::identity::IDENTITY);
+        if let Err(error) = self.platform.open_url(&url) {
+            let message = self.i18n.text("error-open-manual");
             self.notice = Some(format!("{message}: {error}"));
         }
     }
@@ -396,12 +390,6 @@ impl App {
             self.notice = Some(text);
         }
     }
-}
-
-fn manual_path() -> Option<std::path::PathBuf> {
-    let directory = std::env::current_exe().ok()?.parent()?.join(MANUAL_DIRECTORY);
-    let index = directory.join(MANUAL_INDEX);
-    index.is_file().then_some(index)
 }
 
 fn worker_settings(settings: &Settings) -> WorkerSettings {

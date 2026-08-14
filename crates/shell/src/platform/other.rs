@@ -3,8 +3,6 @@
 //! Linux is the platform this is written for; anything else the project has
 //! not been tried on lands here too and gets the same neutral answers.
 
-use std::path::PathBuf;
-
 use egui::IconData;
 
 use crate::Identity;
@@ -19,13 +17,6 @@ pub const FILE_MANAGER: Option<&str> = if cfg!(target_os = "linux") {
 } else {
     None
 };
-
-/// Only Linux has distribution packages that install the manual; another
-/// platform reaching here has no package and therefore no fallback.
-pub fn manual_fallback(identity: &Identity) -> Option<PathBuf> {
-    cfg!(target_os = "linux")
-        .then(|| PathBuf::from(format!("/usr/share/doc/{}/help/index.html", identity.process_name)))
-}
 
 /// Linux keeps its per-application directories lowercase, under a base
 /// directory that is already hidden. The platforms that show these to the

@@ -25,12 +25,12 @@ jobs:
       app: sstv
       title: Grayline SSTV
       ref: ${{ inputs.tag || github.ref_name }}
-      manual: true
       templates: true
       notes: |
         Each download holds the `grayline-sstv` application, this project's
-        license, the licenses of its dependencies as `licenses.html`, the
-        manual, and the MMSSTV templates ported to the KDL format.
+        license, the licenses of its dependencies as `licenses.html`, and the
+        MMSSTV templates ported to the KDL format. The manual is on the web,
+        at <https://grayline.jl1his.radio/sstv/>, which the Help menu opens.
 
         | Platform | Download |
         | --- | --- |

@@ -387,16 +387,13 @@ mod tests {
         }
     }
 
-    /// A build run from the source tree has no manual beside it. The entry
-    /// still has to say so, because an entry that reports nothing is
-    /// indistinguishable from one that is broken.
+    /// The manual is a page on the web, so the entry has nothing to report
+    /// unless the browser could not be reached. What it opens is checked
+    /// where the application's own state is.
     #[test]
-    fn a_missing_manual_is_reported() {
+    fn opening_the_manual_reports_nothing() {
         let mut app = App::headless();
         apply(&mut app, Action::OpenManual);
-        assert_eq!(
-            app.notice.as_deref(),
-            Some(app.i18n.text("error-manual-missing").as_str())
-        );
+        assert_eq!(app.notice, None);
     }
 }

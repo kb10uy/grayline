@@ -2,9 +2,7 @@
 
 use std::{
     ffi::c_void,
-    mem,
-    path::PathBuf,
-    ptr,
+    mem, ptr,
     sync::atomic::{AtomicI64, Ordering},
 };
 
@@ -40,12 +38,6 @@ use windows_sys::Win32::{
 pub const UI_FONTS: [&str; 3] = ["Yu Gothic UI", "Meiryo UI", "Segoe UI"];
 
 pub const FILE_MANAGER: Option<&str> = Some("explorer.exe");
-
-/// The Windows archive is extracted wherever the operator keeps it, so the
-/// manual is always beside the executable or absent.
-pub fn manual_fallback(_identity: &Identity) -> Option<PathBuf> {
-    None
-}
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";
 
@@ -475,6 +467,7 @@ mod tests {
         display_name: "Grayline Test",
         process_name: "grayline-test",
         pictures_directory: "Grayline Test",
+        manual_url: "https://grayline.jl1his.radio/test/",
         app_user_model_id: "kb10uy.GraylineTest",
         icon_png: &[],
     };
