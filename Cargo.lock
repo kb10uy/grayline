@@ -1991,6 +1991,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-rtty"
+version = "0.4.2"
+dependencies = [
+ "criterion",
+ "grayline-dsp",
+ "libm",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-rtty-cli"
+version = "0.4.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "grayline-rtty",
+ "hound",
+ "rstest",
+]
+
+[[package]]
 name = "grayline-shell"
 version = "0.4.2"
 dependencies = [

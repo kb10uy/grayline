@@ -1,0 +1,19 @@
+[package]
+name = "grayline-rtty-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "gl-rtty"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+hound.workspace = true
+grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
+
+[dev-dependencies]
+rstest.workspace = true
