@@ -84,6 +84,9 @@ The Rust implementation: what it is meant to be, and what it currently is.
 - [grayline/wefax.md](grayline/wefax.md): the WEFAX receive crate, what it took
   from the core on its way in, and where it deliberately parts company with the
   SSTV receive contract.
+- [grayline/rtty.md](grayline/rtty.md): the RTTY crate, what it lifted into the
+  core, and where it deliberately parts company with MMTTY — including that
+  nothing is decimated.
 - [grayline/rig-control.md](grayline/rig-control.md): the transports the rig is
   reached over, the script that decides what is sent, and the band plan both
   read. Describes a target design ahead of what is implemented.

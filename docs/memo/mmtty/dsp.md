@@ -117,7 +117,9 @@ and doubles the time available per sample.
 Note that `CFSKDEM`'s constructor never assigns `m_type` or `m_atc`. Both are
 read from the INI file at startup with their own indeterminate value as the
 default (`Main.cpp:1961`, `Main.cpp:2025`), so the effective default is
-whatever the shipped `mmtty.ini` says — IIR, with ATC off.
+whatever the shipped `Mmtty.ini` says — FIR (`DEMTYPE=1`, with `Tap=512`), and
+ATC off, in all three shipped INI files. The author's own profile
+(`je3hht.pro`) selects the FFT discriminator, and only `test.pro` selects IIR.
 
 **IIR** uses the two-pole resonator at `fir.cpp:46`:
 

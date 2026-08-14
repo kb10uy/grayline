@@ -48,26 +48,30 @@ frequencies into the demodulator. A reasonable target is to make it a
 `demodulator`-level component that consumes a spectrum slice and emits a tone
 pair, with the FFT itself in `dsp` and the timing decision in `application`.
 
-## Required Core Scope
+## What the Original's Path Contains
 
-A faithful receiver needs all of:
+What a port takes from this list is Grayline's decision, recorded in
+[grayline/rtty.md](../grayline/rtty.md); this section only states what MMTTY's
+own path contains and what each piece is for.
 
-- The limiter, including its AGC variant and the optional four-times
-  oversampled form.
-- Half-rate decimation and the resulting Nyquist constraint on the space tone.
-- At least the IIR resonator discriminator; the FIR, PLL, and sliding-FFT
-  variants are alternatives worth having but not required for a first port.
-- Rectification and both integrator forms.
-- ATC, because signals with echo are the case it was added for.
+The receive path holds:
+
+- The limiter, its AGC variant, and the optional four-times oversampled form.
+- Half-rate decimation, which is where the Nyquist constraint on the space
+  tone comes from.
+- Four discriminators — IIR resonator, FIR, PLL, and sliding FFT — of which
+  the IIR resonator pair is the structural baseline the others substitute for.
+- Rectification and two integrator forms, boxcar and Butterworth.
+- ATC, added for signals with echo.
 - The squelch, which suppresses framing on noise.
-- Both framing state machines. The majority-vote decoder is the default and is
+- Two framing state machines; the majority-vote decoder is the default and is
   the more robust of the two.
-- The full stop-element wait table, since returning early is what tolerates a
-  fast transmitter.
+- The stop-element wait tables, whose early return is what tolerates a fast
+  transmitter — and which differ between the two framing machines.
 
-A faithful transmitter needs the framing state machine, the three keying states
-(mark, space, and muted), the control codes, diddle with its wait policy, and
-the amplitude ramp. The TX filters are optional quality features.
+The transmit path holds the framing state machine, the three keying states
+(mark, space, and muted), the control codes, diddle with its wait policy, the
+amplitude ramp on the transmit gate, and the TX filters.
 
 ## Type and State Modeling
 
@@ -126,13 +130,15 @@ These should stay outside the portable core:
 
 ## Shared Ground With the SSTV Port
 
-`fir.cpp` and `Fft.cpp` are common to both programs, so `grayline-dsp` should
-already cover Kaiser-windowed FIR design, `CFIR2`-style convolution, the
-Butterworth IIR design, and the FFT. What MMTTY adds and MMSSTV does not have
-is the two-pole resonator (`CIIRTANK`), the half-band decimator (`CDECM2`), the
-four-times interpolate/decimate pair used by the oversampled limiter, and the
-recursive sliding DFT (`CSlideFFT`). Those are the pieces to add to the shared
-DSP crate rather than to an RTTY-specific one.
+`fir.cpp` and `Fft.cpp` are common to both programs, and `grayline-dsp`
+already covers Kaiser-windowed FIR design, `CFIR2`-style convolution, the
+Butterworth IIR design, the FFT — and the two-pole resonator (`CIIRTANK`),
+which is `grayline_dsp::filter::Resonator`, lifted for the MMSSTV port's tone
+detectors. What MMTTY's DSP layer holds beyond that is the boxcar moving
+average (`CSmooz`), the half-band decimator (`CDECM2`), the four-times
+interpolate/decimate pair used by the oversampled limiter, and the recursive
+sliding DFT (`CSlideFFT`). Which of those the shared DSP crate takes is
+Grayline's decision, recorded in [grayline/rtty.md](../grayline/rtty.md).
 
 Conversely, nothing in the RTTY path needs image buffers, color conversion, or
 the SSTV timing model, and the RTTY receiver's output is a character stream
