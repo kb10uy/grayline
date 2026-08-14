@@ -16,9 +16,12 @@ pub mod code;
 pub mod error;
 /// Baud rate, tone pairs, and start-stop framing parameters.
 pub mod params;
+/// Audio front end, start-stop framing, and streaming text decoding.
+pub mod rx;
 /// Text encoding, keying, and PCM synthesis.
 pub mod tx;
 
 pub use error::RttyError;
 pub use params::{BaudRate, BitLength, Parity, RxFraming, StopElement, StopTolerance, ToneSet, TxFraming};
+pub use rx::{ReceivePipeline, RxConfig, RxEvent, RxOutcome};
 pub use tx::{Transmitter, TxCode, TxConfig, encode_text};
