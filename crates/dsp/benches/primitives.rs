@@ -3,8 +3,9 @@ use std::{f64::consts::TAU, hint::black_box};
 use criterion::{Criterion, criterion_group, criterion_main};
 use grayline_dsp::{
     detector::{ToneDetector, ToneDetectorDesign},
-    filter::{Fir, FirDesign, FirKind},
+    filter::{Fir, FirDesign, FirKind, MovingAverage, MovingAverageDesign, Resonator},
     frequency::{HilbertDiscriminator, HilbertDiscriminatorDesign},
+    level::{PeakNormalizer, PeakNormalizerDesign},
     oscillator::Vco,
     transform::{RealSpectrum, SpectrumWindow},
 };
@@ -111,6 +112,72 @@ fn vco(c: &mut Criterion) {
     });
 }
 
+fn moving_average(c: &mut Criterion) {
+    for rate in [11_025.0, 48_000.0] {
+        let input = tone(rate, 1_900.0, 1.0);
+        let mut filter = MovingAverage::new(MovingAverageDesign {
+            sample_rate_hz: rate,
+            smoothing_hz: 70.0,
+        })
+        .unwrap();
+        c.bench_function(&format!("moving_average_1s_{}", rate as u32), |b| {
+            b.iter(|| {
+                let mut acc = 0.0;
+                for &sample in &input {
+                    acc += filter.process_sample(sample);
+                }
+                black_box(acc)
+            })
+        });
+    }
+}
+
+fn peak_normalizer(c: &mut Criterion) {
+    for rate in [11_025.0, 48_000.0] {
+        let input = tone(rate, 1_900.0, 1.0);
+        let mut normalizer = PeakNormalizer::new(PeakNormalizerDesign {
+            sample_rate_hz: rate,
+            decay_seconds: 0.1,
+            floor: 1.0e-6,
+        })
+        .unwrap();
+        c.bench_function(&format!("peak_normalizer_1s_{}", rate as u32), |b| {
+            b.iter(|| {
+                let mut acc = 0.0;
+                for &sample in &input {
+                    acc += normalizer.process_sample(sample);
+                }
+                black_box(acc)
+            })
+        });
+    }
+}
+
+/// One RTTY discriminator channel: resonator, rectifier, and integrator.
+///
+/// The number the no-decimation decision rests on: this chain runs twice per
+/// sample at the full capture rate, so it has to stay cheap there.
+fn rtty_channel(c: &mut Criterion) {
+    for rate in [11_025.0, 48_000.0] {
+        let input = tone(rate, 2_125.0, 1.0);
+        let mut resonator = Resonator::new(rate, 2_125.0, 60.0).unwrap();
+        let mut integrator = MovingAverage::new(MovingAverageDesign {
+            sample_rate_hz: rate,
+            smoothing_hz: 70.0,
+        })
+        .unwrap();
+        c.bench_function(&format!("rtty_channel_1s_{}", rate as u32), |b| {
+            b.iter(|| {
+                let mut acc = 0.0;
+                for &sample in &input {
+                    acc += integrator.process_sample(resonator.process_sample(sample).abs());
+                }
+                black_box(acc)
+            })
+        });
+    }
+}
+
 fn spectrum(c: &mut Criterion) {
     let length = 2_048;
     let input = tone(48_000.0, 1_900.0, length as f64 / 48_000.0);
@@ -123,5 +190,15 @@ fn spectrum(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, fir, hilbert, tone_detector, vco, spectrum);
+criterion_group!(
+    benches,
+    fir,
+    hilbert,
+    tone_detector,
+    vco,
+    moving_average,
+    peak_normalizer,
+    rtty_channel,
+    spectrum
+);
 criterion_main!(benches);

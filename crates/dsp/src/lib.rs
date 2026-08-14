@@ -17,6 +17,8 @@ pub mod error;
 pub mod filter;
 /// Zero-crossing, phase-locked, and Hilbert phase-difference frequency measurement.
 pub mod frequency;
+/// Level tracking and normalization.
+pub mod level;
 /// Oscillators and voltage-controlled oscillators.
 pub mod oscillator;
 /// Discrete Fourier and Hilbert transforms.
