@@ -1,3 +1,6 @@
 [submodule "original/mmsstv"]
 	path = docs/reference/mmsstv
 	url = https://github.com/n5ac/mmsstv
+[submodule "docs/reference/mmtty"]
+	path = docs/reference/mmtty
+	url = https://github.com/n5ac/mmtty
