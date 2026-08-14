@@ -273,13 +273,19 @@ struct EncodeArgs {
     #[arg(long)]
     skip_unmappable: bool,
 
-    /// Text file to encode, or `-` for standard input.
+    /// Encode this string instead of reading a file; the one remaining
+    /// positional is then the WAV to write.
+    #[arg(short = 'i', long = "text", value_name = "STRING")]
+    text: Option<String>,
+
+    /// Text file to encode, or `-` for standard input; the WAV to write
+    /// when --text supplies the input instead.
     #[arg(value_name = "INPUT.txt")]
     input: PathBuf,
 
     /// WAV file to write.
     #[arg(value_name = "OUTPUT.wav")]
-    output: PathBuf,
+    output: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -400,14 +406,24 @@ fn decode(arguments: DecodeArgs) -> Result<ExitCode> {
 }
 
 fn encode(arguments: EncodeArgs) -> Result<ExitCode> {
-    let text = if arguments.input.as_os_str() == "-" {
-        let mut buffer = String::new();
-        std::io::stdin()
-            .read_to_string(&mut buffer)
-            .context("failed to read standard input")?;
-        buffer
-    } else {
-        fs::read_to_string(&arguments.input).with_context(|| format!("failed to read {}", arguments.input.display()))?
+    // With --text the input positional is not needed, so the one that was
+    // given is the output.
+    let (text, output) = match (arguments.text, arguments.output) {
+        (Some(text), None) => (text, arguments.input),
+        (Some(_), Some(_)) => anyhow::bail!("--text replaces the input file, so only the output WAV is expected"),
+        (None, Some(output)) if arguments.input.as_os_str() == "-" => {
+            let mut buffer = String::new();
+            std::io::stdin()
+                .read_to_string(&mut buffer)
+                .context("failed to read standard input")?;
+            (buffer, output)
+        }
+        (None, Some(output)) => (
+            fs::read_to_string(&arguments.input)
+                .with_context(|| format!("failed to read {}", arguments.input.display()))?,
+            output,
+        ),
+        (None, None) => anyhow::bail!("the output WAV path is required"),
     };
 
     let mut config = TxConfig {
@@ -433,7 +449,7 @@ fn encode(arguments: EncodeArgs) -> Result<ExitCode> {
         skip_unmappable: arguments.skip_unmappable,
         config,
     };
-    let report = encode_text_to_wav(&text, &arguments.output, options)?;
+    let report = encode_text_to_wav(&text, &output, options)?;
 
     eprintln!("characters: {}", report.characters);
     eprintln!("codes: {}", report.codes);
