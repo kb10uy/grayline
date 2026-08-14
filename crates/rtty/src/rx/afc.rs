@@ -83,16 +83,32 @@ impl Afc {
         if floor_bin + 2 >= ceiling_bin {
             return None;
         }
-        let center_bin = ((tones.center_hz() / bin_hz) as usize).clamp(floor_bin + 1, ceiling_bin - 1);
 
-        let (mark_bin, mark_peak) = peak_in(magnitudes, floor_bin, center_bin);
-        let (space_bin, space_peak) = peak_in(magnitudes, center_bin, ceiling_bin);
+        // The two strongest local peaks at least a minimum shift apart; the
+        // lower is the mark. The original walks outward from the current
+        // bins instead, which cannot find a pair that has drifted past the
+        // midpoint of the old one — this search can, and is recorded as a
+        // deliberate simplification.
+        let (best_bin, best_peak) = strongest_peak(magnitudes, floor_bin, ceiling_bin, None, bin_hz, 0.0)?;
+        let (other_bin, other_peak) = strongest_peak(
+            magnitudes,
+            floor_bin,
+            ceiling_bin,
+            Some(best_bin),
+            bin_hz,
+            MINIMUM_SHIFT_HZ,
+        )?;
         let noise_floor =
             magnitudes[floor_bin..=ceiling_bin].iter().sum::<f64>() / (ceiling_bin - floor_bin + 1) as f64;
-        if mark_peak < noise_floor * ACCEPTANCE_RATIO || space_peak < noise_floor * ACCEPTANCE_RATIO {
+        if best_peak < noise_floor * ACCEPTANCE_RATIO || other_peak < noise_floor * ACCEPTANCE_RATIO {
             return None;
         }
 
+        let (mark_bin, space_bin) = if best_bin < other_bin {
+            (best_bin, other_bin)
+        } else {
+            (other_bin, best_bin)
+        };
         let detected_mark = (mark_bin as f64 + interpolate(magnitudes, mark_bin)) * bin_hz;
         let detected_space = (space_bin as f64 + interpolate(magnitudes, space_bin)) * bin_hz;
         let separation = detected_space - detected_mark;
@@ -148,11 +164,29 @@ fn snap_shift(separation_hz: f64) -> f64 {
     }
 }
 
-fn peak_in(magnitudes: &[f64], from: usize, to: usize) -> (usize, f64) {
-    let mut best = (from, magnitudes[from]);
-    for (bin, &magnitude) in magnitudes.iter().enumerate().take(to + 1).skip(from) {
-        if magnitude > best.1 {
-            best = (bin, magnitude);
+/// Finds the strongest local maximum in `[from, to]`, at least
+/// `separation_hz` away from `avoid`.
+fn strongest_peak(
+    magnitudes: &[f64],
+    from: usize,
+    to: usize,
+    avoid: Option<usize>,
+    bin_hz: f64,
+    separation_hz: f64,
+) -> Option<(usize, f64)> {
+    let mut best: Option<(usize, f64)> = None;
+    for bin in from.max(1)..=to {
+        let magnitude = magnitudes[bin];
+        if magnitude < magnitudes[bin - 1] || magnitude < magnitudes[bin + 1] {
+            continue;
+        }
+        if let Some(avoid) = avoid
+            && (bin as f64 - avoid as f64).abs() * bin_hz < separation_hz
+        {
+            continue;
+        }
+        if best.is_none_or(|(_, peak)| magnitude > peak) {
+            best = Some((bin, magnitude));
         }
     }
     best

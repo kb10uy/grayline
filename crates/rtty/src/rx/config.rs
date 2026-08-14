@@ -66,8 +66,9 @@ pub struct RxConfig {
     /// normalized scale, or `None` for no squelch.
     ///
     /// MMTTY's threshold lives on its limiter's integer scale and cannot be
-    /// copied; this default was calibrated so that the noise-only and
-    /// stated-signal-to-noise integration tests sit on either side of it.
+    /// copied; this default was calibrated against the integration tests:
+    /// broadband noise alone peaks near 0.15 on this scale while a clean or
+    /// 10 dB signal reads about 0.5, at every supported capture rate.
     pub squelch_threshold: Option<f64>,
     /// Automatic frequency control, off by default for file decoding.
     pub afc: Option<AfcConfig>,
@@ -88,7 +89,7 @@ impl Default for RxConfig {
             detector_bandwidth_hz: 60.0,
             integrator: IntegratorDesign::default(),
             atc: None,
-            squelch_threshold: Some(0.05),
+            squelch_threshold: Some(0.25),
             afc: None,
             band_width_hz: 250.0,
             ignore_framing_errors: false,

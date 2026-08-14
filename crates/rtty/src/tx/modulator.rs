@@ -8,7 +8,7 @@ use grayline_dsp::{
 
 use crate::{
     RttyError,
-    code::LTRS,
+    code::{FIGS, LTRS},
     params::BitLength,
     tx::{
         config::{Diddle, TxConfig},
@@ -52,6 +52,10 @@ pub struct Transmitter<I: Iterator<Item = TxCode>> {
     stage: Stage,
     pending: VecDeque<(Keying, f64)>,
     diddle_enabled: bool,
+    /// The shift the stream last announced, which a diddle filler must not
+    /// contradict: the codes are already encoded, so nothing downstream
+    /// would re-announce a case a stray LTRS knocked over.
+    announced_shift: u8,
     keying: Keying,
     position: u64,
     boundary: f64,
@@ -137,6 +141,7 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
             stage: Stage::Stream,
             pending,
             diddle_enabled: true,
+            announced_shift: LTRS,
             keying: Keying::Mark,
             position: 0,
             boundary: 0.0,
@@ -203,6 +208,9 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
     fn schedule(&mut self, code: TxCode) {
         match code {
             TxCode::Character(code) => {
+                if code == LTRS || code == FIGS {
+                    self.announced_shift = code;
+                }
                 self.schedule_character(code);
                 self.schedule_gap();
             }
@@ -252,7 +260,10 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
         };
         let filler = match diddle {
             Diddle::None => None,
-            Diddle::Ltrs => Some(LTRS),
+            // The filler repeats whichever shift the stream last announced:
+            // a bare LTRS in the middle of figures text would silently move
+            // the receiver's case out from under the remaining codes.
+            Diddle::Ltrs => Some(self.announced_shift),
             Diddle::Blank => Some(0),
         };
         if let Some(code) = filler {
