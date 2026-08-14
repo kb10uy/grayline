@@ -28,16 +28,22 @@ The repository contains:
   subcommand stays a thin layer over a tested function.
 - `assets/`: data the repository ships outside any one crate, such as the
   ported MMSSTV templates under `assets/templates/`.
-- `docs/reference/mmsstv/`: the original MMSSTV source code, included as a Git
-  submodule and used as the behavioral reference.
+- `docs/reference/mmsstv/` and `docs/reference/mmtty/`: the original MMSSTV and
+  MMTTY source code, included as Git submodules and used as the behavioral
+  reference for SSTV and RTTY respectively.
 - `docs/memo/`: development documentation, divided by subject.
   `docs/memo/README.md` indexes it.
   - `docs/memo/sstv/`: the protocols themselves — modes, timing, VIS, and
     FSKID — independent of any one implementation.
   - `docs/memo/wefax/`: the WEFAX signal on the air — modulation, index of
     cooperation, line rates, framing tones, and the phasing signal.
+  - `docs/memo/rtty/`: the RTTY signal on the air — modulation, shift and
+    speed, start-stop framing, and the ITA2 character code.
   - `docs/memo/mmsstv/`: the behavior of the original application, including
     its DSP implementation and where it departs from published descriptions.
+  - `docs/memo/mmtty/`: the behavior of the original MMTTY, the reference
+    implementation for RTTY — its DSP, its framing, and its application
+    structure.
   - `docs/memo/grayline/`: this project — target architecture, the desktop
     application, and the transmit overlay format.
 
@@ -47,8 +53,9 @@ answers to its source, and a description of this project answers to this
 repository's code; a document that would answer to two of those belongs in two
 documents.
 
-Treat `docs/reference/mmsstv/` as reference material. Do not modify the submodule
-unless the task explicitly requires changes to the original source.
+Treat `docs/reference/mmsstv/` and `docs/reference/mmtty/` as reference
+material. Do not modify a submodule unless the task explicitly requires changes
+to the original source.
 
 ## Architecture
 
