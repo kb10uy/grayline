@@ -88,7 +88,7 @@ fn the_tuning_settings_reach_the_worker() {
     app.shift_hz = 425.0;
     app.baud = 75.0;
     app.reverse = true;
-    app.afc = false;
+    app.afc = true;
     app.push_settings();
 
     let settings = app.audio.settings();
@@ -96,7 +96,7 @@ fn the_tuning_settings_reach_the_worker() {
     assert_eq!(settings.tones.space_hz, 1_700.0);
     assert_eq!(settings.baud, 75.0);
     assert!(settings.reverse);
-    assert!(!settings.afc);
+    assert!(settings.afc);
 }
 
 /// The threshold is only a threshold while the squelch is on; the core takes

@@ -369,6 +369,7 @@ The workspace currently contains seventeen packages:
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
 | `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
 | `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
+| `grayline-rtty-app` | Application composition root | egui interface with live receive |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
@@ -411,6 +412,10 @@ grayline-dsp ------------> grayline-rtty ---> grayline-rtty-cli
 grayline-audio ----------+
 grayline-shell ----------+-> grayline-wefax-app
 grayline-wefax ----------+
+
+grayline-audio ----------+
+grayline-shell ----------+-> grayline-rtty-app
+grayline-rtty -----------+
 ```
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this
@@ -623,8 +628,11 @@ implementations:
 - The RTTY pieces deliberately deferred, listed in [rtty.md](rtty.md): the
   FIR, PLL, and sliding-DFT discriminators, the center-sampling framing
   machine, the zero-crossing limiter AGC, the prefilter notch and LMS chain,
-  6-to-8-bit pipelines, CW identification, serial FSK keying, and the live
-  `apps/rtty` application.
+  6-to-8-bit pipelines, CW identification, and serial FSK keying.
+- The rest of `apps/rtty`, whose receive half is implemented: the transmit
+  queue and its macros, the scope window, the received-text history log, and
+  the rig frequency readout. The design is
+  [rtty-impl-plan.md](rtty-impl-plan.md).
 
 These should extend the dependency structure above rather than placing platform
 or application behavior into the core crates.

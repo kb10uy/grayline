@@ -15,7 +15,7 @@ interfaces are not.
 | --- | --- | --- |
 | [Grayline SSTV](apps/sstv/README.md) | `apps/sstv/` | Released |
 | Grayline WEFAX | `apps/wefax/` | Receive implemented |
-| Grayline RTTY | — | Core and `gl-rtty` implemented; application planned |
+| Grayline RTTY | `apps/rtty/` | Receive implemented; transmit planned |
 | Grayline PSK | — | Planned |
 
 [apps/web-demo/](apps/web-demo/) builds the SSTV receive path for WebAssembly,

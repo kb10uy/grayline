@@ -28,6 +28,11 @@ case "$app" in
     display="Grayline WEFAX"
     microphone="Grayline WEFAX listens to the selected capture device to receive weather fax transmissions."
     ;;
+  rtty)
+    bundle="GraylineRTTY"
+    display="Grayline RTTY"
+    microphone="Grayline RTTY listens to the selected capture device to receive radioteletype transmissions."
+    ;;
   *)
     echo "unknown application: $app" >&2
     exit 1

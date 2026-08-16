@@ -321,6 +321,20 @@ settle before the first start bit.
   consequence.
 - A missed start bit corrupts everything until the line idles long enough
   to resynchronize. The framing has no other recovery; RTTY carries none.
+- **AFC left on with no signal walks off the pair.** The search takes the two
+  strongest peaks in the configured range, and on an empty band those are
+  whatever the receiver's own noise is loudest at — mains harmonics near the
+  300 Hz floor, in practice, which snap to a 170 Hz shift as readily as a
+  transmission does. The acceptance ratio against the visited noise floor
+  does not catch it, because a spectrum with a hum peak in it has a mean the
+  peak clears twice over. Nothing gates the correction on there being a
+  signal: the demodulator squelch cannot, since a pair far enough off to need
+  AFC is exactly the pair that fails to open it, which
+  `afc_pulls_a_detuned_transmission_back` pins. So `gl-rtty` leaves AFC off by
+  default and `apps/rtty` does the same, switching it on being what an
+  operator does once there is something to follow. The fix, when it is
+  written, is a signal test of the AFC's own — MMTTY has one, `AFC_SQ`, on an
+  AGC-normalized spectrum this path does not produce.
 
 ## Verification
 

@@ -65,7 +65,15 @@ impl Default for Settings {
             shift_hz: 170.0,
             baud: 45.45,
             reverse: false,
-            afc: true,
+            // Off, unlike MMTTY, which ships it on. This core's frequency
+            // control searches the whole configured range for the two
+            // strongest peaks rather than sweeping outward from the pair it
+            // is on (`docs/memo/grayline/rtty.md`), and on an empty band the
+            // strongest pair in the noise is whatever the receiver's own hum
+            // happens to be: a watch left running with it on walks off the
+            // pair it was put on. Switched on for a signal, it does what it
+            // is for.
+            afc: false,
             squelch: true,
             squelch_threshold: 0.25,
             unshift_on_space: true,

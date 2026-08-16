@@ -39,16 +39,16 @@ jobs:
         run: cargo fmt --all --check
 
   # The libraries, the tools, and the browser demo's host build: everything a
-  # change can break with no application involved. The two applications are
+  # change can break with no application involved. The applications are
   # excluded so they can run beside this job rather than after it; each is a
-  # long tail of its own, and the run used to wait for both of them in turn.
+  # long tail of its own, and the run used to wait for all of them in turn.
   core:
     name: Core
     runs-on: ubuntu-latest
     # Named once and reused by the three commands below, so a member that
     # leaves the core cannot be dropped from one of them alone.
     env:
-      SCOPE: --workspace --exclude grayline-sstv-app --exclude grayline-wefax-app
+      SCOPE: --workspace --exclude grayline-sstv-app --exclude grayline-wefax-app --exclude grayline-rtty-app
     steps:
       # The submodule is reference material and nothing builds against it.
       - uses: actions/checkout@v5
@@ -99,7 +99,7 @@ jobs:
           cargo build -p grayline-tone-tx
           cargo build -p grayline-sstv-rx
 
-  # One job per application, so the two compile at the same time and a failure
+  # One job per application, so they compile at the same time and a failure
   # names which one broke rather than which command did.
   app:
     name: App (${{ matrix.name }})
@@ -112,6 +112,8 @@ jobs:
             package: grayline-sstv-app
           - name: WEFAX
             package: grayline-wefax-app
+          - name: RTTY
+            package: grayline-rtty-app
     steps:
       - uses: actions/checkout@v5
 
@@ -124,13 +126,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      # One entry for both applications rather than one each. The two graphs
-      # meet at eframe, and what SSTV adds past it — mlua, the template stack,
-      # the extra image formats — is what WEFAX does without, so everything the
-      # WEFAX job compiles apart from its own two crates is already in what the
+      # One entry for every application rather than one each. The graphs meet
+      # at eframe, and what SSTV adds past it — mlua, the template stack, the
+      # extra image formats — is what the other two do without, so everything
+      # their jobs compile apart from their own crates is already in what the
       # SSTV job builds. Only SSTV writes the entry: two jobs reserving one key
       # in the same run have one of them lose the reservation and cache
-      # nothing, and it is the larger of the two that is worth keeping.
+      # nothing, and it is the largest of them that is worth keeping.
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: app

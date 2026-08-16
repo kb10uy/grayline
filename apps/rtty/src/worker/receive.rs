@@ -247,7 +247,7 @@ impl Default for WorkerSettings {
             tones: ToneSet::default(),
             baud: BaudRate::default().bits_per_second(),
             reverse: false,
-            afc: true,
+            afc: false,
             squelch: Some(0.25),
             unshift_on_space: true,
             atc: false,

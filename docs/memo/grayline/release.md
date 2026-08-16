@@ -1,9 +1,9 @@
 # Continuous Integration and Releases
 
-Five workflows in `.github/workflows/` cover the repository: `ci.yml` checks
-every change, `release-sstv.yml` and `release-wefax.yml` publish what a tag
-names by calling the shared `release-app.yml`, and `deploy.yml` publishes the
-browser demo.
+Six workflows in `.github/workflows/` cover the repository: `ci.yml` checks
+every change, `release-sstv.yml`, `release-wefax.yml`, and `release-rtty.yml`
+publish what a tag names by calling the shared `release-app.yml`, and
+`deploy.yml` publishes the browser demo.
 
 ## CI
 
@@ -17,7 +17,7 @@ system packages nor the compiled dependencies the other jobs wait for, so a
 misformatted change is reported in under a minute instead of behind a build.
 
 `core` runs Clippy with warnings denied, the tests, and a build over the
-workspace with the two applications excluded, followed by the `no_std` builds.
+workspace with the applications excluded, followed by the `no_std` builds.
 The exclusion list is named once in the job's environment and reused by the
 three commands, so a member that leaves the core cannot be dropped from one of
 them alone. The browser demo stays in this job: its host build is cheap,
@@ -25,15 +25,17 @@ because it depends on the SSTV crates and `wasm-bindgen` and not on the
 graphics stack, and the `wasm` job below is what actually holds it to its own
 target.
 
-`app` is a matrix over `grayline-sstv-app` and `grayline-wefax-app`, running
-Clippy, the tests, and a build for one package each. Each application is a long
-tail of its own; running the three beside each other trades runner minutes for
-wall clock, and a failure names which application broke rather than which
-command did.
-Each matrix leg keys its own cache: the two dependency graphs meet at eframe —
-which `crates/shell` already pulls in, so the core compiles it too — and
-diverge after it, and one key over both would have each run overwriting the
-other's entry.
+`app` is a matrix over `grayline-sstv-app`, `grayline-wefax-app`, and
+`grayline-rtty-app`, running Clippy, the tests, and a build for one package
+each. Each application is a long tail of its own; running them beside each
+other trades runner minutes for wall clock, and a failure names which
+application broke rather than which command did.
+The legs share one cache entry, written by the SSTV leg alone: the dependency
+graphs meet at eframe — which `crates/shell` already pulls in, so the core
+compiles it too — and what SSTV adds past it is what the other two do without,
+so the entry it writes already holds everything they compile apart from their
+own crates. Two legs reserving one key in the same run would have one of them
+lose the reservation and cache nothing, which is why only the largest writes.
 
 These three run on Linux alone. That is a deliberate asymmetry rather than full
 coverage: Linux selects `platform/other.rs` and the in-window menu bar, which
@@ -98,21 +100,25 @@ git push origin sstv-v0.3.1
 
 git tag wefax-v0.1.0
 git push origin wefax-v0.1.0
+
+git tag rtty-v0.1.0
+git push origin rtty-v0.1.0
 ```
 
-`apps/sstv/` and `apps/wefax/` carry their own `version` rather than the
+Every directory under `apps/` carries its own `version` rather than the
 workspace's, which is what makes that possible: a shared number would move one
-application's version every time the other shipped, and would have given WEFAX
-a first release numbered from how far SSTV had already got. The libraries under
-`crates/` keep `version.workspace = true`; nothing publishes them separately,
-and the number they carry is the workspace's own.
+application's version every time another shipped, and would have given WEFAX
+and RTTY first releases numbered from how far SSTV had already got. The
+libraries under `crates/` keep `version.workspace = true`; nothing publishes
+them separately, and the number they carry is the workspace's own.
 
-`release-sstv.yml` and `release-wefax.yml` are the two entry points. Each runs
-on its own tag pattern, can be dispatched manually with the tag to build, and
-does nothing but call `release-app.yml` with what makes that application
-itself: the directory under `apps/`, the product name the release is titled
-with, whether the archives carry the templates, and the release notes. A third
-application is a third caller rather than a copy of the build.
+`release-sstv.yml`, `release-wefax.yml`, and `release-rtty.yml` are the entry
+points. Each runs on its own tag pattern, can be dispatched manually with the
+tag to build, and does nothing but call `release-app.yml` with what makes that
+application itself: the directory under `apps/`, the product name the release
+is titled with, whether the archives carry the templates, and the release
+notes. A further application is a further caller rather than a copy of the
+build.
 
 `release-app.yml` holds everything the applications share, in three jobs.
 
@@ -149,13 +155,13 @@ dependency graph differs by target: a page built on Linux would list neither
 the icon from `apps/<app>/assets/`, which a Wayland compositor needs to find the
 window icon.
 
-What the two applications ship beyond that differs, and is what the callers
+What the applications ship beyond that differs, and is what the callers
 decide:
 
-| | SSTV | WEFAX |
-| --- | --- | --- |
-| `templates/` | yes | no |
-| `README.md` | yes | no |
+| | SSTV | WEFAX | RTTY |
+| --- | --- | --- | --- |
+| `templates/` | yes | no | no |
+| `README.md` | yes | no | no |
 
 macOS gets a bundle in a disk image rather than an archive of bare files.
 `package/build-app.sh` stages it, taking the application as its first argument

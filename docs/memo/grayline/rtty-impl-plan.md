@@ -8,6 +8,14 @@ is written down so the decisions survive between working sessions. The
 RTTY items listed under Planned Gaps in
 [grayline/architecture.md](../grayline/architecture.md).
 
+**Progress.** Steps 1 (the monitor tap half of it), 2, and 3 of the order
+below are implemented, so `apps/rtty` receives: the skeleton, the receive
+worker and its session, the scrollback pane, the tuning and squelch panel, and
+the repository work step 2 drags with it. Transmit, the scope window, the
+macros, and everything after them are not written. Where the implementation
+departs from what is described below, the departure is recorded in the section
+it belongs to.
+
 Everything the core already offers is assumed rather than restated here:
 [grayline/rtty.md](../grayline/rtty.md) covers the crate and where it parts from
 MMTTY, [rtty/protocol.md](protocol.md) covers the signal, and
@@ -37,6 +45,13 @@ Package naming follows the existing pair: the package is `grayline-rtty-app`
 so it does not collide with the `grayline-rtty` library, and the binary is
 `grayline-rtty`. The CLI binary `gl-rtty` is unaffected.
 
+`apps/rtty/assets/icon.png` and `icon.ico` were generated in the family's
+visual language — the rounded blue frame, the navy sky, the sun behind the
+grayline, the name across the top — with the palette sampled from the WEFAX
+icon. They are placeholders in the sense that the lettering is a system face
+rather than the drawn one the other two carry; everything that reads them
+(the Windows resource, the desktop entry, the identity) is done.
+
 ## Layout
 
 A left/right split first, then a top/bottom split of the left side.
@@ -47,6 +62,20 @@ squelch, column count, and the button that opens the scope — with the QSO entr
 fields below them: his call, his name, and RST sent and received. The left pane
 splits into receive text on top and the transmit area below: the message queue
 with its sent-text underline, the input line, and the macro buttons.
+
+As built, the pane holds the mark tone, the shift, the speed, reverse, AFC,
+and the squelch with its threshold over a meter of what the threshold is being
+set against. Two departures, both following
+[gui-design.md](gui-design.md)'s rule that only controls which do something are
+built: there is no column count, because it would be pinned to one and a
+control that cannot move says nothing an operator can act on — the column list
+is `DecodePath::ALL` and a second demodulator is what changes it — and there
+are no QSO fields, because what reads them is the macro engine, which arrives
+with transmit. Unshift-on-space and the threshold corrector are on the
+Settings menu rather than the panel: they are set once for a station's habits
+rather than worked while listening. The panel gained one control the plan did
+not name, `Take Detected Pair`, because what AFC found is lost the next time
+the receiver is built and the operator had no way to keep it.
 
 Panel claim order, which egui makes load-bearing, is: status bar at the bottom,
 then the right panel so it runs the full height above the status bar, then the
@@ -86,6 +115,18 @@ Per-column headers can read `ReceivePipeline::signal_strength`,
 `ReceivePipeline::case`, and `ReceivePipeline::tones` as they stand. The
 mark-minus-space figure is not exposed today and arrives with the monitor tap
 below.
+
+As built, a header carries the path's name, the pair it is actually detecting,
+which tone the comparator is on, the case, and the signal reading. Which tone
+reads as neither while the squelch is closed: the comparator answers with one
+of the two whatever noise it is given, and a reading that swung about on an
+empty band would be the loudest thing in the window.
+
+A settings change rebuilds every pipeline, because a receiver is built from
+its configuration and cannot be retuned in place. That costs a few
+milliseconds of filter settling and nothing else — the text lives in the
+interface — and it is why the worker compares the whole settings set on each
+block rather than acting on a change flag.
 
 ## Scope Window
 
@@ -161,6 +202,13 @@ Only two, and both are small:
 
 Everything else the application needs already exists in `crates/rtty`,
 `crates/audio`, `crates/dsp`, and `crates/shell`.
+
+The first is written, as `rx/monitor.rs` and described in
+[rtty.md](rtty.md): what it hands out is the pair the comparator compares —
+rectified, integrated, and corrected — rather than the resonator outputs, both
+because that is what MMTTY's own XY scope draws and because the signed
+difference of the two is the tuning figure the header wants. The second is
+still to be written and belongs to transmit.
 
 ## Implementation Order
 
