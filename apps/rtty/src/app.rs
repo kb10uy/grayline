@@ -28,7 +28,11 @@ use crate::{
     },
 };
 
-/// How far one press of the tuning controls moves the mark tone, in hertz.
+/// How far one point of drag moves the mark tone, in hertz.
+///
+/// Five, because that is about the width of the band-pass's tolerance for
+/// being wrong: a pair set to within five hertz decodes, and a field that
+/// moved by one would take a hundred drags to cross a mistuning.
 pub const MARK_STEP_HZ: f64 = 5.0;
 
 /// Everything the application is, other than the pixels on screen.

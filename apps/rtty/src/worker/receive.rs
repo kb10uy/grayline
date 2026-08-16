@@ -177,6 +177,9 @@ fn merge(snapshot: &mut RxSnapshot, previous: RxSnapshot) {
     if snapshot.error.is_none() {
         snapshot.error = previous.error;
     }
+    // Two snapshots with different column counts cannot be lined up against
+    // each other, and nothing changes the count while a worker runs, so this
+    // is the shape of the check rather than a case that happens.
     if snapshot.columns.len() != previous.columns.len() {
         return;
     }
