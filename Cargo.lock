@@ -2002,6 +2002,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-rtty-app"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "eframe",
+ "egui",
+ "egui_kittest",
+ "embed-resource",
+ "fluent-bundle",
+ "fontdb",
+ "grayline-audio",
+ "grayline-rtty",
+ "grayline-shell",
+ "hound",
+ "image",
+ "muda",
+ "raw-window-handle",
+ "rstest",
+ "thiserror 2.0.20",
+ "toml_edit",
+ "unic-langid",
+]
+
+[[package]]
 name = "grayline-rtty-cli"
 version = "0.4.2"
 dependencies = [
