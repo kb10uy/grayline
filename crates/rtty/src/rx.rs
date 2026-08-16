@@ -6,6 +6,7 @@ mod config;
 mod event;
 mod framing;
 mod frontend;
+mod monitor;
 mod pipeline;
 mod squelch;
 
@@ -13,4 +14,5 @@ pub use afc::{AfcConfig, AfcMode};
 pub use config::{AtcDesign, IntegratorDesign, RxConfig};
 pub use event::{RxEvent, RxOutcome};
 pub use framing::{Bit, FramingOutcome};
+pub use monitor::{ChannelLevels, MonitorConfig};
 pub use pipeline::{MINIMUM_SAMPLE_RATE_HZ, ReceivePipeline};

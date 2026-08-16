@@ -12,6 +12,7 @@ use crate::{
         atc::Atc,
         config::{IntegratorDesign, RxConfig},
         framing::Bit,
+        monitor::ChannelLevels,
     },
 };
 
@@ -24,8 +25,8 @@ const NORMALIZER_DECAY_SECONDS: f64 = 0.1;
 
 pub(crate) struct FrontEndOutput {
     pub(crate) bit: Bit,
-    /// The channel difference `|mark − space|` this sample, for the squelch.
-    pub(crate) strength: f64,
+    /// What the comparator compared, for the squelch and the monitor tap.
+    pub(crate) levels: ChannelLevels,
 }
 
 enum Integrator {
@@ -133,7 +134,7 @@ impl FrontEnd {
         let space = self.space.process_sample(normalized);
         FrontEndOutput {
             bit: if mark >= space { Bit::Mark } else { Bit::Space },
-            strength: (mark - space).abs(),
+            levels: ChannelLevels { mark, space },
         }
     }
 

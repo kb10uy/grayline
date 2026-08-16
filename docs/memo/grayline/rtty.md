@@ -159,6 +159,23 @@ coefficients are three lines. The band-pass keeps its original design: a FIR
 cannot retune without discarding state, and the default width leaves
 hundreds of hertz of passband to move in.
 
+**The monitor tap** (`rx/monitor.rs`) hands out `ChannelLevels`, the pair the
+comparator compared: rectified, integrated, and corrected. It exists for a
+display and nothing downstream reads it. `ReceivePipeline::channels` answers
+with the newest pair always, which is the signed tuning figure a receive
+column's header shows; `set_monitor` opens a decimated bounded ring that
+`drain_monitor` empties, which is what an XY scope draws. Both are settings
+rather than construction arguments, because a scope is opened and closed
+while a reception runs and rebuilding the pipeline to open one would throw
+away the reception being watched. The decimation is the caller's: only the
+caller knows how many points it is going to draw. The ring drops its oldest
+pair rather than its newest, because a caller that stopped draining is one
+whose display stopped drawing, and what it wants when it returns is the
+signal now. MMTTY's XY scope takes the same two channels and interpolates
+them ×2, ×4, or ×8 for display resolution alone
+([../mmtty/dsp.md](../mmtty/dsp.md)); this one decimates instead, for the
+reason the section below gives — the channels here run at the capture rate.
+
 ## Nothing is decimated
 
 MMTTY halves the rate before demodulating and runs its limiter at ×4; the

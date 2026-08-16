@@ -12,6 +12,7 @@ use crate::{
         event::{RxEvent, RxOutcome},
         framing::{Bit, FramingOutcome, MajorityFraming},
         frontend::FrontEnd,
+        monitor::{ChannelLevels, Monitor, MonitorConfig},
     },
 };
 
@@ -48,6 +49,10 @@ pub struct ReceivePipeline {
     framing: MajorityFraming,
     decoder: Ita2Decoder,
     afc: Option<AfcState>,
+    monitor: Option<Monitor>,
+    /// What the comparator last compared, kept whether or not the tap is on:
+    /// a tuning readout wants the newest pair rather than a stream of them.
+    channels: ChannelLevels,
     ignore_framing_errors: bool,
     squelch_open: bool,
     position: u64,
@@ -104,6 +109,8 @@ impl ReceivePipeline {
             framing: MajorityFraming::new(rate, config.framing),
             decoder: Ita2Decoder::new(config.code_set, config.unshift_on_space),
             afc,
+            monitor: None,
+            channels: ChannelLevels::default(),
             ignore_framing_errors: config.ignore_framing_errors,
             squelch_open: config.squelch_threshold.is_none(),
             position: 0,
@@ -123,7 +130,11 @@ impl ReceivePipeline {
             let input = f64::from(sample);
             self.run_afc(input, &mut on_event)?;
             let output = self.front_end.process(input);
-            let open = self.squelch.process_sample(output.strength);
+            self.channels = output.levels;
+            if let Some(monitor) = &mut self.monitor {
+                monitor.observe(output.levels);
+            }
+            let open = self.squelch.process_sample(output.levels.difference().abs());
             if open != self.squelch_open {
                 self.squelch_open = open;
                 on_event(&RxEvent::SquelchChanged {
@@ -155,6 +166,38 @@ impl ReceivePipeline {
     /// Returns the case the decoder is reading in.
     pub fn case(&self) -> Case {
         self.decoder.case()
+    }
+
+    /// Returns what the comparator last compared.
+    ///
+    /// The signed difference is the tuning reading: a pair sitting on the
+    /// tones swings between its two extremes, while one that is off them
+    /// stays near zero.
+    pub const fn channels(&self) -> ChannelLevels {
+        self.channels
+    }
+
+    /// Starts, reconfigures, or stops the monitor tap.
+    ///
+    /// A display is opened and closed while a reception runs, so this is a
+    /// setting rather than a construction argument: rebuilding the pipeline
+    /// to open a scope would throw away the reception being watched. A
+    /// configuration that is already in effect keeps what has been collected.
+    pub fn set_monitor(&mut self, config: Option<MonitorConfig>) {
+        match config {
+            Some(config) => {
+                if self.monitor.as_ref().is_some_and(|monitor| monitor.config() == config) {
+                    return;
+                }
+                self.monitor = Some(Monitor::new(config));
+            }
+            None => self.monitor = None,
+        }
+    }
+
+    /// Takes the pairs the tap collected since the last call.
+    pub fn drain_monitor(&mut self) -> impl Iterator<Item = ChannelLevels> + '_ {
+        self.monitor.as_mut().into_iter().flat_map(Monitor::drain)
     }
 
     /// Returns the pair being detected, after any AFC movement.
@@ -247,5 +290,88 @@ impl ReceivePipeline {
             });
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::vec::Vec;
+    use core::f64::consts::TAU;
+
+    use super::*;
+    use crate::params::ToneSet;
+
+    const RATE: u32 = 11_025;
+
+    fn tone(frequency_hz: f64, samples: usize) -> Vec<f32> {
+        (0..samples)
+            .map(|index| libm::sin(TAU * frequency_hz * index as f64 / f64::from(RATE)) as f32)
+            .collect()
+    }
+
+    fn settled(frequency_hz: f64) -> ReceivePipeline {
+        let mut pipeline = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
+        pipeline
+            .process(&tone(frequency_hz, RATE as usize / 4), |_| {})
+            .unwrap();
+        pipeline
+    }
+
+    /// The tuning reading has to say which tone is being heard, or the column
+    /// header shows the same figure whatever the receiver is listening to.
+    #[test]
+    fn the_channel_reading_leans_towards_the_tone_being_heard() {
+        let tones = ToneSet::AFSK_170;
+        let mark = settled(tones.mark_hz).channels();
+        assert!(mark.difference() > 0.0, "{mark:?}");
+        let space = settled(tones.space_hz).channels();
+        assert!(space.difference() < 0.0, "{space:?}");
+    }
+
+    #[test]
+    fn nothing_is_collected_until_the_tap_is_opened() {
+        let mut pipeline = settled(ToneSet::AFSK_170.mark_hz);
+        assert_eq!(pipeline.drain_monitor().count(), 0);
+    }
+
+    #[test]
+    fn the_tap_collects_one_pair_per_decimation_window() {
+        let mut pipeline = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
+        pipeline.set_monitor(Some(MonitorConfig {
+            decimation: 4,
+            capacity: 1_024,
+        }));
+        pipeline.process(&tone(ToneSet::AFSK_170.mark_hz, 400), |_| {}).unwrap();
+
+        assert_eq!(pipeline.drain_monitor().count(), 100);
+        assert_eq!(pipeline.drain_monitor().count(), 0);
+    }
+
+    /// Closing a display must not leave the ring filling behind it.
+    #[test]
+    fn closing_the_tap_stops_the_collection() {
+        let mut pipeline = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
+        pipeline.set_monitor(Some(MonitorConfig {
+            decimation: 1,
+            capacity: 64,
+        }));
+        pipeline.set_monitor(None);
+        pipeline.process(&tone(ToneSet::AFSK_170.mark_hz, 128), |_| {}).unwrap();
+        assert_eq!(pipeline.drain_monitor().count(), 0);
+    }
+
+    /// A display polls at its own frame rate, and a reopened tap that threw
+    /// away what it had collected would drop a frame's worth of signal.
+    #[test]
+    fn a_tap_that_is_already_open_keeps_what_it_has() {
+        let config = MonitorConfig {
+            decimation: 1,
+            capacity: 64,
+        };
+        let mut pipeline = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
+        pipeline.set_monitor(Some(config));
+        pipeline.process(&tone(ToneSet::AFSK_170.mark_hz, 16), |_| {}).unwrap();
+        pipeline.set_monitor(Some(config));
+        assert_eq!(pipeline.drain_monitor().count(), 16);
     }
 }
