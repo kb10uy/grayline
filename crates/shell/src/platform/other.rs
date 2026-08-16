@@ -9,6 +9,13 @@ use crate::Identity;
 
 pub const UI_FONTS: [&str; 3] = ["Noto Sans CJK JP", "Noto Sans", "DejaVu Sans"];
 
+pub const MONOSPACE_FONTS: [&str; 4] = [
+    "Noto Sans Mono CJK JP",
+    "Noto Sans Mono",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+];
+
 /// Only Linux has a file manager this can name. Another platform reaching
 /// here reports that revealing a directory is unsupported rather than
 /// spawning a command that does not exist.

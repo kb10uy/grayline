@@ -6,6 +6,8 @@ use crate::Identity;
 
 pub const UI_FONTS: [&str; 2] = ["Hiragino Sans", "Helvetica Neue"];
 
+pub const MONOSPACE_FONTS: [&str; 3] = ["SF Mono", "Menlo", "Monaco"];
+
 pub const FILE_MANAGER: Option<&str> = Some("open");
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";

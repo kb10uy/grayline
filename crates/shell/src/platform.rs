@@ -40,6 +40,16 @@ mod imp;
 /// hairline.
 pub use imp::UI_FONTS;
 
+/// Font families monospaced text is drawn with, in priority order.
+///
+/// Each platform's own coding font leads the list: the face the operator
+/// already reads program text and terminal output in is the one their eye is
+/// trained on, and it is the face on the machine most likely to have been
+/// drawn for column alignment at small sizes. What follows it is the face that
+/// was there before it shipped, so an older release of the same system still
+/// finds one.
+pub use imp::MONOSPACE_FONTS;
+
 /// The directory every application in this family keeps its files under.
 ///
 /// Each application owns a directory beneath this one, and the settings they

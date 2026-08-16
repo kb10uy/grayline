@@ -37,6 +37,8 @@ use windows_sys::Win32::{
 
 pub const UI_FONTS: [&str; 3] = ["Yu Gothic UI", "Meiryo UI", "Segoe UI"];
 
+pub const MONOSPACE_FONTS: [&str; 3] = ["Cascadia Mono", "Consolas", "Courier New"];
+
 pub const FILE_MANAGER: Option<&str> = Some("explorer.exe");
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";

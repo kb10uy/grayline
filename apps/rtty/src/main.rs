@@ -17,11 +17,12 @@ mod test_util;
 
 use app::App;
 use grayline_shell::log;
-use grayline_shell::platform::{self, UI_FONTS};
+use grayline_shell::platform::{self, MONOSPACE_FONTS, UI_FONTS};
 use storage::paths;
 use ui::{menu, view};
 
-/// Draws the interface with the platform's UI font.
+/// Draws the interface with the platform's UI font, and the received text with
+/// its coding font.
 ///
 /// The system families are installed ahead of the bundled fonts, so Latin and
 /// Japanese come from one face, while a machine with none of them installed
@@ -38,8 +39,30 @@ fn install_fonts(ctx: &egui::Context) {
 
 fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
+    let ui = install_faces(&mut definitions, database, &UI_FONTS);
+    let monospace = install_faces(&mut definitions, database, &MONOSPACE_FONTS);
+
+    if ui.is_empty() {
+        log::note("no system UI font matched; using the bundled fonts");
+    }
+    if monospace.is_empty() {
+        log::note("no system monospaced font matched; using the bundled fonts");
+    }
+
+    prefer(&mut definitions, FontFamily::Proportional, &ui);
+    // The UI face is put in the monospaced family first, so that the coding
+    // font then lands in front of it: a coding font is drawn for program text
+    // and need not carry Japanese, and the pane also prints the interface's
+    // own words when it is empty.
+    prefer(&mut definitions, FontFamily::Monospace, &ui);
+    prefer(&mut definitions, FontFamily::Monospace, &monospace);
+    definitions
+}
+
+/// Loads whichever of `families` the machine has, and names those it loaded.
+fn install_faces(definitions: &mut FontDefinitions, database: &fontdb::Database, families: &[&str]) -> Vec<String> {
     let mut installed = Vec::new();
-    for family in UI_FONTS {
+    for family in families {
         let Some((data, index)) = load_face(database, family) else {
             continue;
         };
@@ -53,20 +76,15 @@ fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
         );
         installed.push((*family).to_owned());
     }
+    installed
+}
 
-    if installed.is_empty() {
-        log::note("no system UI font matched; using the bundled fonts");
+/// Puts `families` at the front of `target`, keeping the order they are in.
+fn prefer(definitions: &mut FontDefinitions, target: FontFamily, families: &[String]) {
+    let installed = definitions.families.entry(target).or_default();
+    for family in families.iter().rev() {
+        installed.insert(0, family.clone());
     }
-    for family in installed.iter().rev() {
-        for target in [FontFamily::Proportional, FontFamily::Monospace] {
-            definitions
-                .families
-                .entry(target)
-                .or_default()
-                .insert(0, family.clone());
-        }
-    }
-    definitions
 }
 
 fn load_face(database: &fontdb::Database, family: &str) -> Option<(Vec<u8>, u32)> {
@@ -284,23 +302,79 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_matched_family_is_installed_ahead_of_the_bundled_fonts() {
+    /// The first family the machine has of a list, or `None` when it has none
+    /// of them and there is nothing to check against here.
+    fn first_available(database: &fontdb::Database, families: &[&str]) -> Option<String> {
+        families
+            .iter()
+            .find(|family| load_face(database, family).is_some())
+            .map(|family| (*family).to_owned())
+    }
+
+    fn system_database() -> fontdb::Database {
         let mut database = fontdb::Database::new();
         database.load_system_fonts();
-        let Some(wanted) = UI_FONTS.iter().find(|family| load_face(&database, family).is_some()) else {
-            return; // No system font to check against on this machine.
+        database
+    }
+
+    #[test]
+    fn a_matched_family_is_installed_ahead_of_the_bundled_fonts() {
+        let database = system_database();
+        let Some(wanted) = first_available(&database, &UI_FONTS) else {
+            return;
         };
 
         let definitions = font_definitions(&database);
         let bundled = FontDefinitions::default();
-        for family in [FontFamily::Proportional, FontFamily::Monospace] {
-            let installed = &definitions.families[&family];
-            assert_eq!(installed.first().map(String::as_str), Some(*wanted));
+        let installed = &definitions.families[&FontFamily::Proportional];
+        assert_eq!(installed.first(), Some(&wanted));
+        assert!(
+            installed.len() > bundled.families[&FontFamily::Proportional].len(),
+            "the bundled fonts should still be behind the system ones"
+        );
+    }
+
+    /// RTTY is read as columns, so the coding font has to be reached before the
+    /// proportional UI face, which would otherwise answer for every character
+    /// it has and leave the received text unaligned.
+    #[test]
+    fn the_monospaced_family_is_led_by_a_coding_font() {
+        let database = system_database();
+        let Some(wanted) = first_available(&database, &MONOSPACE_FONTS) else {
+            return;
+        };
+
+        let definitions = font_definitions(&database);
+        let installed = &definitions.families[&FontFamily::Monospace];
+        assert_eq!(installed.first(), Some(&wanted));
+
+        // The UI face stays in the family, behind it, for the characters a
+        // coding font has no glyph for.
+        if let Some(ui) = first_available(&database, &UI_FONTS) {
             assert!(
-                installed.len() > bundled.families[&family].len(),
-                "the bundled fonts should still be behind the system ones"
+                installed.iter().position(|family| *family == ui) > Some(0),
+                "the UI face should sit behind the coding font: {installed:?}"
             );
         }
+    }
+
+    /// The interface is drawn in the platform's own UI face, which a coding
+    /// font must not displace.
+    #[test]
+    fn the_proportional_family_is_not_led_by_a_coding_font() {
+        let database = system_database();
+        let Some(wanted) = first_available(&database, &MONOSPACE_FONTS) else {
+            return;
+        };
+        if first_available(&database, &UI_FONTS).is_none() {
+            return;
+        }
+
+        let definitions = font_definitions(&database);
+        let installed = &definitions.families[&FontFamily::Proportional];
+        assert!(
+            !installed.contains(&wanted),
+            "the coding font has no business in the proportional family: {installed:?}"
+        );
     }
 }
