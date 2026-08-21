@@ -35,6 +35,7 @@ proptest = "1.7"
 png = "0.18"
 resvg = "0.47"
 rstest = "0.26"
+rusqlite = { version = "0.40", features = ["bundled"] }
 thiserror = { version = "2.0", default-features = false }
 toml_edit = "0.25"
 unic-langid = "0.9"

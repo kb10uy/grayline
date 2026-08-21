@@ -6,6 +6,8 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+jiff.workspace = true
+rusqlite.workspace = true
 thiserror = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
