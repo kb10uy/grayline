@@ -32,6 +32,9 @@ pub use credentials::{Credentials, KEY_VARIABLE, URL_VARIABLE};
 pub use directory::{Directory, HIT_TTL, Lookup, MISS_TTL};
 pub use error::QsoError;
 pub use paths::{CREDENTIALS_FILE, FAMILY_DIRECTORY, STORE_FILE, default_credentials_path, default_store_path};
-pub use record::{Record, WELL_KNOWN_KEYS, normalize_callsign, valid_key};
+pub use record::{
+    DEFAULT_FIELDS, FIELD_GROUPS, GROUP_PREFIX, Record, WELL_KNOWN_KEYS, expand_fields, field_group,
+    normalize_callsign, valid_key,
+};
 pub use store::{Origin, Store};
 pub use wavelog::{DEFAULT_TIMEOUT, Wavelog};

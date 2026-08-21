@@ -1,16 +1,22 @@
 use std::collections::BTreeMap;
 
-/// The keys this crate fills in from an upstream source, and that an
-/// application offers by name.
+/// The keys this crate names.
 ///
-/// A record is not limited to these: whatever the operator files under a
-/// callsign keeps its own name and is read back under it. This is the set that
-/// an import and a lookup normalize onto, so that the same fact arrives under
-/// the same name whichever source it came from.
-pub const WELL_KNOWN_KEYS: [&str; 14] = [
+/// Naming a key is not the same as filling it in and not the same as showing
+/// it: an import and a lookup normalize onto some of these so that the same
+/// fact arrives under the same name whichever source it came from, while
+/// others are only ever typed. Which of them an application puts a field on
+/// screen for is a third question, and the operator's — see [`FIELD_GROUPS`].
+///
+/// A record is not limited to these. Whatever the operator files under a
+/// callsign keeps its own name and is read back under it.
+pub const WELL_KNOWN_KEYS: [&str; 17] = [
     "name",
+    "name_latin",
     "qth",
+    "qth_latin",
     "grid",
+    "jcc",
     "dxcc",
     "dxcc_id",
     "cq_zone",
@@ -23,6 +29,77 @@ pub const WELL_KNOWN_KEYS: [&str; 14] = [
     "email",
     "note",
 ];
+
+/// The named sets of keys a configuration can ask for as `!name`.
+///
+/// A field list is written as keys and groups mixed together, so an operator
+/// says `["!core", "!latin", "dxcc"]` rather than naming six keys and being
+/// unable to say why they belong together.
+///
+/// Two of them are parts and one is a whole. `core` is what a contact is worth
+/// looking up for at all. `latin` exists because ITA2 carries no kanji and a
+/// station working RTTY needs somewhere to keep a name the mode can actually
+/// send — a problem shared by every non-Latin script rather than a Japanese
+/// one. `ja` is the set a station in Japan would otherwise assemble out of
+/// those two and a JCC code, offered whole so that the common case is one
+/// entry rather than three.
+///
+/// None of them is a country's whole convention, and the list is not where a
+/// convention should end up. A station wanting anything else names the keys,
+/// and the store files them without being told they exist.
+pub const FIELD_GROUPS: [(&str, &[&str]); 3] = [
+    ("core", &["name", "qth", "grid"]),
+    ("latin", &["name_latin", "qth_latin"]),
+    ("ja", &["name", "name_latin", "qth", "qth_latin", "grid", "jcc"]),
+];
+
+/// What a configuration that names no fields asks for.
+///
+/// The three a contact is worth looking up for at all. Everything else is
+/// something a particular station has a use for rather than something every
+/// station does, and a dialog that offered all seventeen would be one nobody
+/// reads.
+pub const DEFAULT_FIELDS: [&str; 1] = ["!core"];
+
+/// The prefix that marks a group rather than a key.
+pub const GROUP_PREFIX: char = '!';
+
+/// The keys one group holds, or nothing when no group is named that.
+pub fn field_group(name: &str) -> Option<&'static [&'static str]> {
+    FIELD_GROUPS
+        .iter()
+        .find(|(group, _)| *group == name)
+        .map(|(_, keys)| *keys)
+}
+
+/// Reads a configured field list into the keys it asks for.
+///
+/// Groups expand where they are written, so the order is the operator's own.
+/// A key named twice, or named once in its own right and once inside a group,
+/// appears once and where it first appeared. A group nobody defines and a key
+/// no template could read are both passed over rather than reported: this
+/// answers what to put on screen, and a dialog is a poor place to learn that a
+/// configuration file has a typo in it.
+pub fn expand_fields<'a>(spec: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut fields: Vec<String> = Vec::new();
+    let mut push = |key: &str| {
+        if valid_key(key) && key != RESERVED_KEY && !fields.iter().any(|held| held == key) {
+            fields.push(key.to_owned());
+        }
+    };
+    for entry in spec {
+        let entry = entry.trim();
+        match entry.strip_prefix(GROUP_PREFIX) {
+            Some(group) => {
+                for key in field_group(group).unwrap_or_default() {
+                    push(key);
+                }
+            }
+            None => push(entry),
+        }
+    }
+    fields
+}
 
 /// The key a record refuses, because the callsign is what a record is filed
 /// under rather than something filed in one.
@@ -155,6 +232,66 @@ mod tests {
         for key in WELL_KNOWN_KEYS {
             assert!(valid_key(key), "{key}");
         }
+    }
+
+    /// A group naming a key the crate does not is one an application would
+    /// offer a field for and never be able to label.
+    #[test]
+    fn every_grouped_key_is_a_well_known_one() {
+        for (group, keys) in FIELD_GROUPS {
+            for key in keys {
+                assert!(WELL_KNOWN_KEYS.contains(key), "`{key}` in `!{group}`");
+            }
+        }
+    }
+
+    #[test]
+    fn the_default_field_list_expands_to_something() {
+        assert_eq!(expand_fields(DEFAULT_FIELDS), ["name", "qth", "grid"]);
+    }
+
+    #[test]
+    fn a_group_expands_where_it_is_written() {
+        assert_eq!(
+            expand_fields(["dxcc", "!latin", "email"]),
+            ["dxcc", "name_latin", "qth_latin", "email"]
+        );
+    }
+
+    /// `!ja` is offered so the common case is one entry rather than three, so
+    /// it has to stay the same thing those three add up to.
+    #[test]
+    fn the_japanese_set_is_what_its_parts_come_to() {
+        let assembled = expand_fields(["!core", "!latin", "jcc"]);
+        let whole = expand_fields(["!ja"]);
+
+        assert_eq!(
+            assembled.iter().collect::<std::collections::BTreeSet<_>>(),
+            whole.iter().collect::<std::collections::BTreeSet<_>>()
+        );
+    }
+
+    /// The order is the operator's, so a key already placed stays where it was
+    /// rather than moving to wherever it was named again.
+    #[test]
+    fn a_key_named_twice_appears_once_and_where_it_first_appeared() {
+        assert_eq!(expand_fields(["name", "!core", "qth"]), ["name", "qth", "grid"]);
+    }
+
+    #[rstest]
+    #[case("!nobody-defines-this")]
+    #[case("cq-zone")]
+    #[case("callsign")]
+    #[case("")]
+    fn an_entry_nothing_could_use_is_passed_over(#[case] entry: &str) {
+        assert_eq!(expand_fields(["name", entry]), ["name"]);
+    }
+
+    #[test]
+    fn a_group_is_named_without_its_prefix_when_it_is_asked_for_directly() {
+        assert_eq!(field_group("latin"), Some(["name_latin", "qth_latin"].as_slice()));
+        assert_eq!(field_group("!latin"), None);
+        assert_eq!(field_group("nothing"), None);
     }
 
     #[rstest]
