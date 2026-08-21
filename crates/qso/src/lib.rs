@@ -19,8 +19,10 @@ mod adif;
 mod error;
 mod record;
 mod store;
+mod wavelog;
 
 pub use adif::{Adif, AdifRecord, ImportReport, import, read_adif};
 pub use error::QsoError;
 pub use record::{Record, WELL_KNOWN_KEYS, normalize_callsign, valid_key};
 pub use store::{Origin, Store};
+pub use wavelog::{DEFAULT_TIMEOUT, Wavelog};

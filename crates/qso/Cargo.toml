@@ -9,7 +9,9 @@ authors.workspace = true
 encoding_rs.workspace = true
 jiff.workspace = true
 rusqlite.workspace = true
+serde_json.workspace = true
 thiserror = { workspace = true, features = ["std"] }
+ureq.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
