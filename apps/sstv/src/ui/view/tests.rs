@@ -72,6 +72,101 @@ fn the_variable_dialog_renders_a_row_for_every_name() {
     harness.get_by_label(&title);
 }
 
+/// The contact dialog lays out three kinds of row at once — labelled fields
+/// for what the settings asked for, name-and-value pairs for whatever else the
+/// station has, and the buttons under them — which is exactly the shape egui
+/// panics over if any of them share an id.
+#[test]
+fn the_contact_dialog_renders_every_kind_of_row() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.contact_snapshot.fields = std::collections::BTreeMap::from([
+        ("name".to_owned(), "Taro".to_owned()),
+        ("qth".to_owned(), "Tokyo".to_owned()),
+        ("rig".to_owned(), "IC-705".to_owned()),
+    ]);
+    app.open_contact();
+    assert_eq!(
+        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        ["name", "qth", "grid", "rig"],
+        "the fields asked for lead, and what the station also has follows"
+    );
+    assert!(app.contact_draft.iter().take(3).all(|row| row.offered));
+    assert!(!app.contact_draft[3].offered);
+    let title = app.i18n.text("contact-title");
+
+    let harness = render(&mut app);
+
+    harness.get_by_label_contains(&title);
+}
+
+/// A station in Japan wants a JCC code and a name RTTY can send; a station
+/// anywhere else wants neither, and which of those an operator is was never
+/// something the application could decide.
+#[test]
+fn the_dialog_offers_the_fields_the_settings_asked_for() {
+    let mut app = App::headless();
+    app.contact_settings.fields = vec!["!ja".to_owned()];
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+
+    app.open_contact();
+
+    assert_eq!(
+        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        ["name", "name_latin", "qth", "qth_latin", "grid", "jcc"]
+    );
+    let jcc = app.i18n.text("contact-jcc");
+    render(&mut app).get_by_label(&jcc);
+}
+
+/// A key the operator invented is one no catalogue was going to know, so it
+/// stands under its own name rather than under a missing message's id.
+#[test]
+fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
+    let mut app = App::headless();
+    app.contact_settings.fields = vec!["oblast".to_owned()];
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+
+    app.open_contact();
+
+    render(&mut app).get_by_label("oblast");
+}
+
+/// A modal builds its own `Ui` from the context rather than from the one the
+/// interface was drawn into, so setting this on that `Ui` alone left every
+/// dialog with selectable labels while nothing behind them had any.
+#[test]
+fn labels_are_inert_inside_a_dialog_as_well_as_behind_it() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.open_contact();
+
+    let harness = render(&mut app);
+
+    for theme in [egui::Theme::Dark, egui::Theme::Light] {
+        assert!(
+            !harness.ctx.style_of(theme).interaction.selectable_labels,
+            "{theme:?} labels should be inert"
+        );
+    }
+}
+
+/// The button beside the callsign is what opens that dialog, so a station
+/// that has been named has to have one to press.
+#[test]
+fn the_qso_panel_offers_the_contact_details_button() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+
+    let harness = render(&mut app);
+
+    harness.get_by_label("…");
+}
+
 /// The panel keeps the same controls in every connection state so its
 /// contents do not move while a connection is established or lost.
 #[test]

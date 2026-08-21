@@ -337,7 +337,11 @@ Variables belong to named domains rather than a flat table of single-character
 macros. Anticipated values include:
 
 - `station.callsign`, `station.qth`, `station.grid`, and `station.name`
-- `contact.callsign`
+- `contact.callsign`, `contact.name`, `contact.qth`, `contact.grid`, and the
+  rest of the keys [qso-directory.md](qso-directory.md) names — including
+  `contact.name_latin` and `contact.qth_latin`, which a mode that cannot carry
+  the operator's own script reads instead — plus `contact.*` for anything else
+  the directory holds
 - `report.sent`, `report.number`, and `report.received`
 - `radio.frequency` and `radio.band`
 - `tx.timestamp.utc`, `tx.timestamp.local`, `rx.timestamp.utc`, and
@@ -345,9 +349,21 @@ macros. Anticipated values include:
 - `custom.*`, whose names the operator chooses
 - `application.version`
 
-Contact detail beyond the callsign is deliberately absent. Grayline SSTV does
-not set out to keep a QSO log, so a field that exists only to be typed into a
-template is not worth the entry it would need.
+Contact detail beyond the callsign comes from a directory of stations rather
+than from a log of contacts, and the difference between those two things is the
+whole of why it exists. Grayline SSTV still does not set out to keep a QSO log —
+who was worked, when, on what band, and with what report is what the operator's
+own logger already holds, and a second copy of it here would be one nobody
+updates and everybody eventually distrusts. But a template that prints the other
+operator's name is asking for something that station *is* rather than something
+a contact *was*, and that is a different question with an answer worth keeping.
+So what the application keeps is a table from a callsign to what is filed under
+it, filled in by hand, by importing an ADIF the operator already has, or by
+asking their own Wavelog, and read back the next time the same station is
+worked. It is a directory of stations you look things up in, not a log of
+contacts you keep, and nothing in it records that a contact took place.
+[qso-directory.md](qso-directory.md) describes the store, the lookup, and the
+import.
 
 The evaluation context supplies typed values, including the image used by an
 `rximage` layer. Text interpolation converts only values used in text; images
@@ -393,6 +409,7 @@ The desktop composition worker currently supplies:
 | --- | --- |
 | `station.callsign`, `station.qth`, `station.grid` | Station dialog |
 | `contact.callsign` | QSO call field |
+| `contact.*` | The contact directory, looked up from that field |
 | `report.sent`, `report.number` | QSO RSV and serial-number fields |
 | `report.received` | QSO received-RSV field |
 | `radio.frequency`, `radio.band` | Fixed until rig control arrives |
@@ -415,6 +432,20 @@ either: what a callsign means is the callsign, not the spaces typed around it.
 The stand-in is the composition's alone — the identifier a transmission sends
 and the check that names the station both read the field itself, so an unset
 callsign still refuses to transmit rather than going out as the word.
+
+The rest of `contact.*` goes the other way, and expands to nothing when the
+directory has nothing to say. A name is a line the template author chose to
+include rather than one every layout carries, so printing the word `Name` over
+the air would not be a gap but a wrong value — the same reasoning that leaves
+`radio.band` empty rather than contradicting the frequency beside it. Because a
+missing variable is otherwise a render error, and because which entries are
+incomplete is not something the template author can know, the composition worker
+asks the template which `contact.*` names it reads and answers with nothing the
+ones the directory could not: a key the operator has invented for their own
+records is printable the moment they file it, and a station that lacks it still
+composes. Nothing outside `contact.` is filled in that way — an operator names
+their own `custom.` variables in a dialog that already refuses unusable ones, so
+a name that resolves to nothing there is a typo worth reporting.
 
 `rx.timestamp.*` follows the same rule as the `rximage` layer it describes: the
 test pattern counts as adopted at startup, so the variable resolves from the

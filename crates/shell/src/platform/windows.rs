@@ -369,8 +369,8 @@ unsafe fn color_bitmap(bitmap: HBITMAP) -> Option<IconData> {
 /// Such a frame is taken as opaque; its mask is not consulted, since every
 /// frame this application embeds carries real alpha.
 fn to_rgba(mut pixels: Vec<u8>) -> Vec<u8> {
-    let transparent = pixels.chunks_exact(4).all(|pixel| pixel[3] == 0);
-    for pixel in pixels.chunks_exact_mut(4) {
+    let transparent = pixels.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 0);
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
         if transparent {
             pixel[3] = u8::MAX;

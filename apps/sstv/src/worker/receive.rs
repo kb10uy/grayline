@@ -62,7 +62,9 @@ impl Frame {
         let size = ImageSize::new(self.width as usize, self.height as usize).ok()?;
         let pixels = self
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|pixel| Rgb8::new(pixel[0], pixel[1], pixel[2]))
             .collect();
         RgbImage::from_pixels(size, pixels).ok()
@@ -580,7 +582,7 @@ mod pipeline_tests {
 
     fn mean_abs_error(decoded: &Frame, expected: &RgbImage) -> f64 {
         let mut total = 0_u64;
-        for (pixel, chunk) in expected.pixels().iter().zip(decoded.rgba.chunks_exact(4)) {
+        for (pixel, chunk) in expected.pixels().iter().zip(decoded.rgba.as_chunks::<4>().0) {
             total += u64::from(pixel.r.abs_diff(chunk[0]));
             total += u64::from(pixel.g.abs_diff(chunk[1]));
             total += u64::from(pixel.b.abs_diff(chunk[2]));

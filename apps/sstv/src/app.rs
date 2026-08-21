@@ -27,7 +27,7 @@ use crate::{
     error::AppError,
     storage::{
         bands::{BandDefinition, BandPlan},
-        config::{Config, RigSettings, Settings, UI_SCALE_RANGE},
+        config::{Config, ContactSettings, RigSettings, Settings, UI_SCALE_RANGE},
         paths::{AppPaths, Folder},
     },
     ui::raster::{Raster, test_pattern_image},
@@ -35,6 +35,7 @@ use crate::{
         Waker,
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
+        contact::{ContactPaths, ContactSnapshot, ContactWorker},
         receive::{Frame, RxProgress},
         rig::{Reading, RigSnapshot, RigState, RigWorker, script},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
@@ -217,6 +218,34 @@ pub struct App {
     /// what a rig needs is a station's own business rather than something a
     /// menu could offer a list of.
     pub rig: RigSettings,
+    /// Where the contact directory looks a callsign up.
+    ///
+    /// Only whether to look one up is the interface's to change, for the same
+    /// reason the rig's address is not: the instance and the key belong to the
+    /// station rather than to a list a menu could offer.
+    pub contact_settings: ContactSettings,
+    /// The thread that reads and writes the contact directory.
+    pub contact: ContactWorker,
+    /// What that thread last found, read once per frame.
+    pub contact_snapshot: ContactSnapshot,
+    /// Whether the dialog showing what is filed under the contact is open.
+    pub contact_dialog_open: bool,
+    /// The rows that dialog is editing.
+    ///
+    /// The fields the settings ask for lead, then anything else the directory
+    /// happens to hold.
+    pub contact_draft: Vec<ContactRow>,
+    /// The files the worker was opened over, kept so that switching the lookup
+    /// on or off can open it again over a different logger.
+    contact_paths: ContactPaths,
+    /// The waker that worker was given, kept for the same reason.
+    contact_waker: Waker,
+    /// The callsign it was last asked about.
+    ///
+    /// Leaving a field is what commits it, and the operator leaves the field
+    /// whether or not they changed anything; without this the same station
+    /// would be asked about again on every pass through the panel.
+    contact_requested: String,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -274,6 +303,20 @@ pub struct App {
 
 /// What the station says about itself.
 ///
+/// One row of the contact dialog.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ContactRow {
+    pub key: String,
+    pub value: String,
+    /// Whether the settings asked for this key, and so whether it is shown
+    /// with a label rather than with its name laid open for editing.
+    ///
+    /// A row is offered whether or not the station has a value for it, which
+    /// is what makes the dialog say what this operator files rather than only
+    /// what this contact happens to have.
+    pub offered: bool,
+}
+
 /// Set once for the operator rather than per contact, which is why it is
 /// edited in a dialog of its own instead of in the panel beside the image.
 pub struct Station {
@@ -359,9 +402,20 @@ impl App {
             settings.dsp.live_slant,
             settings.vis_restart,
             settings.vis_strict,
-            waker,
+            waker.clone(),
         );
-        let mut app = Self::from_parts(audio, paths, config, &settings, platform::host());
+        let mut app = Self::from_parts(
+            audio,
+            paths,
+            config,
+            &settings,
+            ContactPaths {
+                store: grayline_qso::default_store_path(),
+                credentials: grayline_qso::default_credentials_path(),
+            },
+            waker,
+            platform::host(),
+        );
         app.refresh_library();
         app.restore_selection(&settings);
         app.request_composition();
@@ -393,6 +447,12 @@ impl App {
             ),
             Config::detached(),
             &Settings::default(),
+            // Nothing named, so the store is held in memory and no logger is
+            // reached: the suite must neither write into the directory the
+            // operator's applications share nor put a question to the logger
+            // whose key sits beside it.
+            ContactPaths::default(),
+            Waker::default(),
             platform,
         )
     }
@@ -402,6 +462,8 @@ impl App {
         paths: AppPaths,
         config: Config,
         settings: &Settings,
+        contact_paths: ContactPaths,
+        waker: Waker,
         platform: Box<dyn Platform>,
     ) -> Self {
         let (bands, bands_error) = BandPlan::load(paths.config_dir());
@@ -453,6 +515,14 @@ impl App {
             device_fault: None,
             ui_scale: settings.ui_scale,
             rig: settings.rig.clone(),
+            contact: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
+            contact_snapshot: ContactSnapshot::default(),
+            contact_dialog_open: false,
+            contact_draft: Vec::new(),
+            contact_paths,
+            contact_waker: waker,
+            contact_requested: String::new(),
+            contact_settings: settings.contact.clone(),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -524,6 +594,7 @@ impl App {
             history_format: self.history_format,
             ui_scale: self.ui_scale,
             rig: self.rig.clone(),
+            contact: self.contact_settings.clone(),
         }
     }
 
@@ -679,6 +750,162 @@ impl App {
         trimmed |= trim_in_place(&mut self.qso.number);
         if trimmed {
             self.qso_changed();
+        }
+        // Outside the branch above, because leaving the field is what commits
+        // the callsign whether or not trimming changed anything, and the
+        // request guards itself against being made twice for one station.
+        self.look_up_contact();
+    }
+
+    /// Asks the directory about the callsign in the QSO panel.
+    ///
+    /// Text that is not a callsign asks nobody: a half-typed field and a
+    /// garbled identifier both arrive here, and neither is a station worth
+    /// putting a question to somebody's logger about.
+    fn look_up_contact(&mut self) {
+        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
+            self.contact_requested.clear();
+            return;
+        };
+        if callsign == self.contact_requested {
+            return;
+        }
+        self.contact_requested = callsign.clone();
+        self.contact.look_up(&callsign);
+    }
+
+    /// Asks the logger about the callsign again, whatever the store holds.
+    pub fn refresh_contact(&mut self) {
+        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
+            return;
+        };
+        self.contact_requested = callsign.clone();
+        self.contact.refresh(&callsign);
+    }
+
+    /// Whether asking the logger is something this station can do at all.
+    ///
+    /// A control that would do nothing is not offered: with the lookup off, or
+    /// with no instance and no key configured, there is nobody to ask again.
+    pub fn can_refresh_contact(&self) -> bool {
+        self.contact_settings.lookup && grayline_qso::normalize_callsign(&self.qso.call).is_some()
+    }
+
+    /// Opens the dialog on what is filed under the callsign being worked.
+    ///
+    /// The fields the settings ask for lead, in the order they were written,
+    /// whether or not this station has any of them: a station in Japan wants
+    /// somewhere to put a JCC code and a station anywhere else does not, and
+    /// which of those an operator is was never something to decide here.
+    /// Anything else already filed follows, under its own name.
+    pub fn open_contact(&mut self) {
+        let known = &self.contact_snapshot.fields;
+        let offered = grayline_qso::expand_fields(self.contact_settings.fields.iter().map(String::as_str));
+        let mut draft: Vec<ContactRow> = offered
+            .iter()
+            .map(|key| ContactRow {
+                value: known.get(key).cloned().unwrap_or_default(),
+                key: key.clone(),
+                offered: true,
+            })
+            .collect();
+        draft.extend(
+            known
+                .iter()
+                .filter(|(key, _)| !offered.contains(key))
+                .map(|(key, value)| ContactRow {
+                    key: key.clone(),
+                    value: value.clone(),
+                    offered: false,
+                }),
+        );
+        self.contact_draft = draft;
+        self.contact_dialog_open = true;
+    }
+
+    pub fn add_contact_field(&mut self) {
+        self.contact_draft.push(ContactRow::default());
+    }
+
+    /// Files the edited rows under the callsign being worked.
+    ///
+    /// A row the operator emptied is dropped rather than left alone: clearing
+    /// a value is how a wrong one is taken back, and a write that only ever
+    /// added would hand it straight back on the next lookup. A row whose name
+    /// no `${...}` expression could hold is kept in the dialog to be corrected
+    /// and left out of the store, the way an operator's own variables are.
+    pub fn commit_contact(&mut self) {
+        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
+            return;
+        };
+        let Some(mut record) = grayline_qso::Record::new(&callsign) else {
+            return;
+        };
+        let mut dropped = Vec::new();
+        for row in &self.contact_draft {
+            if !grayline_qso::valid_key(&row.key) {
+                continue;
+            }
+            if record.set(&row.key, &row.value) {
+                continue;
+            }
+            if self.contact_snapshot.fields.contains_key(&row.key) {
+                dropped.push(row.key.clone());
+            }
+        }
+        if record.iter().eq(self
+            .contact_snapshot
+            .fields
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str())))
+            && dropped.is_empty()
+        {
+            return;
+        }
+        self.contact.save(record, dropped);
+    }
+
+    /// Turns asking the operator's own logger on or off.
+    ///
+    /// The worker is opened again rather than told: what it holds is a
+    /// directory composed over a logger or over nothing, and which of those it
+    /// is was decided when it was built.
+    pub fn set_contact_lookup(&mut self, lookup: bool) {
+        if self.contact_settings.lookup == lookup {
+            return;
+        }
+        self.contact_settings.lookup = lookup;
+        self.contact = ContactWorker::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+        self.contact_snapshot = ContactSnapshot::default();
+        self.contact_requested.clear();
+        self.look_up_contact();
+    }
+
+    /// Writes the credentials file out for the operator to edit.
+    ///
+    /// Refuses to write over one that is already there, the way the rig script
+    /// does: the file only exists because someone put a key in it.
+    pub fn write_contact_credentials(&mut self) {
+        let Some(path) = self.contact_paths.credentials.clone() else {
+            return;
+        };
+        let written = if path.exists() {
+            Ok(path)
+        } else {
+            grayline_qso::Credentials::write(&path, Some(&self.contact_settings.wavelog_url), "")
+                .map(|()| path)
+                .map_err(|error| io::Error::other(error.to_string()))
+        };
+        self.report_written(written);
+    }
+
+    /// Takes up what the directory answered, composing again when it differs.
+    fn poll_contact(&mut self) {
+        let latest = self.contact.latest();
+        let changed = latest.fields != self.contact_snapshot.fields;
+        self.contact_snapshot = latest;
+        if changed {
+            self.request_composition();
         }
     }
 
@@ -954,6 +1181,7 @@ impl App {
             self.select_rx_mode(mode);
         }
         self.poll_rig();
+        self.poll_contact();
         self.poll_transmit();
         // Reception stops for as long as anything is going out. The station's
         // own signal comes back off the antenna, and what would be decoded from
@@ -1174,6 +1402,9 @@ impl App {
         }
         self.qso.call = call;
         self.qso_changed();
+        // The identifier path does not go through `finish_qso_edit`, so the
+        // lookup a typed callsign gets has to be asked for here too.
+        self.look_up_contact();
     }
 
     /// Puts a newly decoded contest number in the received report field.
@@ -1360,6 +1591,7 @@ impl App {
             station_qth: self.station.qth.clone(),
             station_grid: self.station.grid.clone(),
             contact_callsign: self.qso.call.clone(),
+            contact: self.contact_snapshot.fields.clone(),
             report: self.qso.rsv.clone(),
             number: self.qso.number.clone(),
             report_received: self.qso.rsv_received.clone(),

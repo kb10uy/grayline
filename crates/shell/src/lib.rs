@@ -82,6 +82,29 @@ pub fn manual_url(identity: &Identity) -> String {
     chosen_manual_url(std::env::var(MANUAL_URL_VARIABLE).ok(), identity)
 }
 
+/// Makes every label in this interface inert, dialogs included.
+///
+/// Labels are inert throughout this family. Several of them sit inside rows
+/// that sense the click themselves, and a selectable label takes the text
+/// cursor and swallows the press; none of the text an application labels with
+/// is worth dragging a selection across either.
+///
+/// The context and the `Ui` in hand are both set, and the two are not the same
+/// reach. A modal builds its own `Ui` out of the context rather than out of
+/// this one, so setting only the `Ui` leaves every dialog with selectable
+/// labels while nothing behind them has any. The context takes effect from the
+/// next `Ui` built out of it, which is why the one in hand is still set too.
+/// Every theme's style rather than the current one, because which theme the
+/// operator is in is not this decision's business.
+///
+/// Called as an interface is drawn rather than as the application starts, so
+/// that an interface driven by a test harness behaves the way the window does.
+pub fn inert_labels(ui: &mut egui::Ui) {
+    ui.ctx()
+        .all_styles_mut(|style| style.interaction.selectable_labels = false);
+    ui.style_mut().interaction.selectable_labels = false;
+}
+
 /// The address `configured` names, or the identity's own.
 ///
 /// Split from the lookup so it can be checked without an environment: a test

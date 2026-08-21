@@ -340,7 +340,10 @@ The following concerns belong outside the portable DSP and SSTV core:
 - Audio device enumeration, callbacks, and stream formats.
 - Windows messages, handles, VCL controls, and other GUI toolkit types.
 - PTT and CAT transports.
-- Logging services and external logger integrations.
+- Logging services and external logger integrations. `grayline-qso` is the
+  first of these: a directory of stations read by callsign, described in
+  [qso-directory.md](qso-directory.md). It is a directory rather than a log,
+  and it deliberately keeps nothing about a contact.
 - History, template editing, settings persistence, and application file
   management.
 - Thread scheduling and application-level queue policy.
@@ -364,6 +367,8 @@ The workspace currently contains seventeen packages:
 | `web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
+| `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
+| `grayline-qso-cli` | Contact directory command line, as `gl-qso` | Implemented |
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
@@ -401,9 +406,12 @@ grayline-audio ----------+
 grayline-sstv-rx ----+
 grayline-sstv-fskid ----------+
 grayline-tone-tx ------+
+grayline-qso ------------+
 grayline-rig ------------+-> grayline-sstv-app
 grayline-sstv -----------+
 grayline-sstv-template -------+
+
+grayline-qso ------------> grayline-qso-cli
 
 grayline-dsp ------------> grayline-wefax --> grayline-wefax-cli
 

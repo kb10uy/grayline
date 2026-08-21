@@ -111,6 +111,18 @@ impl I18n {
         self.format(key, None)
     }
 
+    /// Returns the message `key` names, or nothing when the catalogue has none.
+    ///
+    /// [`I18n::text`] answers with the key itself for a message that is not
+    /// there, which is what a missing label should look like in the interface
+    /// while it is being written. A caller naming keys it did not choose —
+    /// one labelling whatever a configuration file asked for — needs to tell
+    /// the two apart, and has something better than the key to fall back on.
+    pub fn message(&self, key: &str) -> Option<String> {
+        self.bundle.get_message(key)?.value()?;
+        Some(self.text(key))
+    }
+
     /// Returns the message `key` names, with `args` substituted into it.
     pub fn text_with(&self, key: &str, args: &[(&str, Value<'_>)]) -> String {
         let mut arguments = FluentArgs::new();

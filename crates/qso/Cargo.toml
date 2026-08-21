@@ -1,0 +1,19 @@
+[package]
+name = "grayline-qso"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+directories.workspace = true
+encoding_rs.workspace = true
+jiff.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+thiserror = { workspace = true, features = ["std"] }
+toml_edit.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
