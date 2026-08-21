@@ -116,11 +116,14 @@ Per-column headers can read `ReceivePipeline::signal_strength`,
 mark-minus-space figure is not exposed today and arrives with the monitor tap
 below.
 
-As built, a header carries the path's name, the pair it is actually detecting,
-which tone the comparator is on, the case, and the signal reading. Which tone
-reads as neither while the squelch is closed: the comparator answers with one
-of the two whatever noise it is given, and a reading that swung about on an
-empty band would be the loudest thing in the window.
+As built, a header carries the path's name at one end and, at the other, the
+pair it is actually detecting, the case, and the signal reading. The tone the
+comparator is on is not shown: at baud rate it is a light flickering faster
+than it can be read, and the pair reading and the signal meter are what tuning
+is actually done on. The pair is drawn in the same family as the labels beside
+it rather than in the monospaced one — two families laid out at one size do not
+share a baseline, and the proportional family's figures are tabular, so the
+reading keeps its width as the frequency control moves it.
 
 A settings change rebuilds every pipeline, because a receiver is built from
 its configuration and cannot be retuned in place. That costs a few

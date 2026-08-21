@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use grayline_rtty::ToneSet;
 use grayline_shell::{
+    common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale},
     log,
     platform::{Activity, Platform},
@@ -17,7 +18,7 @@ use crate::{
     error::AppError,
     locales::CATALOG,
     storage::{
-        config::{Config, MAXIMUM_MARK_HZ, MAXIMUM_UI_SCALE, MINIMUM_MARK_HZ, MINIMUM_UI_SCALE, Settings},
+        config::{Config, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
         paths::{AppPaths, Folder},
     },
     ui::scrollback::Scrollback,
@@ -62,6 +63,8 @@ pub struct App {
     /// The settings last written, so a frame that changed nothing writes
     /// nothing.
     saved: Settings,
+    /// The language and the scale, which the whole family shares.
+    common: CommonConfig,
     platform: Box<dyn Platform>,
     activity: Activity,
     /// The session the text on screen belongs to.
@@ -74,9 +77,20 @@ pub struct App {
 impl App {
     pub fn new(paths: AppPaths, waker: Waker) -> Self {
         let (config, settings) = Config::load(paths.config_file().to_path_buf());
+        let common = CommonConfig::discover();
         let audio = AudioState::new(settings.device.as_deref(), worker_settings(&settings), waker);
-        let mut app = Self::from_parts(audio, paths, config, &settings, grayline_shell::platform::host());
-        if let Some(error) = app.config.error() {
+        let mut app = Self::from_parts(
+            audio,
+            paths,
+            config,
+            &settings,
+            common,
+            grayline_shell::platform::host(),
+        );
+        // Either file can be the unreadable one, and the first of them the
+        // operator is told about is the one worth reporting: a second notice
+        // would only replace the first before it had been read.
+        if let Some(error) = app.config.error().or_else(|| app.common.error()) {
             let message = app.i18n.text("error-config");
             app.notice = Some(format!("{message}: {error}"));
         }
@@ -88,14 +102,16 @@ impl App {
         paths: AppPaths,
         config: Config,
         settings: &Settings,
+        common: CommonConfig,
         platform: Box<dyn Platform>,
     ) -> Self {
         let session = audio.session();
+        let shared = common.settings();
         Self {
-            i18n: I18n::new(settings.locale, &CATALOG),
+            i18n: I18n::new(shared.locale, &CATALOG),
             audio,
             columns: DecodePath::ALL.map(|_| Scrollback::default()).into_iter().collect(),
-            ui_scale: settings.ui_scale,
+            ui_scale: shared.ui_scale,
             mark_hz: settings.mark_hz,
             shift_hz: settings.shift_hz,
             baud: settings.baud,
@@ -110,6 +126,7 @@ impl App {
             paths,
             config,
             saved: settings.clone(),
+            common,
             platform,
             activity: Activity::Idle,
         }
@@ -130,6 +147,7 @@ impl App {
             AppPaths::from_roots(scratch.join("config"), scratch.join("state")),
             Config::detached(),
             &settings,
+            CommonConfig::detached(),
             platform,
         )
     }
@@ -211,7 +229,14 @@ impl App {
     }
 
     /// Writes the settings when a frame changed one.
+    ///
+    /// Both files: the shared one skips a write that would change nothing
+    /// itself, because the other applications write to it too.
     pub fn persist(&mut self) {
+        self.common.save(&CommonSettings {
+            locale: self.i18n.locale(),
+            ui_scale: self.ui_scale,
+        });
         let settings = self.settings();
         if settings == self.saved {
             return;
@@ -222,8 +247,6 @@ impl App {
 
     fn settings(&self) -> Settings {
         Settings {
-            locale: self.i18n.locale(),
-            ui_scale: self.ui_scale,
             device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
             mark_hz: self.mark_hz,
             shift_hz: self.shift_hz,
@@ -249,7 +272,7 @@ impl App {
     }
 
     pub fn set_ui_scale(&mut self, scale: f32) {
-        self.ui_scale = scale.clamp(MINIMUM_UI_SCALE, MAXIMUM_UI_SCALE);
+        self.ui_scale = scale.clamp(*UI_SCALE_RANGE.start(), *UI_SCALE_RANGE.end());
     }
 
     pub fn zoom_by(&mut self, delta: f32) {

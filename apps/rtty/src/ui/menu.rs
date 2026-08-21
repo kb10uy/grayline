@@ -9,7 +9,10 @@
 //! listening is on the panel beside the text, so the menu carries only what is
 //! set once and then left alone.
 
-use grayline_shell::i18n::{Locale, number};
+use grayline_shell::{
+    common::DEFAULT_UI_SCALE,
+    i18n::{Locale, number},
+};
 
 use crate::{app::App, storage::paths::Folder};
 
@@ -204,7 +207,7 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::OpenManual => app.open_manual(),
         Action::ZoomIn => app.zoom_by(ZOOM_STEP),
         Action::ZoomOut => app.zoom_by(-ZOOM_STEP),
-        Action::ZoomReset => app.set_ui_scale(crate::storage::config::DEFAULT_UI_SCALE),
+        Action::ZoomReset => app.set_ui_scale(DEFAULT_UI_SCALE),
         Action::Reveal(folder) => app.reveal(folder),
         Action::Quit => return true,
     }

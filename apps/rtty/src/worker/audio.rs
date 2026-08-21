@@ -159,6 +159,15 @@ impl AudioState {
         &self.snapshot
     }
 
+    /// Puts a snapshot in place of one a worker would have published.
+    ///
+    /// Tests draw the readings the interface takes from a running receiver
+    /// without one.
+    #[cfg(test)]
+    pub fn seed_snapshot(&mut self, snapshot: RxSnapshot) {
+        self.snapshot = snapshot;
+    }
+
     /// Pushes the operator's settings to the worker, and remembers them for
     /// the next device.
     pub fn set_settings(&mut self, settings: WorkerSettings) {

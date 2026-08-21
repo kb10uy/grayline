@@ -7,7 +7,10 @@ use grayline_shell::i18n::{I18n, Locale};
 use rstest::rstest;
 
 use super::*;
-use crate::{ui::menu, worker::receive::ColumnSnapshot};
+use crate::{
+    ui::menu,
+    worker::receive::{ColumnSnapshot, RxSnapshot},
+};
 
 fn render(app: &mut App) -> Harness<'_> {
     let mut harness = Harness::new_ui(|ui| {
@@ -67,7 +70,6 @@ fn the_header_reads_what_the_decode_path_is_hearing() {
     let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
     let column = ColumnSnapshot {
         signal_strength: 0.5,
-        difference: -0.4,
         case: Case::Figures,
         tones: ToneSet {
             mark_hz: 2_130.0,
@@ -76,26 +78,41 @@ fn the_header_reads_what_the_decode_path_is_hearing() {
         squelch_open: true,
         ..ColumnSnapshot::default()
     };
-    assert_eq!(tones_reading(&column), "2130/2300");
-    assert_eq!(tuning_text(&app, &column).text(), i18n.text("tone-space"));
+    assert_eq!(tones_reading(&column), "M:2130 / S:2300");
     assert_eq!(case_text(&app, &column).text(), i18n.text("case-figures"));
 
+    app.audio.seed_snapshot(RxSnapshot {
+        columns: vec![column],
+        ..RxSnapshot::default()
+    });
     let harness = render(&mut app);
     harness.get_by_label(&i18n.text("path-resonator"));
+    harness.get_by_label(&i18n.text("case-figures"));
+    harness.get_by_label("M:2130 / S:2300");
 }
 
-/// A closed squelch is the receiver saying it is hearing nothing, and the
-/// comparator's answer under noise is not a reading worth printing.
+/// Everything on the header line is read together, so nothing on it may sit
+/// on a baseline of its own: two font families laid out at the same size do
+/// not share one.
 #[test]
-fn a_closed_squelch_reads_as_neither_tone() {
-    let app = App::headless();
-    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
-    let column = ColumnSnapshot {
-        difference: 0.9,
-        squelch_open: false,
-        ..ColumnSnapshot::default()
-    };
-    assert_eq!(tuning_text(&app, &column).text(), i18n.text("tone-quiet"));
+fn the_header_readings_share_one_baseline() {
+    let mut app = App::headless();
+    app.audio.seed_snapshot(RxSnapshot {
+        columns: vec![ColumnSnapshot {
+            tones: ToneSet {
+                mark_hz: 2_125.0,
+                space_hz: 2_295.0,
+            },
+            ..ColumnSnapshot::default()
+        }],
+        ..RxSnapshot::default()
+    });
+    let letters = I18n::new(Locale::En, &crate::locales::CATALOG).text("case-letters");
+    let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+    let reading = harness.get_by_label("M:2125 / S:2295").rect();
+    let case = harness.get_by_label(&letters).rect();
+    assert_eq!(reading.top(), case.top());
+    assert_eq!(reading.height(), case.height());
 }
 
 /// The panel is laid out from the width it is given, so a window too narrow
@@ -119,23 +136,4 @@ fn the_window_settles_and_stops_asking_for_frames() {
     // `run` gives up after a few steps if frames keep being asked for, which
     // is the assertion: by now nothing should be.
     harness.run();
-}
-
-/// Mark and space are read at a glance rather than by reading the word, so
-/// they cannot share a colour.
-#[test]
-fn the_two_tones_are_drawn_apart() {
-    let app = App::headless();
-    let mark = ColumnSnapshot {
-        difference: 0.5,
-        squelch_open: true,
-        ..ColumnSnapshot::default()
-    };
-    let space = ColumnSnapshot {
-        difference: -0.5,
-        squelch_open: true,
-        ..ColumnSnapshot::default()
-    };
-    assert_ne!(tuning_text(&app, &mark).text(), tuning_text(&app, &space).text());
-    assert_ne!(MARK_COLOR, SPACE_COLOR);
 }

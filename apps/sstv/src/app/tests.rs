@@ -22,10 +22,14 @@ use grayline_rig::RigError;
 
 fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     let config = Config::load(paths.config_file());
+    // The shared file, under the same scratch directory: the language and the
+    // scale are read and written there rather than in the application's own
+    // file, and a run that could not reach it would not be restoring them.
+    let common = CommonConfig::load(paths.config_dir().join(grayline_shell::common::COMMON_FILE));
     let mut app = App::from_parts(
         AudioState::disconnected(),
         paths,
-        config,
+        Stored { config, common },
         settings,
         ContactPaths::default(),
         Waker::default(),
@@ -291,7 +295,10 @@ fn the_credentials_file_is_written_where_the_paths_name_it() {
             root.path().join("pictures"),
             root.path().join("state"),
         ),
-        Config::detached(),
+        Stored {
+            config: Config::detached(),
+            common: CommonConfig::detached(),
+        },
         &Settings::default(),
         ContactPaths {
             store: None,

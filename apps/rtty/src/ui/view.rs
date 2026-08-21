@@ -37,9 +37,6 @@ const METER_WIDTH: f32 = 64.0;
 const SMALL: f32 = 12.0;
 const LABEL: f32 = 11.0;
 
-const MARK_COLOR: Color32 = Color32::from_rgb(0x60, 0xD0, 0x70);
-const SPACE_COLOR: Color32 = Color32::from_rgb(0x70, 0xB0, 0xF0);
-const QUIET_COLOR: Color32 = Color32::GRAY;
 const ERROR_COLOR: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
 
 /// Draws the window and returns whatever the menu activated.
@@ -105,30 +102,10 @@ fn column_header(ui: &mut Ui, app: &App, index: usize) {
             ui.label(RichText::new(app.i18n.text("label-signal")).size(LABEL).weak());
             if let Some(column) = snapshot {
                 ui.label(case_text(app, column));
-                ui.label(tuning_text(app, column));
-                ui.label(RichText::new(tones_reading(column)).size(LABEL).monospace().weak());
+                ui.label(RichText::new(tones_reading(column)).size(LABEL).weak());
             }
         });
     });
-}
-
-/// Which tone is being heard, which is what the operator tunes on.
-///
-/// A closed squelch reads as neither: the comparator still answers with one of
-/// the two whatever noise it is given, and a reading that swung about on an
-/// empty band would be the loudest thing in the window.
-fn tuning_text(app: &App, column: &ColumnSnapshot) -> RichText {
-    if !column.squelch_open {
-        return RichText::new(app.i18n.text("tone-quiet"))
-            .size(SMALL)
-            .color(QUIET_COLOR);
-    }
-    let (key, color) = if column.difference >= 0.0 {
-        ("tone-mark", MARK_COLOR)
-    } else {
-        ("tone-space", SPACE_COLOR)
-    };
-    RichText::new(app.i18n.text(key)).size(SMALL).color(color).strong()
 }
 
 /// The case the decoder is reading in.
@@ -146,8 +123,14 @@ fn case_text(app: &App, column: &ColumnSnapshot) -> RichText {
 
 /// The pair actually being detected, which automatic frequency control moves
 /// away from the pair that was asked for.
+///
+/// Drawn in the same family as the labels beside it rather than in the
+/// monospaced one. The two families are laid out from their own metrics, so a
+/// monospaced reading sits a pixel off the baseline of everything around it,
+/// and the proportional family's figures are tabular anyway: the reading keeps
+/// its width as the frequency control moves it.
 fn tones_reading(column: &ColumnSnapshot) -> String {
-    format!("{:.0}/{:.0}", column.tones.mark_hz, column.tones.space_hz)
+    format!("M:{:.0} / S:{:.0}", column.tones.mark_hz, column.tones.space_hz)
 }
 
 fn heading(ui: &mut Ui, label: &str) {

@@ -1,11 +1,14 @@
 use std::{
-    io,
+    fs, io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 use grayline_rtty::ToneSet;
-use grayline_shell::i18n::Locale;
+use grayline_shell::{
+    common::{COMMON_FILE, DEFAULT_UI_SCALE},
+    i18n::Locale,
+};
 use rstest::rstest;
 
 use super::*;
@@ -58,11 +61,11 @@ fn switching_the_language_relabels_the_interface(#[case] locale: Locale) {
 fn the_zoom_stays_inside_what_the_settings_allow() {
     let mut app = App::headless();
     app.zoom_by(10.0);
-    assert_eq!(app.ui_scale, MAXIMUM_UI_SCALE);
+    assert_eq!(app.ui_scale, *UI_SCALE_RANGE.end());
     app.zoom_by(-10.0);
-    assert_eq!(app.ui_scale, MINIMUM_UI_SCALE);
-    app.set_ui_scale(crate::storage::config::DEFAULT_UI_SCALE);
-    assert_eq!(app.ui_scale, crate::storage::config::DEFAULT_UI_SCALE);
+    assert_eq!(app.ui_scale, *UI_SCALE_RANGE.start());
+    app.set_ui_scale(DEFAULT_UI_SCALE);
+    assert_eq!(app.ui_scale, DEFAULT_UI_SCALE);
 }
 
 /// The pair is two figures on the panel and one pair in the receiver, and the
@@ -207,6 +210,34 @@ fn only_a_printing_watch_keeps_the_machine_awake() {
             .all(|activity| *activity == Activity::Idle),
         "an idle watch asked the platform for something"
     );
+}
+
+/// The language and the zoom are read from the file the family shares and
+/// written back to it, which is what makes a language chosen in one
+/// application the language the next one opens in.
+#[test]
+fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
+    let root = crate::test_util::TempDir::new();
+    let shared = root.path().join(COMMON_FILE);
+    fs::write(&shared, "language = \"ja\"\n").unwrap();
+
+    let settings = Settings::default();
+    let mut app = App::from_parts(
+        AudioState::disconnected(worker_settings(&settings)),
+        AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
+        Config::detached(),
+        &settings,
+        CommonConfig::load(shared.clone()),
+        Box::new(grayline_shell::platform::QuietPlatform),
+    );
+    assert_eq!(app.i18n.locale(), Locale::Ja);
+
+    app.set_ui_scale(1.5);
+    app.persist();
+
+    let written = fs::read_to_string(&shared).unwrap();
+    assert!(written.contains("ui-scale = 1.5"), "{written}");
+    assert!(written.contains("language = \"ja\""), "{written}");
 }
 
 #[test]

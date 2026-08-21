@@ -1,13 +1,7 @@
 use std::{fs, io, path::PathBuf};
 
-use grayline_shell::{i18n::Locale, log};
+use grayline_shell::log;
 use toml_edit::{DocumentMut, Item, value};
-
-/// The zoom the interface is laid out at.
-pub const DEFAULT_UI_SCALE: f32 = 1.0;
-/// Bounds on the zoom.
-pub const MINIMUM_UI_SCALE: f32 = 0.5;
-pub const MAXIMUM_UI_SCALE: f32 = 3.0;
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -37,10 +31,12 @@ pub const MINIMUM_SQUELCH: f64 = 0.0;
 pub const MAXIMUM_SQUELCH: f64 = 1.0;
 
 /// Everything the application remembers between sessions.
+///
+/// The language and the interface scale are not here: they are the same in
+/// every application of this family and are kept once, in
+/// `grayline_shell::common`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
-    pub locale: Locale,
-    pub ui_scale: f32,
     pub device: Option<String>,
     /// The tone a mark is heard at; space sits `shift_hz` above it.
     pub mark_hz: f64,
@@ -58,8 +54,6 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            locale: Locale::default(),
-            ui_scale: DEFAULT_UI_SCALE,
             device: None,
             mark_hz: 2_125.0,
             shift_hz: 170.0,
@@ -88,7 +82,6 @@ impl Settings {
     /// Applied to what is read from the file and to what the panel produces
     /// alike, so a hand-edited value arrives in the shape a typed one does.
     pub fn clamped(mut self) -> Self {
-        self.ui_scale = self.ui_scale.clamp(MINIMUM_UI_SCALE, MAXIMUM_UI_SCALE);
         self.mark_hz = self.mark_hz.clamp(MINIMUM_MARK_HZ, MAXIMUM_MARK_HZ);
         self.shift_hz = self.shift_hz.clamp(SHIFTS_HZ[0], SHIFTS_HZ[SHIFTS_HZ.len() - 1]);
         self.baud = self.baud.clamp(BAUD_RATES[0], BAUD_RATES[BAUD_RATES.len() - 1]);
@@ -175,8 +168,6 @@ impl Config {
             return;
         }
         let table = self.document.as_table_mut();
-        table["language"] = value(settings.locale.tag());
-        table["ui_scale"] = value(f64::from(settings.ui_scale));
         match &settings.device {
             Some(device) => table["device"] = value(device.as_str()),
             None => {
@@ -209,14 +200,6 @@ fn read(document: &DocumentMut) -> Settings {
     let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
-    if let Some(tag) = get("language").and_then(|value| value.as_str())
-        && let Some(locale) = Locale::from_tag(tag)
-    {
-        settings.locale = locale;
-    }
-    if let Some(scale) = get("ui_scale").and_then(|value| value.as_float()) {
-        settings.ui_scale = scale as f32;
-    }
     if let Some(device) = get("device").and_then(|value| value.as_str()) {
         settings.device = Some(device.to_owned());
     }
@@ -270,7 +253,6 @@ mod tests {
 
         config.save(&settings);
         let written = fs::read_to_string(&path).unwrap();
-        assert!(written.contains("language = \"en\""));
         assert!(written.contains("mark_hz = 2125.0"));
     }
 
@@ -279,8 +261,6 @@ mod tests {
         let root = TempDir::new();
         let path = root.path().join("config.toml");
         let wanted = Settings {
-            locale: Locale::Ja,
-            ui_scale: 1.25,
             device: Some("Line In".to_owned()),
             mark_hz: 1_275.0,
             shift_hz: 850.0,
@@ -304,10 +284,10 @@ mod tests {
     fn saving_preserves_comments_and_unknown_keys() {
         let root = TempDir::new();
         let path = root.path().join("config.toml");
-        fs::write(&path, "# the station's own note\nunknown = 7\nlanguage = \"ja\"\n").unwrap();
+        fs::write(&path, "# the station's own note\nunknown = 7\nbaud = 75.0\n").unwrap();
 
         let (mut config, settings) = Config::load(path.clone());
-        assert_eq!(settings.locale, Locale::Ja);
+        assert_eq!(settings.baud, 75.0);
         config.save(&settings);
 
         let written = fs::read_to_string(&path).unwrap();
@@ -335,10 +315,9 @@ mod tests {
     fn unusable_values_fall_back_without_discarding_the_rest() {
         let root = TempDir::new();
         let path = root.path().join("config.toml");
-        fs::write(&path, "language = 7\nmark_hz = \"low\"\nbaud = nan\nreverse = true\n").unwrap();
+        fs::write(&path, "mark_hz = \"low\"\nbaud = nan\nreverse = true\n").unwrap();
 
         let (_, settings) = Config::load(path);
-        assert_eq!(settings.locale, Locale::default());
         assert_eq!(settings.mark_hz, Settings::default().mark_hz);
         assert_eq!(settings.baud, Settings::default().baud);
         assert!(settings.reverse);
@@ -351,12 +330,11 @@ mod tests {
         let path = root.path().join("config.toml");
         fs::write(
             &path,
-            "ui_scale = 99.0\nmark_hz = 40000.0\nshift_hz = 1.0\nbaud = 9000.0\nsquelch_threshold = 4.0\n",
+            "mark_hz = 40000.0\nshift_hz = 1.0\nbaud = 9000.0\nsquelch_threshold = 4.0\n",
         )
         .unwrap();
 
         let (_, settings) = Config::load(path);
-        assert_eq!(settings.ui_scale, MAXIMUM_UI_SCALE);
         assert_eq!(settings.mark_hz, MAXIMUM_MARK_HZ);
         assert_eq!(settings.shift_hz, SHIFTS_HZ[0]);
         assert_eq!(settings.baud, BAUD_RATES[BAUD_RATES.len() - 1]);

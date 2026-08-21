@@ -33,9 +33,6 @@ action-atc = Threshold Correction
 
 path-resonator = IIR + majority
 
-tone-mark = MARK
-tone-space = SPACE
-tone-quiet = —
 case-letters = LTRS
 case-figures = FIGS
 

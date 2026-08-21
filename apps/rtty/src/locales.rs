@@ -25,7 +25,7 @@ mod tests {
     fn resources_parse_and_resolve(#[case] locale: Locale) {
         let i18n = I18n::new(locale, &CATALOG);
         assert_eq!(i18n.locale(), locale);
-        assert_ne!(i18n.text("tone-mark"), "tone-mark");
+        assert_ne!(i18n.text("label-mark"), "label-mark");
     }
 
     fn message_keys(locale: Locale) -> BTreeSet<String> {
@@ -68,7 +68,7 @@ mod tests {
     /// Collects every key the application asks for by name.
     ///
     /// A key that is not defined is answered with the key itself, so a
-    /// mistyped one reaches the operator as `tone-makr` rather than as a
+    /// mistyped one reaches the operator as `label-makr` rather than as a
     /// failure. Nothing else notices, which is why this reads the call sites.
     fn requested_keys() -> BTreeSet<String> {
         fn walk(directory: &std::path::Path, keys: &mut BTreeSet<String>) {

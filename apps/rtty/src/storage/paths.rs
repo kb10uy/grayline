@@ -154,10 +154,10 @@ mod tests {
         let root = TempDir::new();
         let paths = AppPaths::from_roots(root.path().join("config"), root.path().join("state"));
         fs::create_dir_all(paths.config_file.parent().unwrap()).unwrap();
-        fs::write(&paths.config_file, "language = \"ja\"\n").unwrap();
+        fs::write(&paths.config_file, "baud = 75.0\n").unwrap();
 
         paths.initialize().unwrap();
 
-        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), "language = \"ja\"\n");
+        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), "baud = 75.0\n");
     }
 }

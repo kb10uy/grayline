@@ -33,9 +33,6 @@ action-atc = しきい値自動補正
 
 path-resonator = IIR + 多数決
 
-tone-mark = マーク
-tone-space = スペース
-tone-quiet = —
 case-letters = 文字
 case-figures = 数字
 

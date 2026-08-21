@@ -584,6 +584,7 @@ directories. Portable storage beside the executable is not supported.
 | Content | Windows | macOS | Linux |
 | --- | --- | --- | --- |
 | Configuration | `%APPDATA%\Grayline\sstv\config.toml` | `~/Library/Application Support/Grayline/sstv/config.toml` | `$XDG_CONFIG_HOME/grayline/sstv/config.toml` |
+| Shared settings | `%APPDATA%\Grayline\common.toml` | `~/Library/Application Support/Grayline/common.toml` | `$XDG_CONFIG_HOME/grayline/common.toml` |
 | Templates and assets | `%APPDATA%\Grayline\sstv\templates`, `%APPDATA%\Grayline\sstv\assets` | `~/Library/Application Support/Grayline/sstv/templates`, `~/Library/Application Support/Grayline/sstv/assets` | `$XDG_DATA_HOME/grayline/sstv/templates`, `$XDG_DATA_HOME/grayline/sstv/assets` |
 | User images | `Pictures\Grayline SSTV` | `~/Pictures/Grayline SSTV` | `$XDG_PICTURES_DIR/Grayline SSTV` |
 
@@ -595,13 +596,22 @@ other resources are stored under `assets`.
 At startup the application creates all of these directories and creates an
 empty, valid `config.toml` when it does not already exist. Existing
 configuration files are never replaced. The application preserves comments and
-unknown keys while saving its language, UI scale, device, library, mode, DSP,
-history, and station-callsign settings. A `[variables]` table holds the
-operator's own template variables as plain string keys, read by templates as
+unknown keys while saving its device, library, mode, DSP, history, and
+station-callsign settings. A `[variables]` table holds the operator's own
+template variables as plain string keys, read by templates as
 `${custom.<name>}`; a key that no `${...}` expression could hold is dropped on
 load the way every other unusable value in the file is. Keys are assigned
 rather than the table being rewritten, so a comment beside one survives a save
 that did not touch it.
+
+The language and the UI scale are not in it. They are the same answer in every
+application of the family, so they live once in `common.toml`, beside the
+per-application directories and beside the shared contact store's credentials,
+under the keys `language` and `ui-scale`. Every application reads it at startup
+and writes it back only when one of the two changes, so a language chosen in
+one is the language the next one opens in. `grayline_shell::common` is the only
+code that touches the file, and comments and unknown keys survive a save there
+too.
 
 The GUI template list is populated from regular `.kdl` files directly inside
 `templates`. The stock list is populated from regular files directly inside

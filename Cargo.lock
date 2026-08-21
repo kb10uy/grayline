@@ -2101,6 +2101,7 @@ dependencies = [
  "jiff",
  "raw-window-handle",
  "rstest",
+ "toml_edit",
  "unic-langid",
  "windows-sys 0.61.2",
 ]
