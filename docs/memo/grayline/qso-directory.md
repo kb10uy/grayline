@@ -38,14 +38,23 @@ into a command-line tool; the SSTV application is where both are in view, and it
 carries the test that holds them to each other. The key `callsign` is refused
 outright, so a record can never shadow the field the operator typed.
 
-The **well-known keys** are the ones an import and a lookup normalize onto, and
-the ones an application offers by name:
+### The keys this crate names
+
+Naming a key, filling it in, and putting a field on screen for it are three
+different questions, and running them together is what produced a dialog of
+fourteen rows nobody wanted. The keys are named here so that the same fact
+arrives under the same name whichever source it came from. Which of them an
+application shows is settled separately, by the operator; see
+[the fields a station uses](#the-fields-a-station-uses).
 
 | Key | Wavelog field | ADIF field |
 | --- | --- | --- |
 | `name` | `name` | `NAME` |
+| `name_latin` | — | — |
 | `qth` | `location` | `QTH` |
+| `qth_latin` | — | — |
 | `grid` | `gridsquare` | `GRIDSQUARE` |
+| `jcc` | — | — |
 | `dxcc` | `dxcc` (the entity name) | `COUNTRY` |
 | `dxcc_id` | `dxcc_id` | `DXCC` |
 | `cq_zone` | `dxcc_cqz` | `CQZ` |
@@ -57,6 +66,15 @@ the ones an application offers by name:
 | `qsl_manager` | `qsl_manager` | `QSL_VIA` |
 | `email` | — | `EMAIL` |
 | `note` | — | `COMMENT`, else `NOTES` |
+
+Four of them no source fills in, and they are named anyway because a key that
+is only ever typed still has to be spelled the same way by everyone who reads
+it. `name_latin` and `qth_latin` exist because **ITA2 carries no kanji**: a
+station keeping a contact's name in its own script has nothing RTTY can send,
+and needs somewhere to keep a form that it can. That is a problem shared by
+every non-Latin script rather than a Japanese one, which is why the keys are not
+spelled `romaji`. `jcc` holds a JCC or JCG code — one key rather than two,
+because the codes are the same field of a QSO and nothing reads them apart.
 
 A record is not limited to these. Whatever else the operator files keeps its own
 name and is read back under it, which is what makes `${contact.rig}` printable
@@ -72,6 +90,43 @@ the DXCC entity's centroid, which would contradict a real QTH printed beside
 them. The operator's own side of a logged contact — `OPERATOR`,
 `STATION_CALLSIGN`, everything under `MY_` — describes the station reading the
 file rather than the one it is filed under.
+
+### The fields a station uses
+
+What an operator files depends on where they operate and on what they work.
+A station in Japan wants a JCC code and a name RTTY can send; a station anywhere
+else wants neither and would rather not scroll past them. Nothing here can
+decide which of those an operator is, so nothing here tries: the field list is
+written in the settings, out of keys and of groups spelled `!name`.
+
+```toml
+[contact]
+fields = ["!ja", "dxcc"]
+```
+
+| Group | Keys |
+| --- | --- |
+| `!core` | `name`, `qth`, `grid` |
+| `!latin` | `name_latin`, `qth_latin` |
+| `!ja` | `name`, `name_latin`, `qth`, `qth_latin`, `grid`, `jcc` |
+
+Two of these are parts and one is a whole: `!ja` is what a station in Japan
+would otherwise assemble out of the other two and a JCC code, offered whole so
+the common case is one entry rather than three. A test holds it to that sum, so
+the shorthand cannot drift from what it stands for.
+
+Groups expand where they are written, so the order is the operator's own, and a
+key named twice appears once and where it first appeared. `["!core"]` is the
+default: three fields, which is what a contact is worth looking up for at all.
+An empty list is taken as written — an operator who asked for no fields wants a
+dialog holding only what the station already has, and handing the default back
+would be arguing with them.
+
+The list is deliberately not a set of country profiles, and it should not become
+one. It is two parts, one shorthand, and the ability to name any key at all;
+anything a station needs beyond that it names for itself, and the store files it
+without being told it exists. `gl-qso keys` prints both the keys and the groups,
+because a field list is written out of both.
 
 ## The store
 
@@ -268,7 +323,7 @@ and inspected while there is no operator-facing import.
 gl-qso [--store <PATH>] <COMMAND>
 
   path                      where the store and the credentials file are
-  keys                      the well-known keys
+  keys                      the keys this build names, and the groups
   lookup <CALLSIGN>         [--remote] [--refresh] [--url <URL>] [--format table|json]
   set <CALLSIGN> <K=V>...   writes at Origin::Manual
   unset <CALLSIGN> <KEY>...
@@ -319,10 +374,13 @@ and the transmission still goes out.
 The dialog opens from a button beside the callsign in the QSO panel rather than
 from the Settings menu, because the record is about the station on the air right
 now and that panel is what the station on the air is worked from, while Settings
-holds what is set once and then left alone. It offers every well-known key
-whether or not this station has one, so an operator can learn what a template
-may read without going to look it up, and shows anything else the directory
-holds as an editable name and value. A field the operator empties is dropped
+holds what is set once and then left alone. It offers the fields the settings
+asked for, in the order they were written and whether or not this station has
+any of them, so the dialog says what this operator files rather than only what
+this contact happens to have; anything else the directory holds follows with its
+name laid open for editing. A field the settings named that the build has no
+label for stands under its own name, because a key the operator invented is one
+no catalogue was ever going to know. A field the operator empties is dropped
 rather than left alone: clearing a value is how a wrong one is taken back, and a
 write that only ever added would hand it straight back on the next lookup.
 

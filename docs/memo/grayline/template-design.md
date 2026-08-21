@@ -338,9 +338,10 @@ macros. Anticipated values include:
 
 - `station.callsign`, `station.qth`, `station.grid`, and `station.name`
 - `contact.callsign`, `contact.name`, `contact.qth`, `contact.grid`, and the
-  rest of the well-known keys listed in
-  [qso-directory.md](qso-directory.md), plus `contact.*` for anything else the
-  operator's directory holds
+  rest of the keys [qso-directory.md](qso-directory.md) names — including
+  `contact.name_latin` and `contact.qth_latin`, which a mode that cannot carry
+  the operator's own script reads instead — plus `contact.*` for anything else
+  the directory holds
 - `report.sent`, `report.number`, and `report.received`
 - `radio.frequency` and `radio.band`
 - `tx.timestamp.utc`, `tx.timestamp.local`, `rx.timestamp.utc`, and

@@ -504,7 +504,7 @@ marked shared are built once and reused across tabs.
 | QSO panel | Shared | `text_input` for the DX call with the contact-details button beside it and the received report under it, then the sent report with its list and its serial, and the two serial buttons |
 | Station dialog | Modal | `text_input` for the callsign, QTH, and grid locator |
 | Template variable dialog | Modal | Rows of `text_input` naming and valuing `${custom.*}` |
-| Contact dialog | Modal | A labelled `text_input` per well-known contact key, then rows naming and valuing anything else the directory holds |
+| Contact dialog | Modal | A labelled `text_input` per contact field the settings ask for, then rows naming and valuing anything else the directory holds |
 | Template list | Shared | `scrollable` of selectable rows |
 | Stock image list | Shared | `scrollable` of selectable rows with thumbnails |
 | Status bar | Shared | Faults from the left; sample rates and decoded callsigns from the right |
@@ -537,9 +537,12 @@ transmission, and it is the first thing the transmit check reports.
 What the *other* station is, in contrast, is edited from a button beside the
 callsign in the QSO panel rather than from the Settings menu, and the reason is
 the same one read the other way: a name and a QTH belong to the station on the
-air right now, which is what that panel is for. The dialog offers every
-well-known key whether or not this station has one, so an operator can learn
-what a template may read without going to look it up. Where the directory finds
+air right now, which is what that panel is for. The dialog offers the fields
+the settings ask for, whether or not this station has any of them, so it says
+what this operator files rather than only what this contact happens to have —
+and which fields those are is the operator's to write, because a station in
+Japan wants a JCC code and a name RTTY can send where a station elsewhere wants
+neither. Where the directory finds
 what it knows — a store of the operator's own, or their own logger asked over
 the network — is settled in files rather than in a dialog, exactly as the rig's
 address is: an API key belongs in neither the settings file the menu offers to
