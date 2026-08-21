@@ -198,3 +198,19 @@ fn the_states_worth_telling_apart_have_their_own_colours() {
     }
     assert_eq!(state_color(RxProgress::Starting), state_color(RxProgress::Phasing));
 }
+
+/// Labels are inert throughout this family, and the setting reaches every
+/// theme so it does not depend on which one the operator is in.
+#[test]
+fn labels_are_inert() {
+    let mut app = App::headless();
+
+    let harness = render(&mut app);
+
+    for theme in [egui::Theme::Dark, egui::Theme::Light] {
+        assert!(
+            !harness.ctx.style_of(theme).interaction.selectable_labels,
+            "{theme:?} labels should be inert"
+        );
+    }
+}

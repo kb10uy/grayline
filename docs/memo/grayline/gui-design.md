@@ -516,6 +516,16 @@ the exception, where a disabled entry either names a whole area still to be
 filled in or is something the menu only has to say — the rig's address, what its
 connection is doing, an empty device list.
 
+Labels are inert throughout, dialogs included, and the two applications say so
+through one call in `grayline_shell::inert_labels`. Several labels sit inside
+rows that sense the click themselves, where a selectable one takes the text
+cursor and swallows the press, and none of this text is worth dragging a
+selection across. It is set as the interface is drawn rather than as the
+application starts, so an interface driven by a test harness behaves the way
+the window does, and it is set on the context as well as on the `Ui` in hand
+because a modal builds its own `Ui` out of the context — setting only the `Ui`
+left every dialog selectable while nothing behind it was.
+
 Rig control is worked from the radio panel rather than from the menu bar: the
 connection is switched on and off there, beside the frequency it is being
 switched on for. What the menu keeps is writing `rigcontrol.lua` and

@@ -57,22 +57,7 @@ pub(crate) fn contact_label_key(key: &str) -> String {
 /// when installing the native one failed, so a machine that refuses it still
 /// has every menu action reachable.
 pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bool) -> Option<menu::Action> {
-    // Labels are inert throughout. Several of them sit inside rows that sense
-    // the click themselves, and a selectable label takes the text cursor and
-    // swallows the press; none of this text is worth dragging a selection
-    // across either. Set here rather than at startup so the interface behaves
-    // the same under test.
-    //
-    // On the context as well as on this `Ui`, and the two are not the same
-    // reach: a modal builds its own `Ui` from the context rather than from
-    // this one, so a dialog would otherwise keep the selectable labels the
-    // interface behind it had given up. Every theme's style rather than the
-    // current one, because the operator's theme is not this code's business.
-    // The context takes effect from the next `Ui` built out of it, which is
-    // why the one in hand is still set too.
-    ui.ctx()
-        .all_styles_mut(|style| style.interaction.selectable_labels = false);
-    ui.style_mut().interaction.selectable_labels = false;
+    grayline_shell::inert_labels(ui);
 
     let mut action = None;
     if in_window_menu {
