@@ -54,6 +54,35 @@ impl Template {
         }
         any(&self.layers)
     }
+
+    /// The names this template reads that `variables` cannot answer, in the
+    /// order they appear and without repeats.
+    ///
+    /// A missing variable is a render error, which is right for a name the
+    /// template author invented and wrong for one whose value comes from
+    /// somewhere the author cannot see. A caller that can stand in for such a
+    /// name asks this and fills the gaps before rendering, rather than
+    /// discovering them as a failure with a picture already on the screen.
+    pub fn missing(&self, variables: &Variables) -> Vec<&str> {
+        fn collect<'a>(layers: &'a [Layer], variables: &Variables, found: &mut Vec<&'a str>) {
+            for layer in layers {
+                match layer {
+                    Layer::Text(text) => {
+                        for name in references(&text.text) {
+                            if variables.get(name).is_none() && !found.contains(&name) {
+                                found.push(name);
+                            }
+                        }
+                    }
+                    Layer::Group(group) => collect(&group.layers, variables, found),
+                    _ => {}
+                }
+            }
+        }
+        let mut found = Vec::new();
+        collect(&self.layers, variables, &mut found);
+        found
+    }
 }
 
 /// What every variable the radio fills in is named under.
@@ -374,5 +403,43 @@ mod tests {
         assert!(text_template("${radio.band}").uses_radio());
         assert!(!text_template("${station.callsign}").uses_radio());
         assert!(!text_template("plain").uses_radio());
+    }
+
+    /// A caller that can stand in for a name has to be told about it whether
+    /// the layer reading it is nested or not.
+    #[test]
+    fn a_name_the_variables_cannot_answer_is_reported_from_inside_a_group() {
+        let variables = variables();
+
+        assert_eq!(
+            text_template("${contact.name} de ${station.callsign}").missing(&variables),
+            ["contact.name"]
+        );
+        assert!(text_template("${station.callsign}").missing(&variables).is_empty());
+        assert!(text_template("plain").missing(&variables).is_empty());
+    }
+
+    #[test]
+    fn a_name_read_twice_is_reported_once() {
+        assert_eq!(
+            text_template("${contact.qth} ${contact.qth} ${contact.name}").missing(&variables()),
+            ["contact.qth", "contact.name"]
+        );
+    }
+
+    /// The format after a colon says how to write a value, not which one to
+    /// read, so it must not be taken for part of the name.
+    #[test]
+    fn a_formatted_reference_is_reported_by_its_name_alone() {
+        assert_eq!(
+            text_template("${contact.since:%Y}").missing(&variables()),
+            ["contact.since"]
+        );
+    }
+
+    /// An escaped interpolation is literal text and reads nothing.
+    #[test]
+    fn an_escaped_interpolation_is_not_a_name_at_all() {
+        assert!(text_template("$${contact.name}").missing(&variables()).is_empty());
     }
 }
