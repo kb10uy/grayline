@@ -35,7 +35,7 @@ use crate::{
         Waker,
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
-        contact::{ContactSnapshot, ContactWorker},
+        contact::{ContactPaths, ContactSnapshot, ContactWorker},
         receive::{Frame, RxProgress},
         rig::{Reading, RigSnapshot, RigState, RigWorker, script},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
@@ -228,6 +228,19 @@ pub struct App {
     pub contact: ContactWorker,
     /// What that thread last found, read once per frame.
     pub contact_snapshot: ContactSnapshot,
+    /// Whether the dialog showing what is filed under the contact is open.
+    pub contact_dialog_open: bool,
+    /// The rows that dialog is editing.
+    ///
+    /// Every well-known key is offered whether or not the station has one, so
+    /// the operator can learn what a template may read without going to look
+    /// it up; anything else the directory holds follows, editable by name.
+    pub contact_draft: Vec<(String, String)>,
+    /// The files the worker was opened over, kept so that switching the lookup
+    /// on or off can open it again over a different logger.
+    contact_paths: ContactPaths,
+    /// The waker that worker was given, kept for the same reason.
+    contact_waker: Waker,
     /// The callsign it was last asked about.
     ///
     /// Leaving a field is what commits it, and the operator leaves the field
@@ -383,7 +396,10 @@ impl App {
             paths,
             config,
             &settings,
-            grayline_qso::default_store_path(),
+            ContactPaths {
+                store: grayline_qso::default_store_path(),
+                credentials: grayline_qso::default_credentials_path(),
+            },
             waker,
             platform::host(),
         );
@@ -418,9 +434,11 @@ impl App {
             ),
             Config::detached(),
             &Settings::default(),
-            // A store of its own, held in memory: the suite must not write
-            // into the directory the operator's own applications share.
-            None,
+            // Nothing named, so the store is held in memory and no logger is
+            // reached: the suite must neither write into the directory the
+            // operator's applications share nor put a question to the logger
+            // whose key sits beside it.
+            ContactPaths::default(),
             Waker::default(),
             platform,
         )
@@ -431,7 +449,7 @@ impl App {
         paths: AppPaths,
         config: Config,
         settings: &Settings,
-        contact_store: Option<PathBuf>,
+        contact_paths: ContactPaths,
         waker: Waker,
         platform: Box<dyn Platform>,
     ) -> Self {
@@ -484,8 +502,12 @@ impl App {
             device_fault: None,
             ui_scale: settings.ui_scale,
             rig: settings.rig.clone(),
-            contact: ContactWorker::spawn(&settings.contact, contact_store, waker),
+            contact: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
+            contact_dialog_open: false,
+            contact_draft: Vec::new(),
+            contact_paths,
+            contact_waker: waker,
             contact_requested: String::new(),
             contact_settings: settings.contact.clone(),
             rig_snapshot: RigSnapshot::default(),
@@ -737,6 +759,116 @@ impl App {
         }
         self.contact_requested = callsign.clone();
         self.contact.look_up(&callsign);
+    }
+
+    /// Asks the logger about the callsign again, whatever the store holds.
+    pub fn refresh_contact(&mut self) {
+        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
+            return;
+        };
+        self.contact_requested = callsign.clone();
+        self.contact.refresh(&callsign);
+    }
+
+    /// Whether asking the logger is something this station can do at all.
+    ///
+    /// A control that would do nothing is not offered: with the lookup off, or
+    /// with no instance and no key configured, there is nobody to ask again.
+    pub fn can_refresh_contact(&self) -> bool {
+        self.contact_settings.lookup && grayline_qso::normalize_callsign(&self.qso.call).is_some()
+    }
+
+    /// Opens the dialog on what is filed under the callsign being worked.
+    pub fn open_contact(&mut self) {
+        let known = &self.contact_snapshot.fields;
+        let mut draft: Vec<(String, String)> = grayline_qso::WELL_KNOWN_KEYS
+            .iter()
+            .map(|key| ((*key).to_owned(), known.get(*key).cloned().unwrap_or_default()))
+            .collect();
+        draft.extend(
+            known
+                .iter()
+                .filter(|(key, _)| !grayline_qso::WELL_KNOWN_KEYS.contains(&key.as_str()))
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+        self.contact_draft = draft;
+        self.contact_dialog_open = true;
+    }
+
+    pub fn add_contact_field(&mut self) {
+        self.contact_draft.push((String::new(), String::new()));
+    }
+
+    /// Files the edited rows under the callsign being worked.
+    ///
+    /// A row the operator emptied is dropped rather than left alone: clearing
+    /// a value is how a wrong one is taken back, and a write that only ever
+    /// added would hand it straight back on the next lookup. A row whose name
+    /// no `${...}` expression could hold is kept in the dialog to be corrected
+    /// and left out of the store, the way an operator's own variables are.
+    pub fn commit_contact(&mut self) {
+        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
+            return;
+        };
+        let Some(mut record) = grayline_qso::Record::new(&callsign) else {
+            return;
+        };
+        let mut dropped = Vec::new();
+        for (key, value) in &self.contact_draft {
+            if !grayline_qso::valid_key(key) {
+                continue;
+            }
+            if record.set(key, value) {
+                continue;
+            }
+            if self.contact_snapshot.fields.contains_key(key) {
+                dropped.push(key.clone());
+            }
+        }
+        if record.iter().eq(self
+            .contact_snapshot
+            .fields
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str())))
+            && dropped.is_empty()
+        {
+            return;
+        }
+        self.contact.save(record, dropped);
+    }
+
+    /// Turns asking the operator's own logger on or off.
+    ///
+    /// The worker is opened again rather than told: what it holds is a
+    /// directory composed over a logger or over nothing, and which of those it
+    /// is was decided when it was built.
+    pub fn set_contact_lookup(&mut self, lookup: bool) {
+        if self.contact_settings.lookup == lookup {
+            return;
+        }
+        self.contact_settings.lookup = lookup;
+        self.contact = ContactWorker::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+        self.contact_snapshot = ContactSnapshot::default();
+        self.contact_requested.clear();
+        self.look_up_contact();
+    }
+
+    /// Writes the credentials file out for the operator to edit.
+    ///
+    /// Refuses to write over one that is already there, the way the rig script
+    /// does: the file only exists because someone put a key in it.
+    pub fn write_contact_credentials(&mut self) {
+        let Some(path) = self.contact_paths.credentials.clone() else {
+            return;
+        };
+        let written = if path.exists() {
+            Ok(path)
+        } else {
+            grayline_qso::Credentials::write(&path, Some(&self.contact_settings.wavelog_url), "")
+                .map(|()| path)
+                .map_err(|error| io::Error::other(error.to_string()))
+        };
+        self.report_written(written);
     }
 
     /// Takes up what the directory answered, composing again when it differs.

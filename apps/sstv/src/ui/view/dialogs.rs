@@ -125,6 +125,149 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
     }
 }
 
+/// Shows and corrects what the directory has filed under the contact.
+///
+/// Opened from the QSO panel rather than from the Settings menu, unlike the two
+/// above: this is about the station on the air right now, which is what that
+/// panel is for, while Settings holds what is set once and then left alone.
+pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
+    if !app.contact_dialog_open {
+        return;
+    }
+
+    let title = app.i18n.text("contact-title");
+    let note = app.i18n.text("contact-note-keys");
+    let invalid = app.i18n.text("custom-invalid");
+    let other = app.i18n.text("contact-other");
+    let add = app.i18n.text("contact-add");
+    let refresh = app.i18n.text("contact-refresh");
+    let close = app.i18n.text("station-close");
+    let callsign = app.contact_snapshot.callsign.clone();
+    let state = contact_state(app);
+    // Resolved before the rows are borrowed for editing, because a label comes
+    // from the catalogue and the catalogue lives on the same interface.
+    let labels: Vec<String> = WELL_KNOWN_KEYS
+        .iter()
+        .map(|key| app.i18n.text(&contact_label_key(key)))
+        .collect();
+    let refreshable = app.can_refresh_contact();
+
+    let mut changed = false;
+    let mut removed = None;
+    let mut adding = false;
+    let mut refreshing = false;
+    let mut done = false;
+    let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
+        ui.set_max_width(420.0);
+        // The callsign is what a record is filed under rather than something
+        // filed in it, so it is shown rather than offered for editing; the
+        // panel behind this dialog is where it is typed.
+        ui.heading(format!("{title} — {callsign}"));
+        ui.add_space(4.0);
+        if let Some(state) = &state {
+            ui.label(RichText::new(state).size(LABEL).weak());
+        }
+        ui.add_space(8.0);
+
+        let remove_width = ui.spacing().interact_size.y;
+        let gaps = ui.spacing().item_spacing.x * 2.0;
+        let labelled_width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
+        let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
+        let value_width = ui.available_width() - remove_width - gaps - name_width;
+
+        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+            let mut headed = false;
+            for (index, (key, value)) in app.contact_draft.iter_mut().enumerate() {
+                // The well-known keys lead, in the order the crate lists them,
+                // so every name a template may read is offered whether or not
+                // this station has one; anything else the directory holds
+                // follows under its own name.
+                if let Some(label) = labels.get(index) {
+                    changed |= station_field(ui, label, "", value, labelled_width);
+                    continue;
+                }
+                if !headed {
+                    headed = true;
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(other.clone()).size(LABEL).weak());
+                }
+                ui.horizontal(|ui| {
+                    let usable = grayline_qso::valid_key(key);
+                    let field = egui::TextEdit::singleline(key)
+                        .desired_width(name_width)
+                        .text_color_opt((!usable).then_some(colors::INVALID));
+                    let mut response = ui.add(field);
+                    if !usable {
+                        response = response.on_hover_text(invalid.clone());
+                    }
+                    // A name is taken up once the field is left rather than on
+                    // every keystroke: half a name is a different key.
+                    changed |= response.lost_focus();
+                    changed |= ui
+                        .add(egui::TextEdit::singleline(value).desired_width(value_width))
+                        .changed();
+                    if ui.button("×").clicked() {
+                        removed = Some(index);
+                    }
+                });
+            }
+        });
+
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            adding = ui.button(add).clicked();
+            // Absent rather than disabled when there is nobody to ask: a
+            // station with no logger configured has no "again" to press.
+            if refreshable {
+                refreshing = ui.button(refresh).clicked();
+            }
+        });
+        ui.add_space(4.0);
+        ui.label(RichText::new(note).size(LABEL).weak());
+        ui.add_space(16.0);
+        done = ui.button(close).clicked();
+    });
+
+    if adding {
+        app.add_contact_field();
+    }
+    if let Some(index) = removed {
+        app.contact_draft.remove(index);
+        changed = true;
+    }
+    let closing = done || response.should_close();
+    if changed || closing {
+        app.commit_contact();
+    }
+    // Looking the station up again answers with what the logger says, so the
+    // rows being edited here stop being what is filed; the dialog closes rather
+    // than showing a draft the answer has moved past.
+    if refreshing {
+        app.refresh_contact();
+    }
+    if closing || refreshing {
+        app.contact_dialog_open = false;
+    }
+}
+
+/// What the directory is doing, in words, when it is worth saying.
+fn contact_state(app: &App) -> Option<String> {
+    if let Some(error) = &app.contact_snapshot.error {
+        return Some(
+            app.i18n
+                .text_with("contact-state-failed", &[("detail", owned(error.to_string()))]),
+        );
+    }
+    match app.contact_snapshot.state {
+        ContactState::Looking => Some(app.i18n.text("contact-state-looking")),
+        ContactState::Unknown => Some(app.i18n.text_with(
+            "contact-state-unknown",
+            &[("callsign", owned(app.contact_snapshot.callsign.clone()))],
+        )),
+        ContactState::Idle | ContactState::Known | ContactState::Failed => None,
+    }
+}
+
 /// One labelled field of the station dialog.
 ///
 /// Returns whether the operator finished with it, which is losing focus to

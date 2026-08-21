@@ -72,6 +72,45 @@ fn the_variable_dialog_renders_a_row_for_every_name() {
     harness.get_by_label(&title);
 }
 
+/// The contact dialog lays out three kinds of row at once — labelled fields
+/// for the well-known keys, name-and-value pairs for everything else, and the
+/// buttons under them — which is exactly the shape egui panics over if any of
+/// them share an id.
+#[test]
+fn the_contact_dialog_renders_every_kind_of_row() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.contact_snapshot.fields = std::collections::BTreeMap::from([
+        ("name".to_owned(), "Taro".to_owned()),
+        ("qth".to_owned(), "Tokyo".to_owned()),
+        ("rig".to_owned(), "IC-705".to_owned()),
+    ]);
+    app.open_contact();
+    assert_eq!(
+        app.contact_draft.len(),
+        grayline_qso::WELL_KNOWN_KEYS.len() + 1,
+        "every well-known key is offered, and the one key beyond them follows"
+    );
+    let title = app.i18n.text("contact-title");
+
+    let harness = render(&mut app);
+
+    harness.get_by_label_contains(&title);
+}
+
+/// The button beside the callsign is what opens that dialog, so a station
+/// that has been named has to have one to press.
+#[test]
+fn the_qso_panel_offers_the_contact_details_button() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+
+    let harness = render(&mut app);
+
+    harness.get_by_label("…");
+}
+
 /// The panel keeps the same controls in every connection state so its
 /// contents do not move while a connection is established or lost.
 #[test]

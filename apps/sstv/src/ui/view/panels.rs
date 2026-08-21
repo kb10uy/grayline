@@ -301,14 +301,20 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
     let call_hint = app.i18n.text("hint-callsign");
     let received_label = app.i18n.text("qso-rsv-received");
     let sent_label = app.i18n.text("qso-rsv-nr");
+    let details_hint = app.i18n.text("contact-open");
 
     // A field is taken up as typed while it is being typed, and trimmed once
     // the operator has left it.
     let mut finished = false;
+    let mut opening = false;
     ui.horizontal(|ui| {
         field_label(ui, &call_label);
+        // The button sits beside the callsign rather than in a menu: what the
+        // directory holds is about the station on the air right now, and this
+        // is where that station is named.
+        let details_width = ui.spacing().interact_size.y;
         let edit = egui::TextEdit::singleline(&mut app.qso.call)
-            .desired_width(fields)
+            .desired_width(fields - details_width - gap)
             .hint_text(call_hint.as_str());
         let response = ui.add(edit);
         finished |= response.lost_focus();
@@ -316,6 +322,11 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
             app.normalize_call();
             app.qso_changed();
         }
+        let usable = grayline_qso::normalize_callsign(&app.qso.call).is_some();
+        opening = ui
+            .add_enabled(usable, egui::Button::new("\u{2026}"))
+            .on_hover_text(details_hint.as_str())
+            .clicked();
     });
     // The report the other station gave is one field: the number in it arrives
     // over the air as one thing, and it is read rather than composed.
@@ -365,5 +376,8 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
     });
     if finished {
         app.finish_qso_edit();
+    }
+    if opening {
+        app.open_contact();
     }
 }

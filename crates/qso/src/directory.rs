@@ -99,6 +99,15 @@ impl Directory {
         Ok(())
     }
 
+    /// Drops one field the operator emptied, whatever origin wrote it.
+    ///
+    /// Emptying a field is not the same as leaving it alone: a save writes what
+    /// is filled in, and a value the operator cleared would otherwise come back
+    /// the next time the record was read.
+    pub fn unset(&mut self, callsign: &str, key: &str) -> Result<bool, QsoError> {
+        self.store.unset(callsign, key)
+    }
+
     /// Forgets a station outright.
     pub fn forget(&mut self, callsign: &str) -> Result<bool, QsoError> {
         self.store.remove(callsign)

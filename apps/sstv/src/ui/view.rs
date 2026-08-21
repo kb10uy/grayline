@@ -4,7 +4,9 @@ use egui_extras::{Column, TableBuilder};
 use grayline_audio::FaultKind;
 use grayline_sstv_template::valid_variable_name;
 
-use grayline_shell::i18n::{arg, number};
+use grayline_qso::WELL_KNOWN_KEYS;
+
+use grayline_shell::i18n::{arg, number, owned};
 
 use crate::{
     app::{App, Dsp, Entry, Tab},
@@ -12,6 +14,7 @@ use crate::{
     storage::paths::Folder,
     ui::{canvas, colors, menu},
     worker::{
+        contact::ContactState,
         receive::RxProgress,
         rig::RigState,
         transmit::{TUNE_FREQUENCY_HZ, TxGain, TxPhase, TxProgress},
@@ -23,7 +26,7 @@ mod library;
 mod panels;
 mod status_bar;
 
-use dialogs::{custom_variable_dialog, device_fault_modal, station_dialog};
+use dialogs::{contact_dialog, custom_variable_dialog, device_fault_modal, station_dialog};
 use library::library;
 use panels::side_panel;
 use status_bar::status_bar;
@@ -38,6 +41,16 @@ const FIELD_LABEL_WIDTH: f32 = 72.0;
 
 const SMALL: f32 = 12.0;
 const LABEL: f32 = 11.0;
+
+/// The catalogue key labelling one well-known contact field.
+///
+/// A store key is spelled with underscores so a template can read it as
+/// `${contact.<key>}`, and a Fluent identifier is spelled with hyphens, so the
+/// two are not the same string. The mapping is named here because the locale
+/// test walks it as well as the dialog.
+pub(crate) fn contact_label_key(key: &str) -> String {
+    format!("contact-{}", key.replace('_', "-"))
+}
 
 /// Draws the whole interface, returning the menu action the operator chose.
 ///
@@ -82,6 +95,7 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bo
     egui::CentralPanel::default().show(ui, |ui| main_pane(ui, app));
     station_dialog(ui, app);
     custom_variable_dialog(ui, app);
+    contact_dialog(ui, app);
     device_fault_modal(ui, app);
     action
 }

@@ -14,7 +14,7 @@ use super::*;
 use crate::{
     test_util::TempDir,
     worker::{
-        contact::ContactState,
+        contact::{ContactPaths, ContactState},
         receive::{Frame, HistoryCandidate, RxSnapshot},
     },
 };
@@ -27,7 +27,7 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
         paths,
         config,
         settings,
-        None,
+        ContactPaths::default(),
         Waker::default(),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
@@ -243,6 +243,39 @@ fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
     app.poll_workers();
 
     assert_eq!(settled(&app).callsign, "JA1ABC");
+}
+
+/// A headless interface must reach neither the operator's own store nor the
+/// key sitting beside it.
+///
+/// Both were discovered rather than named once, which meant the suite wrote a
+/// credentials file into the operator's configuration directory and would have
+/// put questions to whatever logger the key named. Naming them is what stops
+/// that, so it is what is checked.
+#[test]
+fn a_headless_interface_names_none_of_the_operators_own_files() {
+    let app = App::headless();
+
+    assert_eq!(app.contact_paths.store, None);
+    assert_eq!(app.contact_paths.credentials, None);
+}
+
+/// The menu offers to write a credentials file, and a test that applies every
+/// action must not thereby write one.
+#[test]
+fn writing_the_credentials_file_does_nothing_without_one_to_write() {
+    let mut app = App::headless();
+
+    app.write_contact_credentials();
+
+    assert!(app.notice.is_none());
+    if let Some(path) = grayline_qso::default_credentials_path() {
+        assert!(
+            !path.exists(),
+            "the suite wrote {} into the operator's own directory",
+            path.display()
+        );
+    }
 }
 
 /// Half a callsign is not one, and neither is a garbled identifier.
