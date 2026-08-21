@@ -501,9 +501,10 @@ marked shared are built once and reused across tabs.
 | Radio panel | Shared | Connect and its state, then a band `pick_list`, the frequency, and two step buttons |
 | DSP panel | Receive | Three toggle buttons |
 | Transmit trigger | Transmit | The TX button with the tune tone beside it, where the DSP toggles sit |
-| QSO panel | Shared | `text_input` for the DX call and the received report, then the sent report with its list and its serial, and the two serial buttons |
+| QSO panel | Shared | `text_input` for the DX call with the contact-details button beside it and the received report under it, then the sent report with its list and its serial, and the two serial buttons |
 | Station dialog | Modal | `text_input` for the callsign, QTH, and grid locator |
 | Template variable dialog | Modal | Rows of `text_input` naming and valuing `${custom.*}` |
+| Contact dialog | Modal | A labelled `text_input` per well-known contact key, then rows naming and valuing anything else the directory holds |
 | Template list | Shared | `scrollable` of selectable rows |
 | Stock image list | Shared | `scrollable` of selectable rows with thumbnails |
 | Status bar | Shared | Faults from the left; sample rates and decoded callsigns from the right |
@@ -532,6 +533,18 @@ keystroke: half a callsign is not one, and uppercasing the text under the cursor
 while it is still being typed fights the operator. The callsign is required to transmit whether or not the identifier is
 being sent, because it is the only thing that names the station making the
 transmission, and it is the first thing the transmit check reports.
+
+What the *other* station is, in contrast, is edited from a button beside the
+callsign in the QSO panel rather than from the Settings menu, and the reason is
+the same one read the other way: a name and a QTH belong to the station on the
+air right now, which is what that panel is for. The dialog offers every
+well-known key whether or not this station has one, so an operator can learn
+what a template may read without going to look it up. Where the directory finds
+what it knows — a store of the operator's own, or their own logger asked over
+the network — is settled in files rather than in a dialog, exactly as the rig's
+address is: an API key belongs in neither the settings file the menu offers to
+open nor a field the interface rewrites. [qso-directory.md](qso-directory.md)
+describes both.
 
 Leaving a field is also what trims it, in that dialog and in the QSO panel
 alike. Every field in both is a value rather than text — a callsign, a report,
@@ -782,8 +795,11 @@ The application storage directories and an empty default configuration file
 are initialized at startup as described in [architecture.md](architecture.md).
 Rig control reads the same file: the Rig Control menu switches the connection
 on and reports what it is doing, and everything the rig is told is written under
-`[rig]`, as described in [rig-control.md](rig-control.md). Template editing and
-logging remain planned gaps.
+`[rig]`, as described in [rig-control.md](rig-control.md). The contact
+directory reads it too, under `[contact]`, though not the key it needs, which
+sits in a file of its own; [qso-directory.md](qso-directory.md) says why.
+Template editing remains a planned gap, as does a way to import a log without
+the command-line tool.
 
 ## Verification Strategy
 
