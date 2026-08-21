@@ -44,6 +44,9 @@ pub struct ComposeRequest {
     pub report_received: String,
     /// Names the operator defined, offered as `${custom.<name>}`.
     pub custom: BTreeMap<String, String>,
+    /// What the directory knows about the contact, offered as
+    /// `${contact.<key>}`.
+    pub contact: BTreeMap<String, String>,
     /// What the rig is tuned to, when rig control has read it.
     pub radio: Option<Reading>,
 }
@@ -217,7 +220,8 @@ fn compose_frame(
         cache: assets,
         generation: request.template_generation,
     };
-    let variables = variables(request);
+    let mut variables = variables(request);
+    fill_contact_gaps(template, &mut variables);
     let watched = Watched {
         timestamps: template.uses_timestamps(&variables),
         radio: template.uses_radio(),
@@ -337,6 +341,9 @@ const PLACEHOLDER_FREQUENCY_MHZ: f64 = 7.178;
 const PLACEHOLDER_BAND: &str = "40m";
 const PLACEHOLDER_CALLSIGN: &str = "Callsign";
 
+/// What every variable the contact directory fills in is named under.
+const CONTACT_PREFIX: &str = "contact.";
+
 /// What the radio variables say, from the rig when there is one to ask.
 ///
 /// A rig tuned between the bands has no band to name. The variable is left
@@ -379,6 +386,18 @@ fn variables(request: &ComposeRequest) -> Variables {
         variables.insert(name, VariableValue::Text(value.clone()));
     }
     variables.insert("station.callsign", callsign(&request.station_callsign));
+    // Inserted before the callsign, so a key the directory happens to hold
+    // under that name cannot displace the one the operator typed.
+    //
+    // Unlike a callsign, an unset contact field expands to nothing rather than
+    // to a stand-in word. The callsign is drawn on every layout composed for
+    // one, so a gap there is worse than a placeholder; a name is a line the
+    // template author chose to include, and putting the word `Name` on the air
+    // is not a gap but a wrong value — the same reasoning that leaves the band
+    // empty rather than contradicting the frequency beside it.
+    for (key, value) in &request.contact {
+        variables.insert(format!("{CONTACT_PREFIX}{key}"), VariableValue::Text(value.clone()));
+    }
     variables.insert("contact.callsign", callsign(&request.contact_callsign));
     let (frequency_mhz, band) = radio(request);
     variables.insert("radio.band", VariableValue::Text(band));
@@ -400,6 +419,27 @@ fn variables(request: &ComposeRequest) -> Variables {
 
 /// Offers one instant in both the zone the operator reads and the zone the
 /// band works in, so a template chooses rather than converts.
+/// Answers every `contact.*` name the template reads that the directory had
+/// nothing to say about, with nothing.
+///
+/// A missing variable is a render error, which would leave the transmit tab
+/// showing a failure instead of a picture because a directory entry is
+/// incomplete — and which entries are incomplete is not something the template
+/// author can know. Scoped to `contact.` on purpose: an operator invents their
+/// own `custom.` names in a dialog that already refuses unusable ones, so a
+/// typo there is still worth reporting.
+fn fill_contact_gaps(template: &Template, variables: &mut Variables) {
+    let gaps: Vec<String> = template
+        .missing(variables)
+        .into_iter()
+        .filter(|name| name.starts_with(CONTACT_PREFIX))
+        .map(str::to_owned)
+        .collect();
+    for name in gaps {
+        variables.insert(name, VariableValue::Text(String::new()));
+    }
+}
+
 fn insert_timestamp(variables: &mut Variables, name: &str, instant: &Zoned) {
     variables.insert(format!("{name}.local"), VariableValue::Timestamp(instant.clone()));
     variables.insert(
@@ -508,6 +548,7 @@ mod tests {
             number: "001".to_owned(),
             report_received: "579".to_owned(),
             custom: BTreeMap::from([("club".to_owned(), "JARL".to_owned())]),
+            contact: BTreeMap::from([("name".to_owned(), "Taro".to_owned())]),
             radio: None,
         }
     }
@@ -522,6 +563,7 @@ mod tests {
             ("report.sent", "595"),
             ("report.received", "579"),
             ("custom.club", "JARL"),
+            ("contact.name", "Taro"),
         ] {
             assert_eq!(
                 variables.get(name),
@@ -529,6 +571,91 @@ mod tests {
                 "{name} should be offered to the template"
             );
         }
+    }
+
+    fn text_template(text: &str) -> Template {
+        Template::parse(&format!(
+            "text {text:?} {{ position x=(fw)0 y=(fh)0; font family=\"Noto Sans\" size=(fh)9 weight=400; fill color=\"#ffffff\"; }}"
+        ))
+        .expect("the template is well formed")
+    }
+
+    /// A missing variable fails the whole render, so a template naming a key
+    /// this station has nothing filed under would put an error on the transmit
+    /// tab instead of a picture.
+    #[test]
+    fn a_contact_key_the_directory_has_nothing_for_is_answered_with_nothing() {
+        let template = text_template("${contact.name} of ${contact.club}");
+        let mut variables = variables(&ComposeRequest {
+            contact: BTreeMap::new(),
+            ..request()
+        });
+
+        fill_contact_gaps(&template, &mut variables);
+
+        for name in ["contact.name", "contact.club"] {
+            assert_eq!(
+                variables.get(name),
+                Some(&VariableValue::Text(String::new())),
+                "{name} should compose as nothing rather than failing to render"
+            );
+        }
+    }
+
+    /// The operator names their own variables in a dialog that already refuses
+    /// unusable ones, so a name that resolves to nothing there is a typo worth
+    /// reporting rather than a gap worth filling.
+    #[test]
+    fn a_name_outside_the_contact_domain_is_left_to_fail() {
+        let template = text_template("${custom.clbu}");
+        let mut variables = variables(&request());
+
+        fill_contact_gaps(&template, &mut variables);
+
+        assert_eq!(variables.get("custom.clbu"), None);
+    }
+
+    #[test]
+    fn a_contact_key_the_directory_answered_is_left_as_it_was() {
+        let template = text_template("${contact.name}");
+        let mut variables = variables(&request());
+
+        fill_contact_gaps(&template, &mut variables);
+
+        assert_eq!(
+            variables.get("contact.name"),
+            Some(&VariableValue::Text("Taro".to_owned()))
+        );
+    }
+
+    /// The typed callsign is what the operator is working, so a directory
+    /// entry that happened to be filed under that key must not displace it.
+    #[test]
+    fn a_stored_callsign_key_does_not_displace_the_one_that_was_typed() {
+        let variables = variables(&ComposeRequest {
+            contact: BTreeMap::from([("callsign".to_owned(), "JH1XYZ".to_owned())]),
+            ..request()
+        });
+
+        assert_eq!(
+            variables.get("contact.callsign"),
+            Some(&VariableValue::Text("N0CALL".to_owned()))
+        );
+    }
+
+    /// Whatever the directory holds is readable under its own name, so a key
+    /// the operator invented needs no change here to be printable.
+    #[test]
+    fn a_key_this_application_knows_nothing_about_still_reaches_the_template() {
+        let variables = variables(&ComposeRequest {
+            contact: BTreeMap::from([("rig".to_owned(), "IC-705".to_owned())]),
+            ..request()
+        });
+
+        assert_eq!(
+            variables.get("contact.rig"),
+            Some(&VariableValue::Text("IC-705".to_owned()))
+        );
     }
 
     /// A template draws a line for a callsign whether or not one has been

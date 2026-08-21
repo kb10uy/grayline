@@ -1431,6 +1431,7 @@ impl App {
             station_qth: self.station.qth.clone(),
             station_grid: self.station.grid.clone(),
             contact_callsign: self.qso.call.clone(),
+            contact: self.contact_snapshot.fields.clone(),
             report: self.qso.rsv.clone(),
             number: self.qso.number.clone(),
             report_received: self.qso.rsv_received.clone(),
