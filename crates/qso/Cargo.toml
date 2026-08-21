@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+directories.workspace = true
 encoding_rs.workspace = true
 jiff.workspace = true
 rusqlite.workspace = true

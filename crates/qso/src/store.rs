@@ -333,36 +333,7 @@ fn store_error(error: rusqlite::Error) -> QsoError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        sync::atomic::{AtomicU32, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new() -> Self {
-            static COUNTER: AtomicU32 = AtomicU32::new(0);
-            let stamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("after 1970")
-                .as_nanos();
-            let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!("grayline-qso-{stamp}-{unique}"));
-            fs::create_dir_all(&path).expect("a temporary directory");
-            Self(path)
-        }
-
-        fn store(&self) -> PathBuf {
-            self.0.join("contacts.sqlite3")
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
+    use crate::test_util::TempDir;
 
     fn record(callsign: &str, fields: &[(&str, &str)]) -> Record {
         let mut record = Record::new(callsign).expect("that is a callsign");

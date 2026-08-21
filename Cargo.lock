@@ -2013,6 +2013,7 @@ dependencies = [
 name = "grayline-qso"
 version = "0.4.2"
 dependencies = [
+ "directories",
  "encoding_rs",
  "jiff",
  "rstest",

@@ -170,18 +170,10 @@ fn text(answer: &Value, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        io::{BufRead, BufReader, Write},
-        net::TcpListener,
-        sync::{Arc, Mutex},
-        thread::{self, JoinHandle},
-    };
-
     use rstest::rstest;
 
     use super::*;
-
-    const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+    use crate::test_util::{FakeWavelog, TEST_TIMEOUT};
 
     const FULL_ANSWER: &str = r#"{
         "callsign": "JA1ABC", "dxcc": "JAPAN", "dxcc_id": "339", "dxcc_cqz": 25,
@@ -190,95 +182,6 @@ mod tests {
         "bearing": "42", "dxcc_lat": "36", "dxcc_long": "138",
         "call_worked": true, "lotw_member": false, "dxcc_confirmed": true
     }"#;
-
-    /// A stand-in for a Wavelog installation, over plain HTTP.
-    ///
-    /// Plain HTTP because what is under test is the request, the paths and the
-    /// mapping; TLS is the transport's business and a certificate would only
-    /// make the test harder to run.
-    struct FakeWavelog {
-        base: String,
-        requested: Arc<Mutex<Vec<(String, String)>>>,
-        thread: Option<JoinHandle<()>>,
-    }
-
-    impl FakeWavelog {
-        /// Serves one canned answer per request, in the order given.
-        ///
-        /// Each answer is a status and a body; a request past the end of the
-        /// list is left unanswered, which is what a test asserting that no
-        /// second request was made relies on.
-        fn spawn(answers: &[(u16, &str)]) -> Self {
-            let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
-            let base = format!("http://{}", listener.local_addr().expect("an address"));
-            let requested = Arc::new(Mutex::new(Vec::new()));
-            let recorder = Arc::clone(&requested);
-            let answers: Vec<(u16, String)> = answers
-                .iter()
-                .map(|(status, body)| (*status, (*body).to_owned()))
-                .collect();
-
-            let thread = thread::spawn(move || {
-                for (status, body) in answers {
-                    let Ok((mut stream, _)) = listener.accept() else {
-                        return;
-                    };
-                    let mut reader = BufReader::new(stream.try_clone().expect("a clone"));
-                    let mut start = String::new();
-                    if reader.read_line(&mut start).is_err() {
-                        return;
-                    }
-                    let path = start.split(' ').nth(1).unwrap_or_default().to_owned();
-
-                    let mut length = 0;
-                    loop {
-                        let mut header = String::new();
-                        if reader.read_line(&mut header).is_err() || header.trim().is_empty() {
-                            break;
-                        }
-                        if let Some(value) = header.to_ascii_lowercase().strip_prefix("content-length:") {
-                            length = value.trim().parse().unwrap_or(0);
-                        }
-                    }
-                    let mut sent = vec![0; length];
-                    let sent = match std::io::Read::read_exact(&mut reader, &mut sent) {
-                        Ok(()) => String::from_utf8_lossy(&sent).into_owned(),
-                        Err(_) => String::new(),
-                    };
-                    recorder.lock().expect("the recorder").push((path, sent));
-
-                    let answer = format!(
-                        "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    );
-                    let _ = stream.write_all(answer.as_bytes());
-                    let _ = stream.flush();
-                }
-            });
-
-            Self {
-                base,
-                requested,
-                thread: Some(thread),
-            }
-        }
-
-        fn client(&self) -> Wavelog {
-            Wavelog::new(&self.base, "secret", TEST_TIMEOUT).expect("a client")
-        }
-
-        fn requested(&self) -> Vec<(String, String)> {
-            self.requested.lock().expect("the recorder").clone()
-        }
-    }
-
-    impl Drop for FakeWavelog {
-        fn drop(&mut self) {
-            if let Some(thread) = self.thread.take() {
-                let _ = thread.join();
-            }
-        }
-    }
 
     #[test]
     fn an_answer_is_mapped_onto_the_well_known_keys() {
