@@ -35,6 +35,7 @@ use crate::{
         Waker,
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
+        contact::{ContactSnapshot, ContactWorker},
         receive::{Frame, RxProgress},
         rig::{Reading, RigSnapshot, RigState, RigWorker, script},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
@@ -223,6 +224,16 @@ pub struct App {
     /// reason the rig's address is not: the instance and the key belong to the
     /// station rather than to a list a menu could offer.
     pub contact_settings: ContactSettings,
+    /// The thread that reads and writes the contact directory.
+    pub contact: ContactWorker,
+    /// What that thread last found, read once per frame.
+    pub contact_snapshot: ContactSnapshot,
+    /// The callsign it was last asked about.
+    ///
+    /// Leaving a field is what commits it, and the operator leaves the field
+    /// whether or not they changed anything; without this the same station
+    /// would be asked about again on every pass through the panel.
+    contact_requested: String,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -365,9 +376,17 @@ impl App {
             settings.dsp.live_slant,
             settings.vis_restart,
             settings.vis_strict,
-            waker,
+            waker.clone(),
         );
-        let mut app = Self::from_parts(audio, paths, config, &settings, platform::host());
+        let mut app = Self::from_parts(
+            audio,
+            paths,
+            config,
+            &settings,
+            grayline_qso::default_store_path(),
+            waker,
+            platform::host(),
+        );
         app.refresh_library();
         app.restore_selection(&settings);
         app.request_composition();
@@ -399,6 +418,10 @@ impl App {
             ),
             Config::detached(),
             &Settings::default(),
+            // A store of its own, held in memory: the suite must not write
+            // into the directory the operator's own applications share.
+            None,
+            Waker::default(),
             platform,
         )
     }
@@ -408,6 +431,8 @@ impl App {
         paths: AppPaths,
         config: Config,
         settings: &Settings,
+        contact_store: Option<PathBuf>,
+        waker: Waker,
         platform: Box<dyn Platform>,
     ) -> Self {
         let (bands, bands_error) = BandPlan::load(paths.config_dir());
@@ -459,6 +484,9 @@ impl App {
             device_fault: None,
             ui_scale: settings.ui_scale,
             rig: settings.rig.clone(),
+            contact: ContactWorker::spawn(&settings.contact, contact_store, waker),
+            contact_snapshot: ContactSnapshot::default(),
+            contact_requested: String::new(),
             contact_settings: settings.contact.clone(),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
@@ -687,6 +715,37 @@ impl App {
         trimmed |= trim_in_place(&mut self.qso.number);
         if trimmed {
             self.qso_changed();
+        }
+        // Outside the branch above, because leaving the field is what commits
+        // the callsign whether or not trimming changed anything, and the
+        // request guards itself against being made twice for one station.
+        self.look_up_contact();
+    }
+
+    /// Asks the directory about the callsign in the QSO panel.
+    ///
+    /// Text that is not a callsign asks nobody: a half-typed field and a
+    /// garbled identifier both arrive here, and neither is a station worth
+    /// putting a question to somebody's logger about.
+    fn look_up_contact(&mut self) {
+        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
+            self.contact_requested.clear();
+            return;
+        };
+        if callsign == self.contact_requested {
+            return;
+        }
+        self.contact_requested = callsign.clone();
+        self.contact.look_up(&callsign);
+    }
+
+    /// Takes up what the directory answered, composing again when it differs.
+    fn poll_contact(&mut self) {
+        let latest = self.contact.latest();
+        let changed = latest.fields != self.contact_snapshot.fields;
+        self.contact_snapshot = latest;
+        if changed {
+            self.request_composition();
         }
     }
 
@@ -962,6 +1021,7 @@ impl App {
             self.select_rx_mode(mode);
         }
         self.poll_rig();
+        self.poll_contact();
         self.poll_transmit();
         // Reception stops for as long as anything is going out. The station's
         // own signal comes back off the antenna, and what would be decoded from
@@ -1182,6 +1242,9 @@ impl App {
         }
         self.qso.call = call;
         self.qso_changed();
+        // The identifier path does not go through `finish_qso_edit`, so the
+        // lookup a typed callsign gets has to be asked for here too.
+        self.look_up_contact();
     }
 
     /// Puts a newly decoded contest number in the received report field.

@@ -13,7 +13,10 @@ use rstest::rstest;
 use super::*;
 use crate::{
     test_util::TempDir,
-    worker::receive::{Frame, HistoryCandidate, RxSnapshot},
+    worker::{
+        contact::ContactState,
+        receive::{Frame, HistoryCandidate, RxSnapshot},
+    },
 };
 use grayline_rig::RigError;
 
@@ -24,6 +27,8 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
         paths,
         config,
         settings,
+        None,
+        Waker::default(),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
     app.saved = app.settings();
@@ -177,6 +182,81 @@ fn a_decoded_identifier_fills_the_qso_contact_field() {
     app.poll_workers();
 
     assert_eq!(app.qso.call, "JA1ABC");
+}
+
+/// Waits for the contact worker to answer whatever it was last asked.
+///
+/// The worker runs on its own thread, so a test that looked a station up has
+/// to let it get there before reading what it found.
+fn settled(app: &App) -> ContactSnapshot {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let snapshot = app.contact.latest();
+        if snapshot.state != ContactState::Looking || Instant::now() > deadline {
+            return snapshot;
+        }
+        std::thread::yield_now();
+    }
+}
+
+/// Leaving the field is what commits a callsign, and the operator leaves it
+/// whether or not they changed anything. Asking again for the station already
+/// showing would put a second question to somebody's logger for nothing.
+#[test]
+fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
+    let mut app = App::headless();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    app.finish_qso_edit();
+
+    assert_eq!(
+        app.contact.latest().state,
+        ContactState::Unknown,
+        "a second request would have put the worker back to looking"
+    );
+}
+
+#[test]
+fn a_changed_callsign_is_asked_about() {
+    let mut app = App::headless();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+    assert_eq!(settled(&app).callsign, "JA1ABC");
+
+    app.qso.call = "JH1XYZ".to_owned();
+    app.finish_qso_edit();
+
+    assert_eq!(settled(&app).callsign, "JH1XYZ");
+}
+
+/// The identifier path does not go through the field, so it has to ask for
+/// itself.
+#[test]
+fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
+    let mut app = App::headless();
+
+    app.audio.set_snapshot(identified(&["JA1ABC"]));
+    app.poll_workers();
+
+    assert_eq!(settled(&app).callsign, "JA1ABC");
+}
+
+/// Half a callsign is not one, and neither is a garbled identifier.
+#[rstest]
+#[case("JA")]
+#[case("")]
+#[case("????")]
+fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
+    let mut app = App::headless();
+
+    app.qso.call = typed.to_owned();
+    app.finish_qso_edit();
+
+    assert_eq!(app.contact.latest().state, ContactState::Idle);
 }
 
 /// The worker republishes every identifier it has decoded, so the same
