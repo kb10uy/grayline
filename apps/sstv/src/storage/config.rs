@@ -121,6 +121,7 @@ pub struct Settings {
     pub history_format: HistoryFormat,
     pub ui_scale: f32,
     pub rig: RigSettings,
+    pub contact: ContactSettings,
 }
 
 /// How the station's rig is reached.
@@ -140,6 +141,36 @@ pub struct RigSettings {
     pub lead_in_seconds: f32,
     /// How long after the last sample the rig is unkeyed, in seconds.
     pub tail_seconds: f32,
+}
+
+/// Where the contact directory looks a callsign up.
+///
+/// The API key is deliberately absent, and is read from the family's own
+/// credentials file instead. This file is the one the operator is invited to
+/// open from the menu, the one that sits beside the rig script and the band
+/// plan, and the one the application rewrites at the end of any frame that
+/// changed a setting; a credential belongs in none of those.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactSettings {
+    /// Whether the operator's own logger is asked about a callsign the store
+    /// has nothing recent to say about.
+    pub lookup: bool,
+    /// The base URL of that logger.
+    pub wavelog_url: String,
+}
+
+impl Default for ContactSettings {
+    fn default() -> Self {
+        Self {
+            // Unlike rig control, an enabled lookup with nothing configured
+            // does nothing at all rather than trying to reach something: with
+            // no URL and no key there is no logger to ask, and the store still
+            // answers. So the switch starts on, and an operator who writes a
+            // credentials file is not left wondering why nothing happens.
+            lookup: true,
+            wavelog_url: String::new(),
+        }
+    }
 }
 
 /// The name the default port is offered to the script under.
@@ -205,6 +236,7 @@ impl Default for Settings {
             history_format: HistoryFormat::default(),
             ui_scale: DEFAULT_UI_SCALE,
             rig: RigSettings::default(),
+            contact: ContactSettings::default(),
         }
     }
 }
@@ -304,6 +336,7 @@ impl Config {
                 .map(|scale| scale.clamp(*UI_SCALE_RANGE.start(), *UI_SCALE_RANGE.end()))
                 .unwrap_or(defaults.ui_scale),
             rig: rig_settings(&self.document),
+            contact: contact_settings(&self.document),
         }
     }
 
@@ -409,6 +442,7 @@ impl Config {
             Some(value(settings.tx_mode.spec().name())),
         );
         store_rig(document, &settings.rig);
+        store_contact(document, &settings.contact);
         self.error = self.write().err().map(|error| error.to_string());
     }
 
@@ -461,6 +495,29 @@ fn rig_settings(document: &DocumentMut) -> RigSettings {
         lead_in_seconds: seconds(document, "lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
         tail_seconds: seconds(document, "tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
     }
+}
+
+fn contact_settings(document: &DocumentMut) -> ContactSettings {
+    let defaults = ContactSettings::default();
+    ContactSettings {
+        lookup: boolean(document, Some("contact"), "lookup").unwrap_or(defaults.lookup),
+        wavelog_url: subtable(document, "contact", "wavelog")
+            .and_then(|table| table.get("url"))
+            .and_then(Item::as_str)
+            .map(str::trim)
+            .map(str::to_owned)
+            .unwrap_or(defaults.wavelog_url),
+    }
+}
+
+/// Writes the contact section back, the instance's address included.
+///
+/// The address is written even while it is empty, for the same reason the rig
+/// ports are: this file is where it is edited, and an operator who has to
+/// invent the key before they can change it has no way to learn it exists.
+fn store_contact(document: &mut DocumentMut, contact: &ContactSettings) {
+    set(document, Some("contact"), "lookup", Some(value(contact.lookup)));
+    subtable_mut(document, "contact", "wavelog")["url"] = value(contact.wavelog_url.as_str());
 }
 
 fn seconds(document: &DocumentMut, key: &str, range: &core::ops::RangeInclusive<f32>, default: f32) -> f32 {
@@ -673,6 +730,10 @@ mod tests {
                 lead_in_seconds: 0.3,
                 tail_seconds: 0.1,
             },
+            contact: ContactSettings {
+                lookup: false,
+                wavelog_url: "https://log.example.org".to_owned(),
+            },
         }
     }
 
@@ -694,6 +755,40 @@ mod tests {
         assert!(config.error().is_none());
 
         assert_eq!(Config::load(&config_path(&root)).settings(), settings);
+    }
+
+    /// A store key is read as `${contact.<key>}`, so a key holding anything a
+    /// variable name cannot is one no template could ever print. The directory
+    /// crate keeps its own copy of that rule; this is where the two meet.
+    #[test]
+    fn every_well_known_contact_key_is_a_name_a_template_can_read() {
+        for key in grayline_qso::WELL_KNOWN_KEYS {
+            assert!(valid_variable_name(&format!("contact.{key}")), "{key}");
+        }
+    }
+
+    /// The instance is edited in this file, so the key has to be there to be
+    /// edited even before the operator has anything to put in it.
+    #[test]
+    fn the_contact_section_names_its_instance_even_while_it_is_empty() {
+        let root = TempDir::new();
+        let mut config = Config::load(&config_path(&root));
+        config.store(&Settings::default());
+
+        let written = fs::read_to_string(config_path(&root)).expect("a written file");
+        assert!(written.contains("[contact.wavelog]"), "{written}");
+        assert!(written.contains("url"), "{written}");
+    }
+
+    /// The credential is the one thing this file must never learn.
+    #[test]
+    fn the_contact_section_carries_no_key() {
+        let root = TempDir::new();
+        let mut config = Config::load(&config_path(&root));
+        config.store(&populated());
+
+        let written = fs::read_to_string(config_path(&root)).expect("a written file");
+        assert!(!written.contains("key"), "{written}");
     }
 
     /// TOML allows `nan`, which passes every range clamp unchanged and would

@@ -30,6 +30,7 @@ mlua.workspace = true
 grayline-audio = { path = "../../crates/audio" }
 grayline-sstv-rx = { path = "../../crates/sstv-rx" }
 grayline-dsp = { path = "../../crates/dsp" }
+grayline-qso = { path = "../../crates/qso" }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-tone-tx = { path = "../../crates/tone-tx" }
 grayline-rig = { path = "../../crates/rig" }

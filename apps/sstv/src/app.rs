@@ -27,7 +27,7 @@ use crate::{
     error::AppError,
     storage::{
         bands::{BandDefinition, BandPlan},
-        config::{Config, RigSettings, Settings, UI_SCALE_RANGE},
+        config::{Config, ContactSettings, RigSettings, Settings, UI_SCALE_RANGE},
         paths::{AppPaths, Folder},
     },
     ui::raster::{Raster, test_pattern_image},
@@ -217,6 +217,12 @@ pub struct App {
     /// what a rig needs is a station's own business rather than something a
     /// menu could offer a list of.
     pub rig: RigSettings,
+    /// Where the contact directory looks a callsign up.
+    ///
+    /// Only whether to look one up is the interface's to change, for the same
+    /// reason the rig's address is not: the instance and the key belong to the
+    /// station rather than to a list a menu could offer.
+    pub contact_settings: ContactSettings,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -453,6 +459,7 @@ impl App {
             device_fault: None,
             ui_scale: settings.ui_scale,
             rig: settings.rig.clone(),
+            contact_settings: settings.contact.clone(),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -524,6 +531,7 @@ impl App {
             history_format: self.history_format,
             ui_scale: self.ui_scale,
             rig: self.rig.clone(),
+            contact: self.contact_settings.clone(),
         }
     }
 

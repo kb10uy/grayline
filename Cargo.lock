@@ -2084,6 +2084,7 @@ dependencies = [
  "fontdb",
  "grayline-audio",
  "grayline-dsp",
+ "grayline-qso",
  "grayline-rig",
  "grayline-shell",
  "grayline-sstv",

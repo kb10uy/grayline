@@ -236,6 +236,15 @@ mod tests {
         );
     }
 
+    /// The contact store is shared by every application in the family, and the
+    /// crate that owns it restates the family directory rather than depending
+    /// on the shell to learn one string. This is the one place both are in
+    /// view, so it is where they are held to each other.
+    #[test]
+    fn the_contact_directory_agrees_with_the_shell_on_where_the_family_lives() {
+        assert_eq!(grayline_qso::FAMILY_DIRECTORY, FAMILY_DIRECTORY);
+    }
+
     /// The log describes one machine's hardware, so it must not be written
     /// where the account's roaming profile would synchronize it.
     #[test]
