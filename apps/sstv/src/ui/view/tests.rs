@@ -135,6 +135,26 @@ fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
     render(&mut app).get_by_label("oblast");
 }
 
+/// A modal builds its own `Ui` from the context rather than from the one the
+/// interface was drawn into, so setting this on that `Ui` alone left every
+/// dialog with selectable labels while nothing behind them had any.
+#[test]
+fn labels_are_inert_inside_a_dialog_as_well_as_behind_it() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.open_contact();
+
+    let harness = render(&mut app);
+
+    for theme in [egui::Theme::Dark, egui::Theme::Light] {
+        assert!(
+            !harness.ctx.style_of(theme).interaction.selectable_labels,
+            "{theme:?} labels should be inert"
+        );
+    }
+}
+
 /// The button beside the callsign is what opens that dialog, so a station
 /// that has been named has to have one to press.
 #[test]

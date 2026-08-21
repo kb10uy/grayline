@@ -62,6 +62,16 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bo
     // swallows the press; none of this text is worth dragging a selection
     // across either. Set here rather than at startup so the interface behaves
     // the same under test.
+    //
+    // On the context as well as on this `Ui`, and the two are not the same
+    // reach: a modal builds its own `Ui` from the context rather than from
+    // this one, so a dialog would otherwise keep the selectable labels the
+    // interface behind it had given up. Every theme's style rather than the
+    // current one, because the operator's theme is not this code's business.
+    // The context takes effect from the next `Ui` built out of it, which is
+    // why the one in hand is still set too.
+    ui.ctx()
+        .all_styles_mut(|style| style.interaction.selectable_labels = false);
     ui.style_mut().interaction.selectable_labels = false;
 
     let mut action = None;

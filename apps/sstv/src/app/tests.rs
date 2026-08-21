@@ -262,6 +262,11 @@ fn a_headless_interface_names_none_of_the_operators_own_files() {
 
 /// The menu offers to write a credentials file, and a test that applies every
 /// action must not thereby write one.
+///
+/// What is checked is that nothing was written, not that the operator's own
+/// directory is empty: they are entitled to have written a credentials file
+/// themselves, and a test that failed because they had would be reporting on
+/// the machine it ran on rather than on this code.
 #[test]
 fn writing_the_credentials_file_does_nothing_without_one_to_write() {
     let mut app = App::headless();
@@ -269,13 +274,37 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
     app.write_contact_credentials();
 
     assert!(app.notice.is_none());
-    if let Some(path) = grayline_qso::default_credentials_path() {
-        assert!(
-            !path.exists(),
-            "the suite wrote {} into the operator's own directory",
-            path.display()
-        );
-    }
+    assert!(app.library.error.is_none());
+}
+
+/// And when there is one to write, it goes where the paths name rather than
+/// wherever the crate would have discovered.
+#[test]
+fn the_credentials_file_is_written_where_the_paths_name_it() {
+    let root = TempDir::new();
+    let credentials = root.path().join("credentials.toml");
+    let mut app = App::from_parts(
+        AudioState::disconnected(),
+        AppPaths::from_roots(
+            root.path().join("config"),
+            root.path().join("data"),
+            root.path().join("pictures"),
+            root.path().join("state"),
+        ),
+        Config::detached(),
+        &Settings::default(),
+        ContactPaths {
+            store: None,
+            credentials: Some(credentials.clone()),
+        },
+        Waker::default(),
+        Box::new(grayline_shell::platform::QuietPlatform),
+    );
+
+    app.write_contact_credentials();
+
+    assert!(credentials.is_file(), "{}", credentials.display());
+    assert!(app.notice.is_some());
 }
 
 /// Half a callsign is not one, and neither is a garbled identifier.
