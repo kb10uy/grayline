@@ -91,8 +91,9 @@ impl RgbImage {
         if bytes.len() != size.pixel_count() * 3 {
             return Err(SstvError::InvalidPixelCount);
         }
-        let pixels = bytes
-            .chunks_exact(3)
+        let pixel_chunks = bytes.as_chunks::<3>().0;
+        let pixels = pixel_chunks
+            .iter()
             .map(|chunk| Rgb8::new(chunk[0], chunk[1], chunk[2]))
             .collect();
         Ok(Self { size, pixels })

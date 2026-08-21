@@ -188,7 +188,7 @@ mod tests {
         assert!(icon.width > 0 && icon.height > 0);
         assert_eq!(icon.rgba.len(), icon.width as usize * icon.height as usize * 4);
         assert!(
-            icon.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0),
+            icon.rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] != 0),
             "the icon should not be fully transparent"
         );
     }

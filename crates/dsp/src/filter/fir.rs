@@ -222,16 +222,16 @@ impl Fir {
 /// fixed, just no longer strictly front to back.
 fn dot(coefficients: &[f64], window: &[f64]) -> f64 {
     let mut sums = [0.0; 4];
-    let mut coefficient_chunks = coefficients.chunks_exact(4);
-    let mut window_chunks = window.chunks_exact(4);
-    for (coefficients, window) in (&mut coefficient_chunks).zip(&mut window_chunks) {
+    let (coefficient_chunks, coefficient_remainders) = coefficients.as_chunks::<4>();
+    let (window_chunks, window_remainders) = window.as_chunks::<4>();
+    for (coefficients, window) in coefficient_chunks.iter().zip(window_chunks) {
         sums[0] += coefficients[0] * window[0];
         sums[1] += coefficients[1] * window[1];
         sums[2] += coefficients[2] * window[2];
         sums[3] += coefficients[3] * window[3];
     }
     let mut output = (sums[0] + sums[1]) + (sums[2] + sums[3]);
-    for (coefficient, sample) in coefficient_chunks.remainder().iter().zip(window_chunks.remainder()) {
+    for (coefficient, sample) in coefficient_remainders.iter().zip(window_remainders) {
         output += coefficient * sample;
     }
     output

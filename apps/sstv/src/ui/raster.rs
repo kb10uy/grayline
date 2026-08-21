@@ -56,7 +56,7 @@ impl Raster {
         let Ok(size) = ImageSize::new(frame.width as usize, frame.height as usize) else {
             return false;
         };
-        self.replace(size, frame.rgba.chunks_exact(4).map(rgba_pixel));
+        self.replace(size, frame.rgba.as_chunks::<4>().0.iter().map(rgba_pixel));
         true
     }
 
@@ -130,7 +130,7 @@ impl Raster {
     }
 }
 
-fn rgba_pixel(pixel: &[u8]) -> Color32 {
+fn rgba_pixel(pixel: &[u8; 4]) -> Color32 {
     Color32::from_rgba_unmultiplied(pixel[0], pixel[1], pixel[2], pixel[3])
 }
 

@@ -194,8 +194,9 @@ impl Renderer {
         let mut target = pixmap.as_mut();
         resvg::render(&tree, Transform::identity(), &mut target);
         let bytes = pixmap.take_demultiplied();
-        let pixels = bytes
-            .chunks_exact(4)
+        let pixel_chunks = bytes.as_chunks::<4>().0;
+        let pixels = pixel_chunks
+            .iter()
             .map(|pixel| Rgba8::new(pixel[0], pixel[1], pixel[2], pixel[3]))
             .collect();
         RgbaImage::from_pixels(size, pixels)

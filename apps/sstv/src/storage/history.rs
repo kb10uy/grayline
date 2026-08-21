@@ -120,7 +120,9 @@ fn save_jpeg(path: &Path, candidate: HistoryCandidate, xmp: String) -> Result<()
     let rgb = candidate
         .frame
         .rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .flat_map(|pixel| &pixel[..3])
         .copied()
         .collect::<Vec<_>>();
