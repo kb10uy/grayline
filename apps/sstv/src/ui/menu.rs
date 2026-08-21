@@ -38,6 +38,8 @@ pub enum Action {
     ToggleContestMode,
     ToggleVisRestart,
     ToggleVisStrict,
+    ToggleContactLookup,
+    WriteContactCredentials,
     WriteRigScript,
     WriteBandPlan,
     ToggleAutoHistory,
@@ -169,6 +171,24 @@ pub fn model(app: &App) -> Vec<Menu> {
                 // a menu is putting the two files it runs on where they can be
                 // edited, which is a once-ever thing rather than an operating
                 // control.
+                // The directory is worked from the QSO panel; what is left
+                // for a menu is the switch and putting the credentials file
+                // where it can be edited, neither of which is an operating
+                // control.
+                Item::Submenu {
+                    label: text("menu-contact"),
+                    items: vec![
+                        Item::Check {
+                            label: text("action-contact-lookup"),
+                            checked: app.contact_settings.lookup,
+                            action: Action::ToggleContactLookup,
+                        },
+                        Item::Command {
+                            label: text("action-contact-write-credentials"),
+                            action: Action::WriteContactCredentials,
+                        },
+                    ],
+                },
                 Item::Submenu {
                     label: text("menu-rig"),
                     items: vec![
@@ -299,6 +319,8 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::ToggleContestMode => app.contest_mode = !app.contest_mode,
         Action::ToggleVisRestart => app.set_vis_restart(!app.vis_restart),
         Action::ToggleVisStrict => app.set_vis_strict(!app.vis_strict),
+        Action::ToggleContactLookup => app.set_contact_lookup(!app.contact_settings.lookup),
+        Action::WriteContactCredentials => app.write_contact_credentials(),
         Action::WriteRigScript => app.write_rig_script(),
         Action::WriteBandPlan => app.write_band_plan(),
         Action::ToggleAutoHistory => app.auto_history = !app.auto_history,

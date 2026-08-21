@@ -10,10 +10,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use grayline_qso::DEFAULT_FIELDS;
 use grayline_rig::DEFAULT_ADDRESS;
 use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
-use toml_edit::{DocumentMut, Item, Table, value};
+use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use grayline_shell::i18n::Locale;
 
@@ -121,6 +122,7 @@ pub struct Settings {
     pub history_format: HistoryFormat,
     pub ui_scale: f32,
     pub rig: RigSettings,
+    pub contact: ContactSettings,
 }
 
 /// How the station's rig is reached.
@@ -140,6 +142,48 @@ pub struct RigSettings {
     pub lead_in_seconds: f32,
     /// How long after the last sample the rig is unkeyed, in seconds.
     pub tail_seconds: f32,
+}
+
+/// Where the contact directory looks a callsign up.
+///
+/// Written under `[qso]`, beside the serial number: the callsign in that panel
+/// is what a lookup is about, and a section of its own would separate the two
+/// halves of one thing.
+///
+/// The API key is deliberately absent, and is read from the family's own
+/// credentials file instead. This file is the one the operator is invited to
+/// open from the menu, the one that sits beside the rig script and the band
+/// plan, and the one the application rewrites at the end of any frame that
+/// changed a setting; a credential belongs in none of those.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactSettings {
+    /// Whether the operator's own logger is asked about a callsign the store
+    /// has nothing recent to say about.
+    pub lookup: bool,
+    /// The base URL of that logger.
+    pub wavelog_url: String,
+    /// Which fields the contact dialog offers, as written: keys, and groups
+    /// spelled `!name`.
+    ///
+    /// Kept as written rather than expanded, so the file the operator reads
+    /// back says `!ja` where they wrote `!ja`. What the dialog lays out is
+    /// `grayline_qso::expand_fields` of this.
+    pub fields: Vec<String>,
+}
+
+impl Default for ContactSettings {
+    fn default() -> Self {
+        Self {
+            // Unlike rig control, an enabled lookup with nothing configured
+            // does nothing at all rather than trying to reach something: with
+            // no URL and no key there is no logger to ask, and the store still
+            // answers. So the switch starts on, and an operator who writes a
+            // credentials file is not left wondering why nothing happens.
+            lookup: true,
+            wavelog_url: String::new(),
+            fields: DEFAULT_FIELDS.iter().map(|field| (*field).to_owned()).collect(),
+        }
+    }
 }
 
 /// The name the default port is offered to the script under.
@@ -205,6 +249,7 @@ impl Default for Settings {
             history_format: HistoryFormat::default(),
             ui_scale: DEFAULT_UI_SCALE,
             rig: RigSettings::default(),
+            contact: ContactSettings::default(),
         }
     }
 }
@@ -304,6 +349,7 @@ impl Config {
                 .map(|scale| scale.clamp(*UI_SCALE_RANGE.start(), *UI_SCALE_RANGE.end()))
                 .unwrap_or(defaults.ui_scale),
             rig: rig_settings(&self.document),
+            contact: contact_settings(&self.document),
         }
     }
 
@@ -409,6 +455,7 @@ impl Config {
             Some(value(settings.tx_mode.spec().name())),
         );
         store_rig(document, &settings.rig);
+        store_contact(document, &settings.contact);
         self.error = self.write().err().map(|error| error.to_string());
     }
 
@@ -461,6 +508,51 @@ fn rig_settings(document: &DocumentMut) -> RigSettings {
         lead_in_seconds: seconds(document, "lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
         tail_seconds: seconds(document, "tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
     }
+}
+
+fn contact_settings(document: &DocumentMut) -> ContactSettings {
+    let defaults = ContactSettings::default();
+    ContactSettings {
+        lookup: boolean(document, Some("qso"), "lookup").unwrap_or(defaults.lookup),
+        wavelog_url: subtable(document, "qso", "wavelog")
+            .and_then(|table| table.get("url"))
+            .and_then(Item::as_str)
+            .map(str::trim)
+            .map(str::to_owned)
+            .unwrap_or(defaults.wavelog_url),
+        fields: contact_fields(document).unwrap_or(defaults.fields),
+    }
+}
+
+/// Reads the field list, or nothing when the file names none.
+///
+/// A list that is present is taken as written, an empty one included: an
+/// operator who wrote `fields = []` asked for a dialog holding only what the
+/// station already has, and handing the default back would be arguing with
+/// them. Entries that are not strings are dropped; what the remaining ones
+/// mean is `expand_fields`'s business.
+fn contact_fields(document: &DocumentMut) -> Option<Vec<String>> {
+    let array = get(document, Some("qso"), "fields")?.as_array()?;
+    Some(
+        array
+            .iter()
+            .filter_map(|entry| entry.as_str().map(str::trim).map(str::to_owned))
+            .collect(),
+    )
+}
+
+/// Writes the directory's half of the QSO section back, the instance's address
+/// included.
+///
+/// The address is written even while it is empty, for the same reason the rig
+/// ports are: this file is where it is edited, and an operator who has to
+/// invent the key before they can change it has no way to learn it exists.
+fn store_contact(document: &mut DocumentMut, contact: &ContactSettings) {
+    set(document, Some("qso"), "lookup", Some(value(contact.lookup)));
+    let mut fields = Array::new();
+    fields.extend(contact.fields.iter().map(String::as_str));
+    set(document, Some("qso"), "fields", Some(Item::Value(fields.into())));
+    subtable_mut(document, "qso", "wavelog")["url"] = value(contact.wavelog_url.as_str());
 }
 
 fn seconds(document: &DocumentMut, key: &str, range: &core::ops::RangeInclusive<f32>, default: f32) -> f32 {
@@ -673,6 +765,11 @@ mod tests {
                 lead_in_seconds: 0.3,
                 tail_seconds: 0.1,
             },
+            contact: ContactSettings {
+                lookup: false,
+                wavelog_url: "https://log.example.org".to_owned(),
+                fields: vec!["!ja".to_owned(), "dxcc".to_owned()],
+            },
         }
     }
 
@@ -694,6 +791,83 @@ mod tests {
         assert!(config.error().is_none());
 
         assert_eq!(Config::load(&config_path(&root)).settings(), settings);
+    }
+
+    /// A field list is written as keys and groups, so both have to survive a
+    /// reload as written rather than as what they expand to.
+    #[test]
+    fn a_field_list_is_stored_the_way_it_was_written() {
+        let root = TempDir::new();
+        let mut config = Config::load(&config_path(&root));
+        config.store(&populated());
+
+        let written = fs::read_to_string(config_path(&root)).expect("a written file");
+        assert!(written.contains("\"!ja\""), "{written}");
+        assert_eq!(
+            Config::load(&config_path(&root)).settings().contact.fields,
+            ["!ja", "dxcc"]
+        );
+    }
+
+    /// An operator who asked for no fields wants a dialog holding only what the
+    /// station already has; handing the default back would argue with them.
+    #[test]
+    fn an_empty_field_list_is_taken_as_written() {
+        let root = TempDir::new();
+        fs::create_dir_all(config_path(&root).parent().expect("a parent")).expect("a directory");
+        fs::write(
+            config_path(&root),
+            "[qso]
+fields = []
+",
+        )
+        .expect("a write");
+
+        assert!(Config::load(&config_path(&root)).settings().contact.fields.is_empty());
+    }
+
+    #[test]
+    fn a_file_naming_no_fields_asks_for_the_default_ones() {
+        let root = TempDir::new();
+
+        assert_eq!(
+            Config::load(&config_path(&root)).settings().contact.fields,
+            ContactSettings::default().fields
+        );
+    }
+
+    /// A store key is read as `${contact.<key>}`, so a key holding anything a
+    /// variable name cannot is one no template could ever print. The directory
+    /// crate keeps its own copy of that rule; this is where the two meet.
+    #[test]
+    fn every_well_known_contact_key_is_a_name_a_template_can_read() {
+        for key in grayline_qso::WELL_KNOWN_KEYS {
+            assert!(valid_variable_name(&format!("contact.{key}")), "{key}");
+        }
+    }
+
+    /// The instance is edited in this file, so the key has to be there to be
+    /// edited even before the operator has anything to put in it.
+    #[test]
+    fn the_qso_section_names_its_instance_even_while_it_is_empty() {
+        let root = TempDir::new();
+        let mut config = Config::load(&config_path(&root));
+        config.store(&Settings::default());
+
+        let written = fs::read_to_string(config_path(&root)).expect("a written file");
+        assert!(written.contains("[qso.wavelog]"), "{written}");
+        assert!(written.contains("url"), "{written}");
+    }
+
+    /// The credential is the one thing this file must never learn.
+    #[test]
+    fn the_qso_section_carries_no_key() {
+        let root = TempDir::new();
+        let mut config = Config::load(&config_path(&root));
+        config.store(&populated());
+
+        let written = fs::read_to_string(config_path(&root)).expect("a written file");
+        assert!(!written.contains("key"), "{written}");
     }
 
     /// TOML allows `nan`, which passes every range clamp unchanged and would

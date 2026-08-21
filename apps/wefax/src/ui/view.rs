@@ -22,6 +22,8 @@ const PPM_READING_WIDTH: f32 = 68.0;
 
 /// Draws the window and returns whatever the menu activated.
 pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) -> Option<Action> {
+    grayline_shell::inert_labels(ui);
+
     let mut activated = None;
     if in_window_menu {
         Panel::top(Id::new("menu-bar")).show(ui, |ui| {

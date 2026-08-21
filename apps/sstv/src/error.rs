@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use grayline_audio::AudioError;
 use grayline_dsp::DspError;
+use grayline_qso::QsoError;
 use grayline_rig::RigError;
 use grayline_sstv::SstvError;
 use grayline_sstv_rx::DemodulatorError;
@@ -40,6 +41,12 @@ pub enum AppError {
     /// that are not themselves cloneable.
     #[error("{0}")]
     Template(Arc<TemplateError>),
+    /// A contact lookup failed.
+    ///
+    /// Behind an [`Arc`] for the same reason: it carries a store failure that
+    /// is not cloneable, and the snapshot holding it is cloned every frame.
+    #[error("{0}")]
+    Qso(Arc<QsoError>),
 
     #[error("no output device is selected")]
     NoOutputDevice,
@@ -68,5 +75,11 @@ pub enum AppError {
 impl From<TemplateError> for AppError {
     fn from(error: TemplateError) -> Self {
         Self::Template(Arc::new(error))
+    }
+}
+
+impl From<QsoError> for AppError {
+    fn from(error: QsoError) -> Self {
+        Self::Qso(Arc::new(error))
     }
 }

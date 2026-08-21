@@ -13,7 +13,10 @@ use rstest::rstest;
 use super::*;
 use crate::{
     test_util::TempDir,
-    worker::receive::{Frame, HistoryCandidate, RxSnapshot},
+    worker::{
+        contact::{ContactPaths, ContactState},
+        receive::{Frame, HistoryCandidate, RxSnapshot},
+    },
 };
 use grayline_rig::RigError;
 
@@ -24,6 +27,8 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
         paths,
         config,
         settings,
+        ContactPaths::default(),
+        Waker::default(),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
     app.saved = app.settings();
@@ -177,6 +182,143 @@ fn a_decoded_identifier_fills_the_qso_contact_field() {
     app.poll_workers();
 
     assert_eq!(app.qso.call, "JA1ABC");
+}
+
+/// Waits for the contact worker to answer whatever it was last asked.
+///
+/// The worker runs on its own thread, so a test that looked a station up has
+/// to let it get there before reading what it found.
+fn settled(app: &App) -> ContactSnapshot {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let snapshot = app.contact.latest();
+        if snapshot.state != ContactState::Looking || Instant::now() > deadline {
+            return snapshot;
+        }
+        std::thread::yield_now();
+    }
+}
+
+/// Leaving the field is what commits a callsign, and the operator leaves it
+/// whether or not they changed anything. Asking again for the station already
+/// showing would put a second question to somebody's logger for nothing.
+#[test]
+fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
+    let mut app = App::headless();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    app.finish_qso_edit();
+
+    assert_eq!(
+        app.contact.latest().state,
+        ContactState::Unknown,
+        "a second request would have put the worker back to looking"
+    );
+}
+
+#[test]
+fn a_changed_callsign_is_asked_about() {
+    let mut app = App::headless();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+    assert_eq!(settled(&app).callsign, "JA1ABC");
+
+    app.qso.call = "JH1XYZ".to_owned();
+    app.finish_qso_edit();
+
+    assert_eq!(settled(&app).callsign, "JH1XYZ");
+}
+
+/// The identifier path does not go through the field, so it has to ask for
+/// itself.
+#[test]
+fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
+    let mut app = App::headless();
+
+    app.audio.set_snapshot(identified(&["JA1ABC"]));
+    app.poll_workers();
+
+    assert_eq!(settled(&app).callsign, "JA1ABC");
+}
+
+/// A headless interface must reach neither the operator's own store nor the
+/// key sitting beside it.
+///
+/// Both were discovered rather than named once, which meant the suite wrote a
+/// credentials file into the operator's configuration directory and would have
+/// put questions to whatever logger the key named. Naming them is what stops
+/// that, so it is what is checked.
+#[test]
+fn a_headless_interface_names_none_of_the_operators_own_files() {
+    let app = App::headless();
+
+    assert_eq!(app.contact_paths.store, None);
+    assert_eq!(app.contact_paths.credentials, None);
+}
+
+/// The menu offers to write a credentials file, and a test that applies every
+/// action must not thereby write one.
+///
+/// What is checked is that nothing was written, not that the operator's own
+/// directory is empty: they are entitled to have written a credentials file
+/// themselves, and a test that failed because they had would be reporting on
+/// the machine it ran on rather than on this code.
+#[test]
+fn writing_the_credentials_file_does_nothing_without_one_to_write() {
+    let mut app = App::headless();
+
+    app.write_contact_credentials();
+
+    assert!(app.notice.is_none());
+    assert!(app.library.error.is_none());
+}
+
+/// And when there is one to write, it goes where the paths name rather than
+/// wherever the crate would have discovered.
+#[test]
+fn the_credentials_file_is_written_where_the_paths_name_it() {
+    let root = TempDir::new();
+    let credentials = root.path().join("credentials.toml");
+    let mut app = App::from_parts(
+        AudioState::disconnected(),
+        AppPaths::from_roots(
+            root.path().join("config"),
+            root.path().join("data"),
+            root.path().join("pictures"),
+            root.path().join("state"),
+        ),
+        Config::detached(),
+        &Settings::default(),
+        ContactPaths {
+            store: None,
+            credentials: Some(credentials.clone()),
+        },
+        Waker::default(),
+        Box::new(grayline_shell::platform::QuietPlatform),
+    );
+
+    app.write_contact_credentials();
+
+    assert!(credentials.is_file(), "{}", credentials.display());
+    assert!(app.notice.is_some());
+}
+
+/// Half a callsign is not one, and neither is a garbled identifier.
+#[rstest]
+#[case("JA")]
+#[case("")]
+#[case("????")]
+fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
+    let mut app = App::headless();
+
+    app.qso.call = typed.to_owned();
+    app.finish_qso_edit();
+
+    assert_eq!(app.contact.latest().state, ContactState::Idle);
 }
 
 /// The worker republishes every identifier it has decoded, so the same
