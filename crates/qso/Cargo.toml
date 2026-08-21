@@ -12,6 +12,7 @@ jiff.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
 thiserror = { workspace = true, features = ["std"] }
+toml_edit.workspace = true
 ureq.workspace = true
 
 [dev-dependencies]

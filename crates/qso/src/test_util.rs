@@ -4,7 +4,7 @@ use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU32, Ordering},
@@ -33,6 +33,10 @@ impl TempDir {
         let path = std::env::temp_dir().join(format!("grayline-qso-{stamp}-{unique}"));
         fs::create_dir_all(&path).expect("a temporary directory");
         Self(path)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
     }
 
     pub fn store(&self) -> PathBuf {

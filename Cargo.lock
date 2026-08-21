@@ -2020,7 +2020,18 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "thiserror 2.0.20",
+ "toml_edit",
  "ureq",
+]
+
+[[package]]
+name = "grayline-qso-cli"
+version = "0.4.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "grayline-qso",
+ "rstest",
 ]
 
 [[package]]

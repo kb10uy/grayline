@@ -54,6 +54,14 @@ pub enum QsoError {
     /// A remote lookup was asked for with no API key configured.
     #[error("no API key is configured for the lookup")]
     NoKey,
+    /// The credentials file could not be read or written.
+    #[error("{path}: {detail}")]
+    Credentials {
+        /// The file, as the caller named it.
+        path: String,
+        /// What was wrong with it.
+        detail: String,
+    },
     /// The named character encoding is not one this build knows.
     #[error("`{0}` is not a character encoding this build knows")]
     Encoding(String),

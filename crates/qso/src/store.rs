@@ -205,6 +205,23 @@ impl Store {
         Ok(written)
     }
 
+    /// Drops one field from a station, whatever origin wrote it.
+    ///
+    /// Its own operation rather than filing the record that is left, because
+    /// re-filing it would stamp every surviving field with the origin doing the
+    /// re-filing and quietly turn a fetched value into a typed one.
+    pub fn unset(&mut self, callsign: &str, key: &str) -> Result<bool, QsoError> {
+        let callsign = normalized(callsign)?;
+        let dropped = self
+            .connection
+            .execute(
+                "DELETE FROM station_field WHERE callsign = ?1 AND key = ?2",
+                params![callsign, key],
+            )
+            .map_err(store_error)?;
+        Ok(dropped > 0)
+    }
+
     /// Forgets a station outright, fields and lookup history alike.
     pub fn remove(&mut self, callsign: &str) -> Result<bool, QsoError> {
         let callsign = normalized(callsign)?;
@@ -441,6 +458,36 @@ mod tests {
             .query_row("SELECT count(*) FROM station_field", [], |row| row.get(0))
             .expect("a count");
         assert_eq!(orphans, 0);
+    }
+
+    /// Dropping one field must not restamp the rest, or a fetched value would
+    /// become one a later lookup will never refresh.
+    #[test]
+    fn dropping_one_field_leaves_the_others_at_the_origin_that_wrote_them() {
+        let mut store = Store::in_memory().expect("a store");
+        store
+            .merge(
+                &record("JA1ABC", &[("name", "Taro"), ("qth", "Tokyo")]),
+                Origin::Wavelog,
+            )
+            .expect("a write");
+
+        assert!(store.unset("ja1abc", "name").expect("a drop"));
+        assert!(!store.unset("JA1ABC", "name").expect("a second drop"));
+
+        let origins: Vec<String> = store
+            .connection
+            .prepare("SELECT origin FROM station_field WHERE callsign = 'JA1ABC'")
+            .expect("a statement")
+            .query_map([], |row| row.get(0))
+            .expect("a query")
+            .collect::<Result<_, _>>()
+            .expect("the origins");
+        assert_eq!(origins, ["wavelog"]);
+        assert_eq!(
+            store.get("JA1ABC").expect("a read").expect("it was filed").get("name"),
+            None
+        );
     }
 
     #[test]
