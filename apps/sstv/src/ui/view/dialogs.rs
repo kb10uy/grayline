@@ -145,10 +145,18 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let callsign = app.contact_snapshot.callsign.clone();
     let state = contact_state(app);
     // Resolved before the rows are borrowed for editing, because a label comes
-    // from the catalogue and the catalogue lives on the same interface.
-    let labels: Vec<String> = WELL_KNOWN_KEYS
+    // from the catalogue and the catalogue lives on the same interface. A key
+    // the settings named that this build has no label for stands under its own
+    // name: the field list is the operator's to write, and a key they invented
+    // is one no catalogue was ever going to know.
+    let labels: Vec<String> = app
+        .contact_draft
         .iter()
-        .map(|key| app.i18n.text(&contact_label_key(key)))
+        .map(|row| {
+            app.i18n
+                .message(&contact_label_key(&row.key))
+                .unwrap_or_else(|| row.key.clone())
+        })
         .collect();
     let refreshable = app.can_refresh_contact();
 
@@ -177,13 +185,14 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
 
         egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
             let mut headed = false;
-            for (index, (key, value)) in app.contact_draft.iter_mut().enumerate() {
-                // The well-known keys lead, in the order the crate lists them,
-                // so every name a template may read is offered whether or not
-                // this station has one; anything else the directory holds
-                // follows under its own name.
-                if let Some(label) = labels.get(index) {
-                    changed |= station_field(ui, label, "", value, labelled_width);
+            for (index, row) in app.contact_draft.iter_mut().enumerate() {
+                // What the settings asked for leads, in the order it was
+                // written, and is labelled because the operator chose it.
+                // Anything else the directory happens to hold follows with its
+                // name laid open, because nothing here chose that name.
+                if row.offered {
+                    let label = labels.get(index).map_or(row.key.as_str(), String::as_str);
+                    changed |= station_field(ui, label, "", &mut row.value, labelled_width);
                     continue;
                 }
                 if !headed {
@@ -191,6 +200,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
                     ui.add_space(8.0);
                     ui.label(RichText::new(other.clone()).size(LABEL).weak());
                 }
+                let (key, value) = (&mut row.key, &mut row.value);
                 ui.horizontal(|ui| {
                     let usable = grayline_qso::valid_key(key);
                     let field = egui::TextEdit::singleline(key)

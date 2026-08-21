@@ -1,6 +1,6 @@
 //! What `gl-qso` does with a contact store, apart from parsing a command line.
 
-use grayline_qso::{Record, WELL_KNOWN_KEYS, valid_key};
+use grayline_qso::{FIELD_GROUPS, GROUP_PREFIX, Record, WELL_KNOWN_KEYS, valid_key};
 
 /// Reads one `key=value` argument.
 ///
@@ -52,9 +52,18 @@ pub fn render_json(record: &Record) -> String {
     format!("{{\"callsign\":{},{}}}", quote(record.callsign()), fields.join(","))
 }
 
-/// The well-known keys, one per line, for `gl-qso keys`.
+/// The keys this build names and the groups a configuration can ask for.
+///
+/// The groups are printed beside the keys because a field list is written out
+/// of both, and an operator who only ever saw the keys would write six entries
+/// where one would do.
 pub fn render_keys() -> String {
-    WELL_KNOWN_KEYS.iter().map(|key| format!("{key}\n")).collect()
+    let mut rendered: String = WELL_KNOWN_KEYS.iter().map(|key| format!("{key}\n")).collect();
+    rendered.push_str("\ngroups, for a `fields` list:\n");
+    for (group, keys) in FIELD_GROUPS {
+        rendered.push_str(&format!("{GROUP_PREFIX}{group}  {}\n", keys.join(", ")));
+    }
+    rendered
 }
 
 fn quote(text: &str) -> String {
@@ -136,11 +145,14 @@ mod tests {
     }
 
     #[test]
-    fn every_well_known_key_is_offered() {
+    fn every_well_known_key_and_group_is_offered() {
         let rendered = render_keys();
 
         for key in WELL_KNOWN_KEYS {
             assert!(rendered.contains(key), "{key}");
+        }
+        for (group, _) in FIELD_GROUPS {
+            assert!(rendered.contains(&format!("{GROUP_PREFIX}{group}")), "{group}");
         }
     }
 }

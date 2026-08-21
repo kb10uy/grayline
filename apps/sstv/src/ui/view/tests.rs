@@ -73,9 +73,9 @@ fn the_variable_dialog_renders_a_row_for_every_name() {
 }
 
 /// The contact dialog lays out three kinds of row at once — labelled fields
-/// for the well-known keys, name-and-value pairs for everything else, and the
-/// buttons under them — which is exactly the shape egui panics over if any of
-/// them share an id.
+/// for what the settings asked for, name-and-value pairs for whatever else the
+/// station has, and the buttons under them — which is exactly the shape egui
+/// panics over if any of them share an id.
 #[test]
 fn the_contact_dialog_renders_every_kind_of_row() {
     let mut app = App::headless();
@@ -88,15 +88,51 @@ fn the_contact_dialog_renders_every_kind_of_row() {
     ]);
     app.open_contact();
     assert_eq!(
-        app.contact_draft.len(),
-        grayline_qso::WELL_KNOWN_KEYS.len() + 1,
-        "every well-known key is offered, and the one key beyond them follows"
+        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        ["name", "qth", "grid", "rig"],
+        "the fields asked for lead, and what the station also has follows"
     );
+    assert!(app.contact_draft.iter().take(3).all(|row| row.offered));
+    assert!(!app.contact_draft[3].offered);
     let title = app.i18n.text("contact-title");
 
     let harness = render(&mut app);
 
     harness.get_by_label_contains(&title);
+}
+
+/// A station in Japan wants a JCC code and a name RTTY can send; a station
+/// anywhere else wants neither, and which of those an operator is was never
+/// something the application could decide.
+#[test]
+fn the_dialog_offers_the_fields_the_settings_asked_for() {
+    let mut app = App::headless();
+    app.contact_settings.fields = vec!["!ja".to_owned()];
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+
+    app.open_contact();
+
+    assert_eq!(
+        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        ["name", "name_latin", "qth", "qth_latin", "grid", "jcc"]
+    );
+    let jcc = app.i18n.text("contact-jcc");
+    render(&mut app).get_by_label(&jcc);
+}
+
+/// A key the operator invented is one no catalogue was going to know, so it
+/// stands under its own name rather than under a missing message's id.
+#[test]
+fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
+    let mut app = App::headless();
+    app.contact_settings.fields = vec!["oblast".to_owned()];
+    app.qso.call = "JA1ABC".to_owned();
+    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+
+    app.open_contact();
+
+    render(&mut app).get_by_label("oblast");
 }
 
 /// The button beside the callsign is what opens that dialog, so a station

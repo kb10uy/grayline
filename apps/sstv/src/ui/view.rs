@@ -4,8 +4,6 @@ use egui_extras::{Column, TableBuilder};
 use grayline_audio::FaultKind;
 use grayline_sstv_template::valid_variable_name;
 
-use grayline_qso::WELL_KNOWN_KEYS;
-
 use grayline_shell::i18n::{arg, number, owned};
 
 use crate::{

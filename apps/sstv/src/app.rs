@@ -232,10 +232,9 @@ pub struct App {
     pub contact_dialog_open: bool,
     /// The rows that dialog is editing.
     ///
-    /// Every well-known key is offered whether or not the station has one, so
-    /// the operator can learn what a template may read without going to look
-    /// it up; anything else the directory holds follows, editable by name.
-    pub contact_draft: Vec<(String, String)>,
+    /// The fields the settings ask for lead, then anything else the directory
+    /// happens to hold.
+    pub contact_draft: Vec<ContactRow>,
     /// The files the worker was opened over, kept so that switching the lookup
     /// on or off can open it again over a different logger.
     contact_paths: ContactPaths,
@@ -304,6 +303,20 @@ pub struct App {
 
 /// What the station says about itself.
 ///
+/// One row of the contact dialog.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ContactRow {
+    pub key: String,
+    pub value: String,
+    /// Whether the settings asked for this key, and so whether it is shown
+    /// with a label rather than with its name laid open for editing.
+    ///
+    /// A row is offered whether or not the station has a value for it, which
+    /// is what makes the dialog say what this operator files rather than only
+    /// what this contact happens to have.
+    pub offered: bool,
+}
+
 /// Set once for the operator rather than per contact, which is why it is
 /// edited in a dialog of its own instead of in the panel beside the image.
 pub struct Station {
@@ -779,24 +792,39 @@ impl App {
     }
 
     /// Opens the dialog on what is filed under the callsign being worked.
+    ///
+    /// The fields the settings ask for lead, in the order they were written,
+    /// whether or not this station has any of them: a station in Japan wants
+    /// somewhere to put a JCC code and a station anywhere else does not, and
+    /// which of those an operator is was never something to decide here.
+    /// Anything else already filed follows, under its own name.
     pub fn open_contact(&mut self) {
         let known = &self.contact_snapshot.fields;
-        let mut draft: Vec<(String, String)> = grayline_qso::WELL_KNOWN_KEYS
+        let offered = grayline_qso::expand_fields(self.contact_settings.fields.iter().map(String::as_str));
+        let mut draft: Vec<ContactRow> = offered
             .iter()
-            .map(|key| ((*key).to_owned(), known.get(*key).cloned().unwrap_or_default()))
+            .map(|key| ContactRow {
+                value: known.get(key).cloned().unwrap_or_default(),
+                key: key.clone(),
+                offered: true,
+            })
             .collect();
         draft.extend(
             known
                 .iter()
-                .filter(|(key, _)| !grayline_qso::WELL_KNOWN_KEYS.contains(&key.as_str()))
-                .map(|(key, value)| (key.clone(), value.clone())),
+                .filter(|(key, _)| !offered.contains(key))
+                .map(|(key, value)| ContactRow {
+                    key: key.clone(),
+                    value: value.clone(),
+                    offered: false,
+                }),
         );
         self.contact_draft = draft;
         self.contact_dialog_open = true;
     }
 
     pub fn add_contact_field(&mut self) {
-        self.contact_draft.push((String::new(), String::new()));
+        self.contact_draft.push(ContactRow::default());
     }
 
     /// Files the edited rows under the callsign being worked.
@@ -814,15 +842,15 @@ impl App {
             return;
         };
         let mut dropped = Vec::new();
-        for (key, value) in &self.contact_draft {
-            if !grayline_qso::valid_key(key) {
+        for row in &self.contact_draft {
+            if !grayline_qso::valid_key(&row.key) {
                 continue;
             }
-            if record.set(key, value) {
+            if record.set(&row.key, &row.value) {
                 continue;
             }
-            if self.contact_snapshot.fields.contains_key(key) {
-                dropped.push(key.clone());
+            if self.contact_snapshot.fields.contains_key(&row.key) {
+                dropped.push(row.key.clone());
             }
         }
         if record.iter().eq(self
