@@ -100,7 +100,7 @@ decide which of those an operator is, so nothing here tries: the field list is
 written in the settings, out of keys and of groups spelled `!name`.
 
 ```toml
-[contact]
+[qso]
 fields = ["!ja", "dxcc"]
 ```
 
@@ -262,12 +262,16 @@ the same arrangement `grayline_shell`'s manual URL already has. The settings
 file carries the switch and the instance's address only:
 
 ```toml
-[contact]
+[qso]
 lookup = true
 
-[contact.wavelog]
+[qso.wavelog]
 url = "https://log.example.org"
 ```
+
+Under `[qso]` rather than a section of its own, beside the serial number that
+panel already counts: the callsign in it is what a lookup is about, and
+separating the two halves of one thing would only make the file harder to read.
 
 The address is written even while it is empty, for the same reason the rig ports
 are: this file is where it is edited, and an operator who has to invent the key

@@ -146,6 +146,10 @@ pub struct RigSettings {
 
 /// Where the contact directory looks a callsign up.
 ///
+/// Written under `[qso]`, beside the serial number: the callsign in that panel
+/// is what a lookup is about, and a section of its own would separate the two
+/// halves of one thing.
+///
 /// The API key is deliberately absent, and is read from the family's own
 /// credentials file instead. This file is the one the operator is invited to
 /// open from the menu, the one that sits beside the rig script and the band
@@ -509,8 +513,8 @@ fn rig_settings(document: &DocumentMut) -> RigSettings {
 fn contact_settings(document: &DocumentMut) -> ContactSettings {
     let defaults = ContactSettings::default();
     ContactSettings {
-        lookup: boolean(document, Some("contact"), "lookup").unwrap_or(defaults.lookup),
-        wavelog_url: subtable(document, "contact", "wavelog")
+        lookup: boolean(document, Some("qso"), "lookup").unwrap_or(defaults.lookup),
+        wavelog_url: subtable(document, "qso", "wavelog")
             .and_then(|table| table.get("url"))
             .and_then(Item::as_str)
             .map(str::trim)
@@ -528,7 +532,7 @@ fn contact_settings(document: &DocumentMut) -> ContactSettings {
 /// them. Entries that are not strings are dropped; what the remaining ones
 /// mean is `expand_fields`'s business.
 fn contact_fields(document: &DocumentMut) -> Option<Vec<String>> {
-    let array = get(document, Some("contact"), "fields")?.as_array()?;
+    let array = get(document, Some("qso"), "fields")?.as_array()?;
     Some(
         array
             .iter()
@@ -537,17 +541,18 @@ fn contact_fields(document: &DocumentMut) -> Option<Vec<String>> {
     )
 }
 
-/// Writes the contact section back, the instance's address included.
+/// Writes the directory's half of the QSO section back, the instance's address
+/// included.
 ///
 /// The address is written even while it is empty, for the same reason the rig
 /// ports are: this file is where it is edited, and an operator who has to
 /// invent the key before they can change it has no way to learn it exists.
 fn store_contact(document: &mut DocumentMut, contact: &ContactSettings) {
-    set(document, Some("contact"), "lookup", Some(value(contact.lookup)));
+    set(document, Some("qso"), "lookup", Some(value(contact.lookup)));
     let mut fields = Array::new();
     fields.extend(contact.fields.iter().map(String::as_str));
-    set(document, Some("contact"), "fields", Some(Item::Value(fields.into())));
-    subtable_mut(document, "contact", "wavelog")["url"] = value(contact.wavelog_url.as_str());
+    set(document, Some("qso"), "fields", Some(Item::Value(fields.into())));
+    subtable_mut(document, "qso", "wavelog")["url"] = value(contact.wavelog_url.as_str());
 }
 
 fn seconds(document: &DocumentMut, key: &str, range: &core::ops::RangeInclusive<f32>, default: f32) -> f32 {
@@ -812,7 +817,7 @@ mod tests {
         fs::create_dir_all(config_path(&root).parent().expect("a parent")).expect("a directory");
         fs::write(
             config_path(&root),
-            "[contact]
+            "[qso]
 fields = []
 ",
         )
@@ -844,19 +849,19 @@ fields = []
     /// The instance is edited in this file, so the key has to be there to be
     /// edited even before the operator has anything to put in it.
     #[test]
-    fn the_contact_section_names_its_instance_even_while_it_is_empty() {
+    fn the_qso_section_names_its_instance_even_while_it_is_empty() {
         let root = TempDir::new();
         let mut config = Config::load(&config_path(&root));
         config.store(&Settings::default());
 
         let written = fs::read_to_string(config_path(&root)).expect("a written file");
-        assert!(written.contains("[contact.wavelog]"), "{written}");
+        assert!(written.contains("[qso.wavelog]"), "{written}");
         assert!(written.contains("url"), "{written}");
     }
 
     /// The credential is the one thing this file must never learn.
     #[test]
-    fn the_contact_section_carries_no_key() {
+    fn the_qso_section_carries_no_key() {
         let root = TempDir::new();
         let mut config = Config::load(&config_path(&root));
         config.store(&populated());

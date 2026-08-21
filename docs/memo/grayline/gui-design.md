@@ -799,7 +799,7 @@ are initialized at startup as described in [architecture.md](architecture.md).
 Rig control reads the same file: the Rig Control menu switches the connection
 on and reports what it is doing, and everything the rig is told is written under
 `[rig]`, as described in [rig-control.md](rig-control.md). The contact
-directory reads it too, under `[contact]`, though not the key it needs, which
+directory reads it too, under `[qso]`, though not the key it needs, which
 sits in a file of its own; [qso-directory.md](qso-directory.md) says why.
 Template editing remains a planned gap, as does a way to import a log without
 the command-line tool.
