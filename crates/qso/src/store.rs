@@ -178,47 +178,29 @@ impl Store {
     /// Writes every field of `record` at `origin`, leaving alone any field a
     /// stronger origin already wrote. Answers how many were written.
     pub fn merge(&mut self, record: &Record, origin: Origin) -> Result<usize, QsoError> {
+        self.merge_all(std::slice::from_ref(record), origin)
+    }
+
+    /// Writes many records at once, under one transaction.
+    ///
+    /// One transaction rather than one per station, so that an import
+    /// interrupted halfway leaves the store as it was rather than half filled
+    /// with a log the operator would then have to import again to complete.
+    pub fn merge_all(&mut self, records: &[Record], origin: Origin) -> Result<usize, QsoError> {
         let transaction = self.connection.transaction().map_err(store_error)?;
         let now = Timestamp::now().to_string();
-        transaction
-            .execute(
-                "INSERT INTO station (callsign) VALUES (?1) ON CONFLICT (callsign) DO NOTHING",
-                params![record.callsign()],
-            )
-            .map_err(store_error)?;
-
         let mut written = 0;
-        for (key, value) in record.iter() {
-            let existing: Option<String> = transaction
-                .query_row(
-                    "SELECT origin FROM station_field WHERE callsign = ?1 AND key = ?2",
-                    params![record.callsign(), key],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(store_error)?;
-            // An origin the file holds that this build does not know is read as
-            // the strongest there is: a newer build wrote it, and guessing it
-            // weaker would be a way to lose it.
-            let outranked = match existing.as_deref().map(Origin::from_str) {
-                None => true,
-                Some(Ok(existing)) => origin >= existing,
-                Some(Err(())) => false,
-            };
-            if !outranked {
-                continue;
-            }
+
+        for record in records {
             transaction
                 .execute(
-                    "INSERT INTO station_field (callsign, key, value, origin, written_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5)
-                     ON CONFLICT (callsign, key) DO UPDATE
-                     SET value = excluded.value, origin = excluded.origin, written_at = excluded.written_at",
-                    params![record.callsign(), key, value, origin.as_str(), now],
+                    "INSERT INTO station (callsign) VALUES (?1) ON CONFLICT (callsign) DO NOTHING",
+                    params![record.callsign()],
                 )
                 .map_err(store_error)?;
-            written += 1;
+            written += merge_fields(&transaction, record, origin, &now)?;
         }
+
         transaction.commit().map_err(store_error)?;
         Ok(written)
     }
@@ -293,6 +275,47 @@ impl Store {
             .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
             .map_err(store_error)
     }
+}
+
+fn merge_fields(
+    transaction: &rusqlite::Transaction<'_>,
+    record: &Record,
+    origin: Origin,
+    now: &str,
+) -> Result<usize, QsoError> {
+    let mut written = 0;
+    for (key, value) in record.iter() {
+        let existing: Option<String> = transaction
+            .query_row(
+                "SELECT origin FROM station_field WHERE callsign = ?1 AND key = ?2",
+                params![record.callsign(), key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(store_error)?;
+        // An origin the file holds that this build does not know is read as the
+        // strongest there is: a newer build wrote it, and guessing it weaker
+        // would be a way to lose it.
+        let outranked = match existing.as_deref().map(Origin::from_str) {
+            None => true,
+            Some(Ok(existing)) => origin >= existing,
+            Some(Err(())) => false,
+        };
+        if !outranked {
+            continue;
+        }
+        transaction
+            .execute(
+                "INSERT INTO station_field (callsign, key, value, origin, written_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (callsign, key) DO UPDATE
+                 SET value = excluded.value, origin = excluded.origin, written_at = excluded.written_at",
+                params![record.callsign(), key, value, origin.as_str(), now],
+            )
+            .map_err(store_error)?;
+        written += 1;
+    }
+    Ok(written)
 }
 
 fn normalized(callsign: &str) -> Result<String, QsoError> {

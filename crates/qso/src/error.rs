@@ -54,6 +54,9 @@ pub enum QsoError {
     /// A remote lookup was asked for with no API key configured.
     #[error("no API key is configured for the lookup")]
     NoKey,
+    /// The named character encoding is not one this build knows.
+    #[error("`{0}` is not a character encoding this build knows")]
+    Encoding(String),
     /// An ADIF document could not be read.
     #[error("{path}: {detail}")]
     Adif {
