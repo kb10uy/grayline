@@ -143,8 +143,24 @@ fn squelch_panel(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// Throwing away what was printed, and telling the framing to start again.
+/// Opening the display, throwing away what was printed, and telling the
+/// framing to start again.
 fn actions(ui: &mut Ui, app: &mut App) {
+    let scope = app.i18n.text("action-scope");
+    let open = app.scope.is_open();
+    let full = ui.available_width();
+    let line = ui.spacing().interact_size.y;
+    let toggled = ui
+        .add_sized(
+            [full, line],
+            egui::Button::new(RichText::new(scope).size(SMALL)).selected(open),
+        )
+        .clicked();
+    if toggled {
+        app.set_scope_open(!open);
+    }
+    ui.add_space(4.0);
+
     let clear = app.i18n.text("action-clear");
     let resync = app.i18n.text("action-resync");
     let hint = app.i18n.text("hint-resync");

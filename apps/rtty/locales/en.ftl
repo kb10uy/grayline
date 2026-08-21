@@ -12,6 +12,8 @@ menu-quit = Quit
 menu-language = Language
 menu-manual = Manual
 
+window-scope = Scope
+
 input-device = Input device
 
 section-tuning = Tuning
@@ -21,11 +23,14 @@ label-mark = Mark
 label-shift = Shift
 label-speed = Speed
 label-signal = Signal
+label-spectrum = Spectrum
+label-channels = Mark / Space
 
 action-reverse = Rev
 action-afc = AFC
 action-squelch = Squelch
 action-adopt-tones = Take Detected Pair
+action-scope = Scope
 action-clear = Clear
 action-resync = Resync
 action-unshift-on-space = Unshift on Space
@@ -43,6 +48,7 @@ status-reading = Reading
 
 hint-listening = Nothing printed yet. Tune a receiver in, or drop a WAV recording here.
 hint-resync = Start the framing again, for a line that has lost its place
+hint-scope = Nothing is arriving to draw.
 
 error-config = Configuration could not be read
 error-device-lost = The capture device stopped

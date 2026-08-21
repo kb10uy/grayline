@@ -49,6 +49,12 @@ pub struct Settings {
     pub squelch_threshold: f64,
     pub unshift_on_space: bool,
     pub atc: bool,
+    /// Whether the scope window was open.
+    ///
+    /// A display rather than a receiver setting, and remembered for the same
+    /// reason the device is: an operator who works with it open should not
+    /// have to open it again every session.
+    pub scope: bool,
 }
 
 impl Default for Settings {
@@ -72,6 +78,7 @@ impl Default for Settings {
             squelch_threshold: 0.25,
             unshift_on_space: true,
             atc: false,
+            scope: false,
         }
     }
 }
@@ -183,6 +190,7 @@ impl Config {
         table["squelch_threshold"] = value(settings.squelch_threshold);
         table["unshift_on_space"] = value(settings.unshift_on_space);
         table["atc"] = value(settings.atc);
+        table["scope"] = value(settings.scope);
 
         if let Err(error) = fs::write(&path, self.document.to_string()) {
             log::note(&format!("could not save {}: {error}", path.display()));
@@ -222,6 +230,7 @@ fn read(document: &DocumentMut) -> Settings {
         ("squelch", &mut settings.squelch),
         ("unshift_on_space", &mut settings.unshift_on_space),
         ("atc", &mut settings.atc),
+        ("scope", &mut settings.scope),
     ] {
         if let Some(flag) = get(key).and_then(|value| value.as_bool()) {
             *target = flag;
@@ -271,6 +280,7 @@ mod tests {
             squelch_threshold: 0.4,
             unshift_on_space: false,
             atc: true,
+            scope: true,
         };
         Config::load(path.clone()).0.save(&wanted);
 

@@ -24,6 +24,7 @@ fluent-bundle.workspace = true
 fontdb.workspace = true
 hound.workspace = true
 grayline-audio = { path = "../../crates/audio" }
+grayline-dsp = { path = "../../crates/dsp", features = ["std"] }
 grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
 grayline-shell = { path = "../../crates/shell" }
 thiserror.workspace = true

@@ -12,6 +12,8 @@ menu-quit = 終了
 menu-language = 言語
 menu-manual = マニュアル
 
+window-scope = スコープ
+
 input-device = 入力デバイス
 
 section-tuning = 同調
@@ -21,11 +23,14 @@ label-mark = マーク
 label-shift = シフト
 label-speed = 速度
 label-signal = 信号
+label-spectrum = スペクトラム
+label-channels = マーク / スペース
 
 action-reverse = 反転
 action-afc = AFC
 action-squelch = スケルチ
 action-adopt-tones = 検出した周波数を採用
+action-scope = スコープ
 action-clear = 消去
 action-resync = 再同期
 action-unshift-on-space = スペースで文字符号に戻す
@@ -43,6 +48,7 @@ status-reading = 読み込み中
 
 hint-listening = まだ何も受信していません。受信機を合わせるか、WAV ファイルをここにドロップしてください。
 hint-resync = 同期を失った行のために、フレーミングをやり直します
+hint-scope = 描画できる信号がありません。
 
 error-config = 設定を読み込めませんでした
 error-device-lost = 入力デバイスが停止しました

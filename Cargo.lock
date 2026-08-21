@@ -2066,6 +2066,7 @@ dependencies = [
  "fluent-bundle",
  "fontdb",
  "grayline-audio",
+ "grayline-dsp",
  "grayline-rtty",
  "grayline-shell",
  "hound",

@@ -15,7 +15,7 @@ use crate::{
     app::App,
     ui::{
         menu::{self, Action, Menu},
-        scrollback,
+        scope, scrollback,
     },
     worker::receive::{ColumnSnapshot, DecodePath},
 };
@@ -58,6 +58,9 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
         .exact_size(SIDE_PANEL_WIDTH)
         .show(ui, |ui| side_panel(ui, app));
     egui::CentralPanel::default().show(ui, |ui| columns(ui, app));
+    // Shown after the window it is opened from, so that a frame which closed
+    // it does not open it again on its way out.
+    scope::window(ui.ctx(), &app.scope);
     activated
 }
 
