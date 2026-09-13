@@ -151,12 +151,23 @@ impl Transmit {
     /// aborted transmission is resumed by editing and pressing send again, and
     /// that wants the text back rather than a record of how it was divided.
     pub fn abandon(&mut self, played_samples: u64) -> String {
+        let unsent = self
+            .sending
+            .take()
+            .map(|sending| sending.unsent(played_samples))
+            .unwrap_or_default();
+        self.abandon_queue(unsent)
+    }
+
+    /// Hands back `leading` and everything still queued behind it.
+    ///
+    /// Used where a message was taken off the queue and then could not be
+    /// started: it has already left the queue, and dropping it there would
+    /// lose text the operator wrote without anything saying so.
+    pub fn abandon_queue(&mut self, leading: String) -> String {
         let mut parts = Vec::new();
-        if let Some(sending) = self.sending.take() {
-            let unsent = sending.unsent(played_samples);
-            if !unsent.is_empty() {
-                parts.push(unsent);
-            }
+        if !leading.is_empty() {
+            parts.push(leading);
         }
         parts.extend(self.queue.drain(..));
         parts.join("\n")

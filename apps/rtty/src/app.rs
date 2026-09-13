@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use grayline_audio::Playback;
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
@@ -507,6 +508,14 @@ impl App {
         let played = self.tx.played_samples();
         self.tx.stop();
         let unsent = self.transmit.abandon(played);
+        self.return_to_draft(unsent);
+    }
+
+    /// Puts text that was never sent back in front of what is being written.
+    ///
+    /// In front rather than after, because it is the older of the two: the
+    /// operator queued it before typing whatever is in the field now.
+    fn return_to_draft(&mut self, unsent: String) {
         if unsent.is_empty() {
             return;
         }
@@ -598,22 +607,30 @@ impl App {
     /// rather than the one that was asked for, because that is the rate the
     /// audio is generated at and so the one the played position counts in.
     fn start_transmission(&mut self, text: String) {
+        match self.open_transmission(&text) {
+            Ok((playback, worker, schedule)) => {
+                self.tx.begin(playback, worker);
+                self.transmit.begin(Sending::new(text, schedule));
+            }
+            Err(error) => {
+                self.report(&error);
+                // The message had already left the queue, so it is given back
+                // rather than dropped: what could not be sent is still what
+                // the operator wrote, and nothing else would tell them it had
+                // gone.
+                let returned = self.transmit.abandon_queue(text);
+                self.return_to_draft(returned);
+            }
+        }
+    }
+
+    fn open_transmission(&self, text: &str) -> Result<(Playback, TxWorker, TxSchedule), AppError> {
         let config = self.tx_config();
-        let (playback, writer) = match self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES) {
-            Ok(opened) => opened,
-            Err(error) => return self.report(&error),
-        };
+        let (playback, writer) = self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES)?;
         let rate = playback.sample_rate_hz();
-        let codes = match encode_text(&text, &config) {
-            Ok(codes) => codes,
-            Err(error) => return self.report(&AppError::Rtty(error)),
-        };
-        let schedule = match TxSchedule::new(&text, rate, &config) {
-            Ok(schedule) => schedule,
-            Err(error) => return self.report(&AppError::Rtty(error)),
-        };
-        self.tx.begin(playback, TxWorker::spawn(writer, codes, config));
-        self.transmit.begin(Sending::new(text, schedule));
+        let codes = encode_text(text, &config)?;
+        let schedule = TxSchedule::new(text, rate, &config)?;
+        Ok((playback, TxWorker::spawn(writer, codes, config), schedule))
     }
 
     /// Prints what has been sent alongside what was received.

@@ -474,3 +474,23 @@ fn the_station_details_are_stored_and_read_back() {
     assert_eq!(settings.station.callsign, "JL1HIS");
     assert_eq!(settings.station.qth, "TOKYO");
 }
+
+/// A message that could not be started has already left the queue, and
+/// dropping it there would lose text the operator wrote.
+#[test]
+fn a_message_that_cannot_be_started_is_given_back() {
+    let mut app = App::headless();
+    app.transmit.queue("FIRST".to_owned());
+    app.transmit.queue("SECOND".to_owned());
+    assert!(app.audio.output_device.is_none());
+
+    app.poll_workers();
+
+    assert!(!app.transmit.is_busy());
+    assert_eq!(
+        app.transmit.draft,
+        "FIRST
+SECOND"
+    );
+    assert!(app.notice.is_some());
+}
