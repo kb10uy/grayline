@@ -1,12 +1,10 @@
 # Grayline RTTY Application — Implementation Memo
 
-This is a working memo, not a description of code that exists. It records the
-design agreed on 2026-08-15 for `apps/rtty`, the desktop RTTY application, and
-is written down so the decisions survive between working sessions. The
-`grayline-rtty` core and the `gl-rtty` command-line tool are already on branch
-`rtty`; the application is the milestone after them, and it is the last of the
-RTTY items listed under Planned Gaps in
-[grayline/architecture.md](../grayline/architecture.md).
+This memo records the design agreed on 2026-08-15 for `apps/rtty`, the desktop
+RTTY application, and its implementation status. The `grayline-rtty` core,
+`gl-rtty` command-line tool, and desktop application are part of the workspace.
+Sections below retain the original implementation order and distinguish the
+remaining work from the features now implemented.
 
 **Progress.** Steps 1 through 5 of the order below are implemented, so
 `apps/rtty` receives, transmits, and can be watched: the skeleton, the receive
@@ -16,13 +14,14 @@ contact fields, together with the repository work step 2 drags with it. The
 contact directory is wired in as well, which the plan below never named; it is
 described under Macros and Templates and in
 [qso-directory.md](qso-directory.md). Aligned save, the received-text history
-log, the rig frequency readout, and the release workflow are not written. Where
-the implementation departs from what is described below, the departure is
-recorded in the section it belongs to.
+log, and the rig frequency readout remain unimplemented. The release workflow
+and headless UI, scope, and locale tests are implemented. Where the
+implementation departs from what is described below, the departure is recorded
+in the section it belongs to.
 
 Everything the core already offers is assumed rather than restated here:
 [grayline/rtty.md](../grayline/rtty.md) covers the crate and where it parts from
-MMTTY, [rtty/protocol.md](protocol.md) covers the signal, and
+MMTTY, [rtty/protocol.md](../rtty/protocol.md) covers the signal, and
 [grayline/gui-design.md](../grayline/gui-design.md) covers the application
 frame — egui through eframe, the native and in-window menu pair, the platform
 module, the file and help menus — all of which this application inherits
@@ -135,9 +134,9 @@ pipeline at 48 kHz — so several columns are a real option rather than a
 theoretical one.
 
 **The first version is fixed at one column.** The mechanism around it is built
-for more: a descriptor enum naming the path, per-column headers, and a column
-count in the settings pane that starts pinned to one. The path names in the
-mockup, "PLL + majority" and "FFT + repeat synthesis", are demodulators the
+for more: a descriptor enum naming the path and per-column headers. The
+settings pane omits the column-count control until another path is available.
+The path names in the mockup, "PLL + majority" and "FFT + repeat synthesis", are demodulators the
 core does not have yet; they are the discriminators deliberately deferred in
 [mmtty/porting.md](../mmtty/porting.md), and repeat synthesis is further out
 still and to be ignored for now.
@@ -395,17 +394,14 @@ shared with `Transmitter` so the two cannot disagree.
 6. Aligned save and the rig frequency readout.
 7. Tests, history log, documentation, and the release workflow.
 
-Repository touch-points for step 2, each of which is hard-coded per application
-and must be edited by hand:
+The repository integration is implemented in these files:
 
-- `.github/workflows/ci.yml`: add `--exclude grayline-rtty-app` to the core
-  job's `SCOPE` (currently line 51, beside the two existing exclusions), and add
-  a third entry to the `app` job's matrix `include` list.
-- `package/build-app.sh`: add an `rtty` case with its bundle name, display
-  name, and its own `NSMicrophoneUsageDescription` sentence — the script exits
-  on an unknown application, so this cannot be forgotten silently.
-- `.github/workflows/release-rtty.yml`, on the tag pattern `rtty-v*`,
-  alongside the existing `release-sstv.yml` and `release-wefax.yml`.
+- `.github/workflows/ci.yml` excludes `grayline-rtty-app` from the core job
+  and includes it in the application matrix.
+- `package/build-app.sh` supplies the RTTY bundle name, display name, and
+  `NSMicrophoneUsageDescription`.
+- `.github/workflows/release-rtty.yml` handles `rtty-v*` tags and calls the
+  shared `release-app.yml`, as the SSTV and WEFAX workflows do.
 
 Step 7 in full: `App::headless()` tests and `egui_kittest` runs over every
 locale, the locale key-scan tests copied wholesale from the existing

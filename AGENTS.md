@@ -7,8 +7,8 @@ in Rust. The goal is to port the core behavior of MMSSTV while separating its
 signal-processing and protocol logic from the original Win32/VCL application.
 
 The repository is a monorepo holding one application per mode, over a shared
-signal-processing and platform core. SSTV is the first; WEFAX, RTTY, and PSK
-are planned.
+signal-processing and platform core. SSTV and RTTY provide receive and
+transmit applications; WEFAX provides receive. PSK is planned.
 
 The repository contains:
 
@@ -23,7 +23,9 @@ The repository contains:
 - `tools/`: development command-line tools that are not shipped. One directory
   per mode, named `<mode>-cli`, holding the package `grayline-<mode>-cli` and
   the binary `gl-<mode>`; `gl-sstv` encodes and decodes WAV files and
-  `gl-wefax` decodes them. Each binary parses its command line with clap's
+  `gl-wefax` decodes them. `gl-rtty` encodes and decodes RTTY WAV files,
+  while `tools/qso-cli/` provides `gl-qso` for the shared contact directory
+  and ADIF import. Each binary parses its command line with clap's
   derive interface and reaches the work through its own library, so a
   subcommand stays a thin layer over a tested function.
 - `assets/`: data the repository ships outside any one crate, such as the
@@ -127,8 +129,9 @@ in the original DSP classes.
 
 - Write documentation under `docs/memo/` in English.
 - The operator's manual is not in this repository. It is published per
-  application at <https://grayline.jl1his.radio/sstv/> and
-  <https://grayline.jl1his.radio/wefax/>, which each application's Help menu
+  application at <https://grayline.jl1his.radio/sstv/>,
+  <https://grayline.jl1his.radio/wefax/>, and
+  <https://grayline.jl1his.radio/rtty/>, which each application's Help menu
   opens through `grayline_shell::manual_url`; the addresses are the
   `manual_url` field of each `identity::IDENTITY`.
 - When a new implementation or fix changes behavior, APIs, architecture, mode

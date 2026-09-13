@@ -6,8 +6,9 @@ on-air signal, a description of MMSSTV answers to its source, and a description
 of Grayline answers to this repository's code.
 
 None of it is written for the operator. The manual is, and it is published
-outside this repository, at <https://grayline.jl1his.radio/sstv/> and
-<https://grayline.jl1his.radio/wefax/>, which each application's Help menu
+outside this repository, at <https://grayline.jl1his.radio/sstv/>,
+<https://grayline.jl1his.radio/wefax/>, and
+<https://grayline.jl1his.radio/rtty/>, which each application's Help menu
 opens.
 
 ## `sstv/` — the protocols
@@ -87,9 +88,11 @@ The Rust implementation: what it is meant to be, and what it currently is.
 - [grayline/rtty.md](grayline/rtty.md): the RTTY crate, what it lifted into the
   core, and where it deliberately parts company with MMTTY — including that
   nothing is decimated.
+- [grayline/rtty-impl-plan.md](grayline/rtty-impl-plan.md): the RTTY desktop
+  application design, implementation status, and remaining work.
 - [grayline/rig-control.md](grayline/rig-control.md): the transports the rig is
   reached over, the script that decides what is sent, and the band plan both
-  read. Describes a target design ahead of what is implemented.
+  read, including the implemented SSTV Lua host and radio panel.
 - [grayline/qso-directory.md](grayline/qso-directory.md): the directory of
   stations a template looks a callsign up in, the store behind it, and why it
   is not a log.

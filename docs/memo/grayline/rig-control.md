@@ -4,8 +4,9 @@ The application keys the station's rig, reads what it is tuned to, and moves it
 between bands. What each of those means at the rig differs by station, so the
 application supplies the moments and the operator supplies the commands.
 
-This document describes the target design. What is currently implemented is
-narrower; see [Status](#status).
+This document describes the implemented SSTV rig control; see
+[Status](#status). The RTTY application currently uses VOX for PTT and does
+not host this script.
 
 ## Why One Transport and a Script
 

@@ -7,9 +7,9 @@ publish what a tag names by calling the shared `release-app.yml`, and
 
 ## CI
 
-`ci.yml` runs on pushes to `master` and on pull requests, in six jobs that
-between them run the commands `AGENTS.md` requires before a change is
-complete. The jobs are split along the lines the work actually divides on,
+`ci.yml` runs on pushes to `master` and on pull requests, with five job
+definitions (seven jobs after expanding the application matrix) that run the
+commands `AGENTS.md` requires before a change is complete. The jobs are split along the lines the work actually divides on,
 which is what lets them run at the same time rather than one after another.
 
 `format` runs `cargo fmt --all --check` and nothing else. It needs neither the
@@ -105,12 +105,13 @@ git tag rtty-v0.1.0
 git push origin rtty-v0.1.0
 ```
 
-Every directory under `apps/` carries its own `version` rather than the
-workspace's, which is what makes that possible: a shared number would move one
-application's version every time another shipped, and would have given WEFAX
+Each desktop application under `apps/` carries its own `version` rather than
+the workspace's, which is what makes that possible: a shared number would move
+one application's version every time another shipped, and would have given WEFAX
 and RTTY first releases numbered from how far SSTV had already got. The
-libraries under `crates/` keep `version.workspace = true`; nothing publishes
-them separately, and the number they carry is the workspace's own.
+libraries under `crates/`, the tools under `tools/`, and `apps/web-demo` keep
+`version.workspace = true`; nothing publishes them separately, and the number
+they carry is the workspace's own.
 
 `release-sstv.yml`, `release-wefax.yml`, and `release-rtty.yml` are the entry
 points. Each runs on its own tag pattern, can be dispatched manually with the
@@ -164,9 +165,9 @@ decide:
 | `README.md` | yes | no | no |
 
 macOS gets a bundle in a disk image rather than an archive of bare files.
-`package/build-app.sh` stages it, taking the application as its first argument
-and the templates directory as an optional one; the bundle name, the
-identifier, and the microphone permission text come from a case over the
+`package/build-app.sh` stages it, taking the application, executable, license
+page, output disk image, and optional templates directory as its arguments. The
+bundle name, identifier, and the microphone permission text come from a case over the
 application, because a bundled process that opens a capture device without that
 text is killed by the system.
 
@@ -198,5 +199,6 @@ archives rather than failing, so a rebuild is a re-run. The notes come from the
 caller with `@VERSION@` where the version goes, so the prose that describes what
 an archive holds sits beside the inputs that decided it.
 
-Nothing is code signed. A macOS user has to clear the quarantine attribute
-before the first run, and the release notes say so.
+The macOS bundle is ad-hoc signed by `package/build-app.sh`; it is not
+notarized. The release notes describe first-launch handling, including clearing
+the quarantine attribute. Windows executables are not code signed.

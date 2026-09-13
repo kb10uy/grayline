@@ -306,10 +306,10 @@ for the duration of a processing call or moved into an owning stage such as
 being read from global application settings.
 
 Core APIs do not create threads or select an asynchronous runtime. This keeps
-them deterministic and allows applications to choose an execution model. A
-future live pipeline should place bounded queues between independently scheduled
-audio and codec stages, preserve sample positions across those queues, and make
-overflow or backpressure behavior explicit.
+them deterministic and allows applications to choose an execution model. The
+desktop applications run codecs in workers connected to bounded audio capture
+and playback queues. Capture packets retain sample positions so workers can
+detect discontinuities; playback exposes backpressure and underrun counts.
 
 The receive staging option is bounded by a caller-provided sample limit. It is a
 deliberate offline or deferred-refinement facility, not an unbounded hidden
@@ -353,7 +353,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains seventeen packages:
+The workspace currently contains twenty-one packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -364,7 +364,7 @@ The workspace currently contains seventeen packages:
 | `grayline-sstv-rx` | Receive front end | Incremental conventional-VIS demodulation implemented |
 | `grayline-sstv-template` | Portable application-support layer | KDL parsing and SVG-backed RGBA rendering implemented |
 | `grayline-sstv-cli` | Offline receive and transmit integration, as `gl-sstv` | Implemented |
-| `web-demo` | Browser receive integration | Implemented |
+| `grayline-web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
 | `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
@@ -379,54 +379,32 @@ The workspace currently contains seventeen packages:
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
-Their current dependency direction is:
+Direct workspace dependencies are listed below, from each package to the
+packages it uses. External and development-only dependencies are omitted.
 
-```text
-grayline-sstv-fskid ----------------> grayline-sstv
-grayline-dsp ------------------> grayline-tone-tx
-grayline-audio ----------+
-grayline-sstv-rx ----+
-grayline-sstv-fskid ----------+
-grayline-sstv -----------+-> grayline-tone-tx
-grayline-sstv-fskid ---------+-> grayline-sstv-rx --+
-grayline-sstv ----------+                       +-> grayline-sstv-cli
-grayline-sstv-fskid ----------------------------------+
-grayline-audio ----------+
-grayline-sstv-rx ----+
-grayline-sstv-fskid ----------+
-grayline-sstv -----------+-> grayline-sstv-template
-grayline-sstv-fskid ----------+
-grayline-tone-tx ------+
-grayline-sstv -----------+-> grayline-sstv-cli
-grayline-sstv-template -------+
-grayline-sstv-rx ----+
-grayline-sstv-fskid ----------+
-grayline-sstv -----------+-> web-demo
-
-grayline-audio ----------+
-grayline-sstv-rx ----+
-grayline-sstv-fskid ----------+
-grayline-tone-tx ------+
-grayline-qso ------------+
-grayline-rig ------------+-> grayline-sstv-app
-grayline-sstv -----------+
-grayline-sstv-template -------+
-
-grayline-qso ------------> grayline-qso-cli
-
-grayline-dsp ------------> grayline-wefax --> grayline-wefax-cli
-
-grayline-dsp ------------> grayline-rtty ---> grayline-rtty-cli
-
-grayline-audio ----------+
-grayline-shell ----------+-> grayline-wefax-app
-grayline-wefax ----------+
-
-grayline-audio ----------+
-grayline-shell ----------+-> grayline-rtty-app
-grayline-rtty -----------+
-grayline-dsp ------------+
-```
+| Package | Direct workspace dependencies |
+| --- | --- |
+| `grayline-audio` | None |
+| `grayline-dsp` | None |
+| `grayline-qso` | None |
+| `grayline-qso-cli` | `grayline-qso` |
+| `grayline-rig` | None |
+| `grayline-rtty` | `grayline-dsp` |
+| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
+| `grayline-rtty-cli` | `grayline-rtty` |
+| `grayline-shell` | None |
+| `grayline-sstv` | `grayline-sstv-fskid` |
+| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-fskid` | None |
+| `grayline-sstv-rx` | `grayline-dsp`, `grayline-sstv`, `grayline-sstv-fskid` |
+| `grayline-sstv-template` | `grayline-sstv`, `grayline-variables` |
+| `grayline-tone-tx` | `grayline-dsp`, `grayline-sstv` |
+| `grayline-variables` | None |
+| `grayline-web-demo` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx` |
+| `grayline-wefax` | `grayline-dsp` |
+| `grayline-wefax-app` | `grayline-audio`, `grayline-shell`, `grayline-wefax` |
+| `grayline-wefax-cli` | `grayline-wefax` |
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this
 workspace. That it needs no part of `grayline-sstv` is the point of the split
@@ -642,7 +620,7 @@ implementations:
 
 - Transmit and receive raster processing for the remaining modes.
 - Audio detection of extended VIS and N-VIS.
-- Contest FSK records, narrow N-VIS transmission, and optional CW identification.
+- Narrow N-VIS transmission and optional CW identification.
 - Template editing.
 - Real-world received-audio regression fixtures.
 - The RTTY pieces deliberately deferred, listed in [rtty.md](rtty.md): the

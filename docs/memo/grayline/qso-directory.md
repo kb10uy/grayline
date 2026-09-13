@@ -14,10 +14,10 @@ no date, no band, no mode, no report, no confirmation state, and no export.
 What it holds is `Map<Callsign, Map<Key, Value>>` and nothing more. It exists
 because a transmit template that prints the other operator's name was otherwise
 asking the operator to type that name again for a station they have worked
-before, and because the RTTY macros planned in
-[rtty-impl-plan.md](rtty-impl-plan.md) want the same answer in `{name}` form. It
-is reached through `grayline-qso`, which belongs to no one application: it is
-the second thing in this family that both applications share, after the shell.
+before, and because the RTTY macros described in
+[rtty-impl-plan.md](rtty-impl-plan.md) read the same fields through
+`${contact.<key>}`. Both applications use `grayline-qso`, including its shared
+contact worker, to look up and edit station records.
 
 ## The record
 
