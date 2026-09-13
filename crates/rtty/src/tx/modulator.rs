@@ -9,10 +9,10 @@ use grayline_dsp::{
 use crate::{
     RttyError,
     code::{FIGS, LTRS},
-    params::BitLength,
     tx::{
         config::{Diddle, TxConfig},
         encoder::TxCode,
+        schedule::{CONTROL_HOLD_BITS, Timing},
     },
 };
 
@@ -30,14 +30,10 @@ pub enum Keying {
     Muted,
 }
 
-/// How many bit periods one held CW element lasts.
-const CONTROL_HOLD_BITS: f64 = 3.0;
 /// Width added on each side of the tones by the transmit band-pass, in hertz.
 const BAND_PASS_MARGIN_HZ: f64 = 150.0;
 /// Taps in the transmit band-pass, MMTTY's own count.
 const BAND_PASS_ORDER: usize = 48;
-/// The fewest samples a majority-vote receiver needs from one bit.
-const MINIMUM_SAMPLES_PER_BIT: f64 = 8.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Stage {
@@ -77,23 +73,7 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
     pub fn new(codes: I, sample_rate_hz: u32, config: TxConfig) -> Result<Self, RttyError> {
         let rate = f64::from(sample_rate_hz);
         config.tones.validate(rate)?;
-        if config.framing.bits != BitLength::FIVE {
-            return Err(RttyError::UnsupportedBitLength);
-        }
-        let samples_per_bit = rate / config.framing.baud.bits_per_second();
-        if !samples_per_bit.is_finite() || samples_per_bit < MINIMUM_SAMPLES_PER_BIT {
-            return Err(RttyError::TooFewSamplesPerBit);
-        }
-        for seconds in [
-            config.char_gap_bits,
-            config.ramp_seconds,
-            config.lead_in_seconds,
-            config.tail_seconds,
-        ] {
-            if !seconds.is_finite() || seconds < 0.0 {
-                return Err(RttyError::InvalidTransmitTiming);
-            }
-        }
+        let timing = Timing::new(sample_rate_hz, &config)?;
         if !config.amplitude.is_finite() || config.amplitude <= 0.0 {
             return Err(RttyError::Dsp(grayline_dsp::DspError::InvalidLevel));
         }
@@ -125,16 +105,9 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
                 })
             })
             .transpose()?;
-        let parity_bits = if config.framing.parity.transmitted_bit(0).is_some() {
-            1.0
-        } else {
-            0.0
-        };
-        let character_bits =
-            1.0 + f64::from(config.framing.bits.bits()) + parity_bits + 1.0 + config.framing.stop.extra_bits();
         let mut pending = VecDeque::new();
-        if config.lead_in_seconds > 0.0 {
-            pending.push_back((Keying::Mark, config.lead_in_seconds * rate));
+        if timing.lead_in_samples > 0.0 {
+            pending.push_back((Keying::Mark, timing.lead_in_samples));
         }
         Ok(Self {
             codes,
@@ -145,15 +118,15 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
             keying: Keying::Mark,
             position: 0,
             boundary: 0.0,
-            samples_per_bit,
-            character_bits,
+            samples_per_bit: timing.samples_per_bit,
+            character_bits: timing.character_bits,
             vco,
             smoothing,
             band_pass,
             reverse: config.reverse,
             amplitude: config.amplitude,
-            ramp_samples: config.ramp_seconds * rate,
-            tail_samples: config.tail_seconds * rate,
+            ramp_samples: timing.ramp_samples,
+            tail_samples: timing.tail_samples,
             fade_out_end: None,
             config,
         })

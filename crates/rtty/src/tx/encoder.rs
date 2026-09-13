@@ -23,17 +23,32 @@ pub enum TxCode {
 /// uses; an existing CR LF pair passes through unchanged. An unmappable
 /// character is an error naming it and its byte offset in `text`.
 pub fn encode_text(text: &str, config: &TxConfig) -> Result<Vec<TxCode>, RttyError> {
+    let mut codes = Vec::new();
+    encode_each(text, config, |emitted| codes.extend_from_slice(emitted))?;
+    Ok(codes)
+}
+
+/// Encodes `text`, handing `emit` the codes each source character produced.
+///
+/// The two sequences are not parallel: the encoder inserts a shift where the
+/// case changes and a carriage return before a bare line feed, so a character
+/// can become several codes or, once the case already agrees, exactly one.
+/// Anything that has to map a position in the keyed stream back onto the text
+/// goes through this rather than counting codes.
+pub(crate) fn encode_each(text: &str, config: &TxConfig, mut emit: impl FnMut(&[TxCode])) -> Result<(), RttyError> {
     let mut encoder = Ita2Encoder::new(config.code_set, config.double_shift, config.tx_unshift_on_space);
     let mut codes = Vec::new();
     let mut previous = None;
     for (offset, character) in text.char_indices() {
+        codes.clear();
         if character == '\n' && previous != Some('\r') {
             push(&mut encoder, '\r', offset, &mut codes)?;
         }
         push(&mut encoder, character, offset, &mut codes)?;
+        emit(&codes);
         previous = Some(character);
     }
-    Ok(codes)
+    Ok(())
 }
 
 fn push(encoder: &mut Ita2Encoder, character: char, offset: usize, codes: &mut Vec<TxCode>) -> Result<(), RttyError> {

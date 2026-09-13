@@ -24,4 +24,4 @@ pub mod tx;
 pub use error::RttyError;
 pub use params::{BaudRate, BitLength, Parity, RxFraming, StopElement, StopTolerance, ToneSet, TxFraming};
 pub use rx::{ReceivePipeline, RxConfig, RxEvent, RxOutcome};
-pub use tx::{Transmitter, TxCode, TxConfig, encode_text};
+pub use tx::{Transmitter, TxCode, TxConfig, TxSchedule, encode_text};

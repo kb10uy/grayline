@@ -210,8 +210,17 @@ The first is written, as `rx/monitor.rs` and described in
 [rtty.md](rtty.md): what it hands out is the pair the comparator compares —
 rectified, integrated, and corrected — rather than the resonator outputs, both
 because that is what MMTTY's own XY scope draws and because the signed
-difference of the two is the tuning figure the header wants. The second is
-still to be written and belongs to transmit.
+difference of the two is the tuning figure the header wants.
+
+The second is written, as `tx/schedule.rs`. It grew past the per-code duration
+the plan named, into `TxSchedule`: given the message text rather than a code
+list, it reports where each *character* finishes going out. That is the figure
+every caller actually wanted — the underline, the echo into the received text,
+the remaining-time readout, and the unsent remainder an aborted transmission
+gives back — and the character-to-code mapping it needs belongs beside the
+encoder that creates the discrepancy rather than in the application. The
+per-code duration is still there as the private `Timing::code_samples`, now
+shared with `Transmitter` so the two cannot disagree.
 
 ## Implementation Order
 

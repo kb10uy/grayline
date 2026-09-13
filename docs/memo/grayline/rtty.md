@@ -310,6 +310,21 @@ The lead-in and tail (0.5 s of mark each, by default) are what a real
 transmission sounds like, and the receive integrators need the lead-in to
 settle before the first start bit.
 
+**`TxSchedule` says where each character of a message goes out**, in output
+samples, for a caller holding a playback position and wanting to know what of
+its text has actually left. The two sequences do not line up on their own: the
+encoder inserts a shift wherever the case changes and a carriage return before
+a bare line feed, so the codes outnumber the characters, and the lead-in idles
+before any of them. The schedule is built by walking the same encoder the
+transmitter is fed from and accumulating per-code durations, which is why
+`Timing` — samples per bit, the bit periods of one framed character, and the
+lead-in, tail, and ramp lengths — is shared with `Transmitter` rather than
+derived twice. One code's duration does not depend on transmitter state: a
+character carries its trailing gap, and a gap comes to `char_gap_bits`
+whether whole diddle characters fill it or mark idle does. A test asserts the
+scheduled length against the length the transmitter actually produces, across
+gap, parity, stop, and lead-in variations.
+
 ## Consequences an operator sees
 
 - Rev is a guess. Nothing in the signal says which sideband the transmitter
