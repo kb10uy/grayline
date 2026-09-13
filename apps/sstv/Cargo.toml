@@ -1,10 +1,7 @@
 [package]
 name = "grayline-sstv-app"
 description = "SSTV for amateur radio"
-# Versioned on its own rather than with the workspace: the applications are
-# released one at a time, under a tag that names which one, and a shared
-# number would move the other's version every time this one shipped.
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
