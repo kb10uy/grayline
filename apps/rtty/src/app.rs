@@ -84,6 +84,8 @@ pub struct App {
     pub contact: Contact,
     /// The buttons under the message field.
     pub macros: Vec<Macro>,
+    /// Whether the window naming this station is open.
+    pub station_dialog_open: bool,
 
     /// The last thing worth telling the operator, shown on the status bar.
     pub notice: Option<String>,
@@ -167,6 +169,7 @@ impl App {
             station: settings.station.clone(),
             contact: Contact::default(),
             macros: settings.macros.clone(),
+            station_dialog_open: false,
             notice: None,
             session,
             paths,

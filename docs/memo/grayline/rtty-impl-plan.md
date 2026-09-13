@@ -73,13 +73,21 @@ built: there is no column count, because it would be pinned to one and a
 control that cannot move says nothing an operator can act on — the column list
 is `DecodePath::ALL` and a second demodulator is what changes it — and there
 were no QSO fields, because what reads them is the macro engine, which arrives
-with transmit; they are there now, in two sections of their own, the station
-above the tuning and the contact below the squelch. Unshift-on-space and the
-threshold corrector are on the
-Settings menu rather than the panel: they are set once for a station's habits
-rather than worked while listening. The panel gained one control the plan did
-not name, `Take Detected Pair`, because what AFC found is lost the next time
-the receiver is built and the operator had no way to keep it.
+with transmit. The contact fields are there now, in a section below the
+squelch. Unshift-on-space and the threshold corrector are on the Settings menu
+rather than the panel: they are set once for a station's habits rather than
+worked while listening. The panel gained one control the plan did not name,
+`Take Detected Pair`, because what AFC found is lost the next time the
+receiver is built and the operator had no way to keep it.
+
+**This station's own callsign, name, and QTH are not on the panel at all.**
+They are a modal window behind the Settings menu, which is where
+`apps/sstv/src/ui/view/dialogs.rs` keeps the same three and for the same
+reason: none of them belongs to the contact being worked. A callsign is
+entered when the application is first set up and then left for years, while
+everything on the panel is worked at every exchange. The window runs the same
+keyboard filter the message field does, since what is typed into it reaches
+the air through the macros that read it.
 
 Panel claim order, which egui makes load-bearing, is: status bar at the bottom,
 then the right panel so it runs the full height above the status bar, then the

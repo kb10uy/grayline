@@ -19,10 +19,12 @@ use crate::{
     worker::receive::{ColumnSnapshot, DecodePath},
 };
 
+mod dialogs;
 mod panels;
 mod status_bar;
 mod transmit;
 
+use dialogs::station_dialog;
 use panels::side_panel;
 use status_bar::status_bar;
 use transmit::transmit_panel;
@@ -72,6 +74,7 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     if let Some(callsign) = picked {
         app.set_contact_callsign(&callsign);
     }
+    station_dialog(ui, app);
     activated
 }
 

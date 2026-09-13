@@ -10,6 +10,7 @@ menu-zoom-reset = 拡大率をリセット ({ $percent }%)
 menu-open-config = 設定フォルダーを開く
 menu-quit = 終了
 menu-language = 言語
+menu-station = 自局情報...
 menu-manual = マニュアル
 
 input-device = 入力デバイス
@@ -69,7 +70,6 @@ hint-unsendable = { $character } はボドー符号にありません。取り�
 error-no-output = 出力デバイスが選択されていません
 error-underrun = サウンドカードへの供給が間に合わず、送信内容に欠落が生じました
 
-section-station = 自局
 section-contact = 交信相手
 
 label-my-call = 自局コール
@@ -84,3 +84,7 @@ label-rst-received = 受信 RST
 action-clear-contact = 相手情報を消去
 
 hint-clear-contact = 交信相手の欄を空にし、次の局に備えます
+
+station-title = 自局情報
+station-close = 閉じる
+station-callsign-required = コールサインはすべてのマクロが署名に使います。名前と QTH はそれらを含むマクロに反映されます。

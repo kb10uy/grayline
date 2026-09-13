@@ -10,6 +10,7 @@ menu-zoom-reset = Reset Zoom ({ $percent }%)
 menu-open-config = Open Config Folder
 menu-quit = Quit
 menu-language = Language
+menu-station = My Station...
 menu-manual = Manual
 
 input-device = Input device
@@ -69,7 +70,6 @@ hint-unsendable = { $character } has no Baudot code. Remove it before sending.
 error-no-output = No output device is selected
 error-underrun = The sound card ran out of audio; the message that went out has a gap in it
 
-section-station = My Station
 section-contact = Contact
 
 label-my-call = My call
@@ -84,3 +84,7 @@ label-rst-received = RST rcvd
 action-clear-contact = Clear Contact
 
 hint-clear-contact = Empty the contact fields, ready for the next station
+
+station-title = My Station
+station-close = Close
+station-callsign-required = The callsign is what every macro signs with. The name and QTH fill in the macros that mention them.

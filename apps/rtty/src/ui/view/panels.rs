@@ -12,9 +12,6 @@ pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
     // a large font scale; scroll rather than silently clipping the bottom.
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add_space(4.0);
-        let station_title = app.i18n.text("section-station");
-        section(ui, &station_title, |ui| station_panel(ui, app));
-        ui.add_space(12.0);
         let tuning_title = app.i18n.text("section-tuning");
         section(ui, &tuning_title, |ui| tuning_panel(ui, app));
         ui.add_space(12.0);
@@ -146,40 +143,6 @@ fn squelch_panel(ui: &mut Ui, app: &mut App) {
 
     if changed {
         app.push_settings();
-    }
-}
-
-/// Who this station is, which every macro signs with.
-///
-/// On the panel rather than on a menu, because a menu cannot hold a field and
-/// because a callsign is the one setting a station cannot transmit without:
-/// leaving it where it is read makes an empty one visible.
-fn station_panel(ui: &mut Ui, app: &mut App) {
-    let gap = ui.spacing().item_spacing.x;
-    let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
-    for (index, (key, salt)) in [
-        ("label-my-call", "my-call"),
-        ("label-my-name", "my-name"),
-        ("label-my-qth", "my-qth"),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let label = app.i18n.text(key);
-        ui.horizontal(|ui| {
-            field_label(ui, &label);
-            let id = Id::new(salt);
-            crate::ui::input::sanitize(ui.ctx(), id);
-            let target = match index {
-                0 => &mut app.station.callsign,
-                1 => &mut app.station.name,
-                _ => &mut app.station.qth,
-            };
-            ui.add_sized(
-                [fields, ui.spacing().interact_size.y],
-                egui::TextEdit::singleline(target).id(id),
-            );
-        });
     }
 }
 

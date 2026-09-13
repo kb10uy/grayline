@@ -45,7 +45,6 @@ fn the_window_draws_in_every_locale(#[case] locale: Locale) {
     harness.get_by_label(&i18n.text("action-send"));
     harness.get_by_label(&i18n.text("action-stop"));
     harness.get_by_label(&i18n.text("label-his-call"));
-    harness.get_by_label(&i18n.text("label-my-call"));
 }
 
 /// The pane says what it is waiting for while it is empty, because an empty
@@ -211,4 +210,48 @@ fn sent_text_is_printed_with_the_received_text() {
     app.columns[0].push_sent("JA1ZZZ DE JL1HIS");
     let harness = render(&mut app);
     harness.get_by_label("CQ DE JA1ZZZ K\nJA1ZZZ DE JL1HIS");
+}
+
+/// This station's own details are set once and then left alone, so they are
+/// behind the Settings menu rather than beside the text that is worked.
+#[rstest]
+#[case(Locale::En)]
+#[case(Locale::Ja)]
+fn the_station_window_opens_from_the_menu(#[case] locale: Locale) {
+    let mut app = App::headless();
+    app.select_locale(locale);
+    let i18n = I18n::new(locale, &crate::locales::CATALOG);
+
+    // Closed, the fields are nowhere in the window.
+    {
+        let harness = render(&mut app);
+        assert!(harness.query_by_label(&i18n.text("label-my-call")).is_none());
+    }
+
+    menu::apply(&mut app, menu::Action::ShowStation);
+    let harness = render(&mut app);
+
+    harness.get_by_label(&i18n.text("station-title"));
+    harness.get_by_label(&i18n.text("label-my-call"));
+    harness.get_by_label(&i18n.text("label-my-qth"));
+    harness.get_by_label(&i18n.text("station-close"));
+}
+
+/// The Settings menu has to carry it, or the window has no way of being
+/// opened at all.
+#[test]
+fn the_settings_menu_names_the_station_window() {
+    let app = App::headless();
+    let model = menu::model(&app);
+    let items = menu::flatten(&model);
+    assert!(
+        items.iter().any(|item| matches!(
+            item,
+            menu::Item::Command {
+                action: menu::Action::ShowStation,
+                ..
+            }
+        )),
+        "the station window is not on any menu"
+    );
 }

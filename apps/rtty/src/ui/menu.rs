@@ -30,6 +30,7 @@ pub use in_window::MenuHost;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
+    ShowStation,
     SelectDevice(String),
     SelectOutputDevice(String),
     SelectLocale(Locale),
@@ -103,6 +104,11 @@ pub fn model(app: &App) -> Vec<Menu> {
         Menu {
             label: text("menu-settings"),
             items: vec![
+                Item::Command {
+                    label: text("menu-station"),
+                    action: Action::ShowStation,
+                },
+                Item::Separator,
                 Item::Submenu {
                     label: text("input-device"),
                     items: device_items(app),
@@ -214,6 +220,7 @@ fn locale_items(app: &App) -> Vec<Item> {
 /// Returns whether the application was asked to close.
 pub fn apply(app: &mut App, action: Action) -> bool {
     match action {
+        Action::ShowStation => app.station_dialog_open = true,
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),
