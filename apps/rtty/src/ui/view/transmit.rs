@@ -66,7 +66,7 @@ pub fn draft_id() -> Id {
 /// Wide enough for a name and the arrow, and no wider: it stands in the row
 /// of buttons, and a list that took the width of its longest entry would move
 /// the buttons every time one was added to the file.
-const TEMPLATE_LIST_WIDTH: f32 = 96.0;
+const TEMPLATE_LIST_WIDTH: f32 = 128.0;
 
 /// The function keys the macro buttons answer to, in order.
 const FUNCTION_KEYS: [egui::Key; 12] = [
@@ -192,6 +192,7 @@ fn macro_buttons(ui: &mut Ui, app: &mut App) {
         .collect();
     let mut picked = None;
     ui.horizontal_wrapped(|ui| {
+        picked = template_list(ui, app);
         for (index, (label, shortcut)) in labels.iter().enumerate() {
             let button = egui::Button::new(RichText::new(label).size(SMALL));
             let mut response = ui.add_sized([64.0, height], button);
@@ -202,7 +203,6 @@ fn macro_buttons(ui: &mut Ui, app: &mut App) {
                 pressed = Some(index);
             }
         }
-        picked = template_list(ui, app);
     });
 
     if let Some(index) = pressed {
