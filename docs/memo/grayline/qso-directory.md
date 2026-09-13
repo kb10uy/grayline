@@ -347,13 +347,18 @@ free.
 
 ## In the SSTV application
 
-The worker in `apps/sstv/src/worker/contact.rs` follows the rig worker's shape —
-a request channel, a snapshot read once per frame — with two differences. It
-takes a `Waker`, because a lookup happens about once a contact and polling for
-one would mean redrawing forever to catch it. And it is started once and kept
-for the whole session, because it holds a store rather than a socket, works with
-the network switched off, and is where a corrected record is written; turning
-the lookup off takes the logger away from it rather than the directory.
+`grayline-qso::ContactWorker` owns the request channel, directory and published
+snapshot for both desktop applications. `ContactPaths::open` selects the named
+store and optional logger; absent paths keep tests in memory and offline. The
+worker accepts the opened directory, a thread name and a notification callback,
+without depending on egui or application error types. Snapshot errors are shared
+`QsoError` values. Each application's `worker/contact.rs` only adapts its settings
+and `Waker` to that interface.
+
+The worker is kept for the session, works with the network switched off, and
+writes corrected records. Turning lookup off replaces the worker with one whose
+directory has no logger. Dropping it drains queued requests and checkpoints the
+store before joining the thread.
 
 A lookup is asked for when the callsign is **committed**, which is leaving the
 field, and again when an FSK identifier arrives — the identifier path writes the
@@ -390,12 +395,9 @@ write that only ever added would hand it straight back on the next lookup.
 
 ## In the RTTY application
 
-The worker is `apps/sstv/src/worker/contact.rs` again, near enough verbatim, as
-is the dialog and the `[qso]` section of the settings file — deliberately the
-same section name, because one operator's two applications ask the same logger
-about the same stations and a station set up once should not have to be set up
-twice. What differs is everything downstream of the answer, and all of it
-follows from ITA2 having no kanji.
+RTTY uses the same `grayline-qso::ContactWorker` as SSTV. The dialog and `[qso]`
+settings remain application-owned, including their field lists and defaults.
+What differs downstream of the answer follows from ITA2 having no kanji.
 
 **The default field list is `["!core", "!latin"]` rather than `["!core"]`.**
 `latin` exists for this mode, and a station that files only a kanji name has

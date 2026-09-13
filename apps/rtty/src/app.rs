@@ -31,7 +31,7 @@ use crate::{
     worker::{
         Waker,
         audio::{AudioState, TxState},
-        contact::{ContactPaths, ContactSnapshot, ContactWorker},
+        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         receive::{ColumnSnapshot, DecodePath, WorkerSettings},
         transmit::{TxPhase, TxWorker},
     },
@@ -260,7 +260,7 @@ impl App {
             templates: library.templates,
             custom_variables: settings.custom_variables.clone(),
             contact_settings: settings.contact.clone(),
-            contact_directory: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
+            contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
             contact_draft: Vec::new(),
@@ -850,7 +850,7 @@ impl App {
         }
         self.contact_settings.lookup = lookup;
         self.contact_directory =
-            ContactWorker::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+            contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
         self.contact_snapshot = ContactSnapshot::default();
         self.contact_requested.clear();
         self.look_up_contact();

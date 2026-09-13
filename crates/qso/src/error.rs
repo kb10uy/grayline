@@ -5,6 +5,9 @@ use thiserror::Error;
 /// A failure reported by the contact directory.
 #[derive(Debug, Error)]
 pub enum QsoError {
+    /// The contact worker could not start or its snapshot lock was poisoned.
+    #[error("the contact directory state is unavailable")]
+    WorkerUnavailable,
     /// The text handed in was not a callsign.
     #[error("`{0}` is not a callsign")]
     Callsign(String),

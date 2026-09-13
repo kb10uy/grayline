@@ -36,7 +36,7 @@ use crate::{
         Waker,
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
-        contact::{ContactPaths, ContactSnapshot, ContactWorker},
+        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         receive::{Frame, RxProgress},
         rig::{Reading, RigSnapshot, RigState, RigWorker, script},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
@@ -534,7 +534,7 @@ impl App {
             device_fault: None,
             ui_scale: shared.ui_scale,
             rig: settings.rig.clone(),
-            contact: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
+            contact: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
             contact_draft: Vec::new(),
@@ -904,7 +904,7 @@ impl App {
             return;
         }
         self.contact_settings.lookup = lookup;
-        self.contact = ContactWorker::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+        self.contact = contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
         self.contact_snapshot = ContactSnapshot::default();
         self.contact_requested.clear();
         self.look_up_contact();

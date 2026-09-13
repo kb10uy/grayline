@@ -23,6 +23,7 @@ mod paths;
 mod record;
 mod store;
 mod wavelog;
+mod worker;
 
 #[cfg(test)]
 mod test_util;
@@ -38,3 +39,4 @@ pub use record::{
 };
 pub use store::{Origin, Store};
 pub use wavelog::{DEFAULT_TIMEOUT, Wavelog};
+pub use worker::{ContactPaths, ContactSnapshot, ContactState, ContactWorker};
