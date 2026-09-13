@@ -8,13 +8,15 @@ is written down so the decisions survive between working sessions. The
 RTTY items listed under Planned Gaps in
 [grayline/architecture.md](../grayline/architecture.md).
 
-**Progress.** Steps 1 (the monitor tap half of it), 2, and 3 of the order
-below are implemented, so `apps/rtty` receives: the skeleton, the receive
-worker and its session, the scrollback pane, the tuning and squelch panel, and
-the repository work step 2 drags with it. Transmit, the scope window, the
-macros, and everything after them are not written. Where the implementation
-departs from what is described below, the departure is recorded in the section
-it belongs to.
+**Progress.** Steps 1, 2, 3, and 5 of the order below are implemented, so
+`apps/rtty` both receives and transmits: the skeleton, the receive worker and
+its session, the scrollback pane, the tuning and squelch panel, the transmit
+panel with its queue and macros, and the station and contact fields, together
+with the repository work step 2 drags with it. The scope window is written on a
+branch of its own and not yet merged here. Aligned save, the received-text
+history log, the rig frequency readout, and the release workflow are not
+written. Where the implementation departs from what is described below, the
+departure is recorded in the section it belongs to.
 
 Everything the core already offers is assumed rather than restated here:
 [grayline/rtty.md](../grayline/rtty.md) covers the crate and where it parts from
@@ -70,8 +72,10 @@ set against. Two departures, both following
 built: there is no column count, because it would be pinned to one and a
 control that cannot move says nothing an operator can act on — the column list
 is `DecodePath::ALL` and a second demodulator is what changes it — and there
-are no QSO fields, because what reads them is the macro engine, which arrives
-with transmit. Unshift-on-space and the threshold corrector are on the
+were no QSO fields, because what reads them is the macro engine, which arrives
+with transmit; they are there now, in two sections of their own, the station
+above the tuning and the contact below the squelch. Unshift-on-space and the
+threshold corrector are on the
 Settings menu rather than the panel: they are set once for a station's habits
 rather than worked while listening. The panel gained one control the plan did
 not name, `Take Detected Pair`, because what AFC found is lost the next time
@@ -160,11 +164,50 @@ queue, the `TxPhase` states, prefill before the stream starts, and cancel on
 drop.
 
 The sent-text underline follows `Playback::played_samples` from
-`crates/audio/src/playback.rs`, mapped through a code-to-sample boundary table
-computed before the transmission starts. Building that table is the second core
-addition: a small helper that returns the per-`TxCode` duration for a given
-`TxConfig` and sample rate, so the application does not have to re-derive the
-modulator's own timing.
+`crates/audio/src/playback.rs`, mapped through the boundary table `TxSchedule`
+computes before the transmission starts.
+
+**As built.** Each queued message is its own `Transmitter` run on its own
+playback stream, rather than one stream carrying the queue. That is what puts a
+mark idle between messages without anything having to insert one, since every
+transmission brings its own lead-in and tail, and it is what lets an abort drop
+the stream and stop the carrier where the operator pressed rather than at the
+end of what had already been generated. It also means the schedule is built
+against the rate the device actually opened at.
+
+The interface departs from the plan's list in four places, each because
+something the plan did not name turned out to be load-bearing.
+
+- **Enter writes a line; Ctrl+Enter sends.** MMTTY's Enter puts CR LF on the
+  air, so the habit is already a line ending, and a field that sent on Enter
+  would put half a message out every time the operator reached for a new line.
+  Escape stops, from wherever the keyboard is.
+- **The message field only ever holds what can be sent.** A keystroke with no
+  Baudot code does not appear, which is the answer a teleprinter with no such
+  key gives; pasted and expanded text keeps what it cannot send and draws it in
+  red with the send button held, because a block that silently lost part of
+  itself would hide the loss. Both paths upper case what they take, so the
+  field shows what leaves. `ui/input.rs` does this by rewriting the frame's
+  input events before the field is added, which is possible because egui
+  reports typing, pasting, and IME commits as separate events; an IME commit is
+  treated as typing, so a Japanese string committed by mistake simply
+  disappears. The same filter runs on the station and contact fields, since
+  what is typed into them is typed to be sent.
+- **What is sent is printed into the received text** in a colour of its own,
+  following the played position rather than the generated audio. A contact is
+  one exchange rather than two, and a transcript holding only half of it would
+  have to be read against a transmit field already cleared for the next
+  message. It is also what makes the history log, when it is written, a log of
+  the whole contact.
+- **Stopping gives the unsent text back**, ahead of whatever is in the field,
+  and so does a message that could not open a stream. Both are text the
+  operator wrote, and dropping either would lose it with nothing saying so.
+
+A transmit level is on the panel, which the plan did not list: a sound card
+feeding a rig needs one, and the fader is squared for the reason recorded
+beside the SSTV application's own. An underrun is reported once per
+transmission, because a queue that ran dry put a gap in a character that the
+receiving station reads as noise.
 
 PTT is VOX in the first version. That is what avoids the SSTV rig worker lift —
 roughly 1500 lines of application-local Lua host — and keeps the milestone
@@ -179,20 +222,42 @@ QTH, `%r` and `%s` the two RSTs, `%R` and `%N` the RST split into three digits
 and a contest number, `%D` and `%T` UTC date and time, and `%g`/`%f` the
 time-of-day greeting.
 
-Grayline adopts the semantics but not the syntax: readable `{name}`-style
-placeholders instead of percent letters. This costs nothing, because `{`, `}`,
-and `%` are all outside ITA2 and so none of them is taken away from the
-transmittable set — the same reasoning that freed FIGS-H for `#`.
+Grayline adopts the semantics but not the syntax: readable placeholders
+instead of percent letters.
 
-Macro buttons and whole-message templates share one substitution engine.
-Definitions live in the configuration TOML, and the editor validates that a
-macro is transmittable with `Ita2Encoder::maps` — a per-character check that is
-cheaper than encoding, with `Ita2Encoder::encode` available where the actual
-code sequence is wanted. Because the QSO fields are in the first version's
-scope, the full variable set works from day one.
+**As built, the placeholders are the `${...}` form** `apps/sstv` already
+interpolates its templates with ([template-design.md](template-design.md)),
+carrying the same names — `station.callsign`, `contact.callsign`,
+`contact.name`, `contact.qth` — with `contact.rst.sent`,
+`contact.rst.received`, `date.utc`, `time.utc`, and `greeting` added for RTTY.
+One convention across the family beats a second one invented here, and an
+operator who has written a template has written a macro. The plan's claim that
+the braces and the percent sign are all outside ITA2 holds, but the dollar sign
+is not — it is FIGS-D in the Bell table. That costs nothing, because a name is
+never written without its braces.
+
+A name that is not one of these is **left exactly as it was written**. The
+expansion lands in a field that refuses the braces, so a misspelled name
+arrives in red with the send button held: a mistake in a macro stops where the
+operator can see it, without a validator having to be written for it. For the
+same reason there is no escape for a literal opening brace pair, which could
+not have been sent either way.
+
+Macro buttons answer to F1 through F12. A press expands at that moment and
+writes the result into the field at the caret, so the time a message names is
+the time it was written and what is about to go out can still be edited; a
+macro marked `send = true` goes out as a message of its own and leaves a
+half-written reply alone. Definitions live in the configuration TOML, written
+once on first run and then never rewritten, because the file is where they are
+edited and rewriting the array on every save would reformat what the operator
+put in it. A callsign reaches the contact field by being double-clicked out of
+the line that printed it.
 
 Deliberately skipped: `%L`/`%F` raw shift insertion, `%E` (a buffered send ends
-by itself), and the CW identifier.
+by itself), the CW identifier, the `%R`/`%N` contest split, and an
+in-application macro editor — the File menu opens the directory the file is in,
+and the red marking reports a macro that cannot be sent the moment it is
+pressed.
 
 ## Core Additions
 

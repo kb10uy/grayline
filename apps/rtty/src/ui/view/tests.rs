@@ -42,6 +42,10 @@ fn the_window_draws_in_every_locale(#[case] locale: Locale) {
     harness.get_by_label(&i18n.text("action-clear"));
     harness.get_by_label(&i18n.text("action-resync"));
     harness.get_by_label(&i18n.text("label-mark"));
+    harness.get_by_label(&i18n.text("action-send"));
+    harness.get_by_label(&i18n.text("action-stop"));
+    harness.get_by_label(&i18n.text("label-his-call"));
+    harness.get_by_label(&i18n.text("label-my-call"));
 }
 
 /// The pane says what it is waiting for while it is empty, because an empty
@@ -122,7 +126,15 @@ fn a_narrow_window_keeps_every_control() {
     let mut app = App::headless();
     let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
     let harness = render_sized(&mut app, egui::vec2(420.0, 500.0));
-    for key in ["label-mark", "label-shift", "label-speed", "action-afc", "action-clear"] {
+    for key in [
+        "label-mark",
+        "label-shift",
+        "label-speed",
+        "action-afc",
+        "action-clear",
+        "action-send",
+        "label-his-call",
+    ] {
         harness.get_by_label(&i18n.text(key));
     }
 }
@@ -136,4 +148,69 @@ fn the_window_settles_and_stops_asking_for_frames() {
     // `run` gives up after a few steps if frames keep being asked for, which
     // is the assertion: by now nothing should be.
     harness.run();
+}
+
+/// The macro buttons are drawn from the configuration, so a station that has
+/// edited it gets its own buttons rather than the ones that shipped.
+#[test]
+fn the_macro_buttons_are_the_ones_the_configuration_names() {
+    let mut app = App::headless();
+    app.macros = vec![
+        crate::app::macros::Macro {
+            label: "CALL".to_owned(),
+            text: "CQ".to_owned(),
+            send: false,
+        },
+        crate::app::macros::Macro {
+            label: "SIGN".to_owned(),
+            text: "SK".to_owned(),
+            send: false,
+        },
+    ];
+    let harness = render(&mut app);
+    harness.get_by_label("CALL");
+    harness.get_by_label("SIGN");
+}
+
+/// A station with no macros at all draws no button row rather than an empty
+/// one, and everything else still lays out.
+#[test]
+fn a_station_with_no_macros_still_draws_the_panel() {
+    let mut app = App::headless();
+    app.macros.clear();
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+    let harness = render(&mut app);
+    harness.get_by_label(&i18n.text("action-send"));
+}
+
+/// The message being keyed is drawn above the field, with the queue behind it,
+/// so a long exchange still lays out rather than pushing the field off.
+#[test]
+fn the_message_on_the_air_and_the_queue_are_both_drawn() {
+    let mut app = App::headless();
+    let text = "CQ CQ DE JL1HIS";
+    let schedule = grayline_rtty::TxSchedule::new(text, 48_000, &app.tx_config()).unwrap();
+    app.transmit
+        .begin(crate::app::transmit::Sending::new(text.to_owned(), schedule));
+    app.transmit.queue("SECOND MESSAGE".to_owned());
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+
+    let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+
+    harness.get_by_label(&i18n.text("label-on-air"));
+    harness.get_by_label(&i18n.text("label-queued"));
+    harness.get_by_label(&i18n.text("action-stop"));
+}
+
+/// What a station sent is printed with what it received, so an exchange reads
+/// back as one transcript.
+#[test]
+fn sent_text_is_printed_with_the_received_text() {
+    let mut app = App::headless();
+    app.columns[0].push_str("CQ DE JA1ZZZ K
+");
+    app.columns[0].push_sent("JA1ZZZ DE JL1HIS");
+    let harness = render(&mut app);
+    harness.get_by_label("CQ DE JA1ZZZ K
+JA1ZZZ DE JL1HIS");
 }
