@@ -2,14 +2,14 @@ use std::collections::HashMap;
 
 use muda::{CheckMenuItem, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 
-use super::{Action, Item, Menu};
+use super::{Item, Menu};
 
 /// The platform menu bar, kept in step with the model.
 ///
 /// The menu is built once and then updated in place. Rebuilding it every
 /// frame would be visible to the window manager, and on Windows would
 /// re-measure the client area on each pass.
-pub struct MenuHost {
+pub struct MenuHost<Action> {
     menu: muda::Menu,
     /// The top-level menus, in bar order.
     bar: Vec<Submenu>,
@@ -20,7 +20,7 @@ pub struct MenuHost {
     /// walk drift and write labels onto the wrong entries.
     items: Vec<Entry>,
     actions: HashMap<MenuId, Action>,
-    model: Vec<Menu>,
+    model: Vec<Menu<Action>>,
     hwnd: Option<isize>,
 }
 
@@ -33,7 +33,7 @@ enum Entry {
 }
 
 impl Entry {
-    fn update(&self, item: &Item) {
+    fn update<Action>(&self, item: &Item<Action>) {
         match (self, item) {
             (Self::Submenu(entry), Item::Submenu { label, .. }) => entry.set_text(label),
             (Self::Check(entry), Item::Check { label, checked, .. }) => {
@@ -49,12 +49,12 @@ impl Entry {
     }
 }
 
-impl MenuHost {
+impl<Action: Clone + PartialEq> MenuHost<Action> {
     /// Builds the menu and attaches it to the platform.
     ///
     /// A failure here is reported rather than fatal: the application is
     /// usable without a menu bar, and the in-window controls still work.
-    pub fn install(cc: &eframe::CreationContext<'_>, model: &[Menu]) -> Result<Self, muda::Error> {
+    pub fn install(cc: &eframe::CreationContext<'_>, model: &[Menu<Action>]) -> Result<Self, muda::Error> {
         let menu = muda::Menu::new();
         let mut native = Self {
             menu,
@@ -86,13 +86,14 @@ impl MenuHost {
         Ok(())
     }
 
+    /// Hides the native window before closing its menu.
     pub fn prepare_for_close(&self) {
         if let Some(hwnd) = self.hwnd {
-            grayline_shell::platform::hide_window(hwnd);
+            crate::platform::hide_window(hwnd);
         }
     }
 
-    fn build(&mut self, model: &[Menu]) -> Result<(), muda::Error> {
+    fn build(&mut self, model: &[Menu<Action>]) -> Result<(), muda::Error> {
         while self.menu.remove_at(0).is_some() {}
         self.bar.clear();
         self.items.clear();
@@ -108,7 +109,7 @@ impl MenuHost {
         Ok(())
     }
 
-    fn append_items(&mut self, parent: &Submenu, items: &[Item]) -> Result<(), muda::Error> {
+    fn append_items(&mut self, parent: &Submenu, items: &[Item<Action>]) -> Result<(), muda::Error> {
         for item in items {
             match item {
                 Item::Submenu { label, items } => {
@@ -148,7 +149,7 @@ impl MenuHost {
     /// Labels and check marks are written in place while the structure
     /// matches; a structural change, such as a device appearing, falls
     /// back to a rebuild.
-    pub fn sync(&mut self, model: &[Menu]) {
+    pub fn sync(&mut self, model: &[Menu<Action>]) {
         if self.model == model {
             return;
         }
@@ -166,7 +167,7 @@ impl MenuHost {
     }
 
     #[cfg(test)]
-    pub fn detached(model: &[Menu]) -> Self {
+    fn detached(model: &[Menu<Action>]) -> Self {
         let mut native = Self {
             menu: muda::Menu::new(),
             bar: Vec::new(),
@@ -181,7 +182,7 @@ impl MenuHost {
 
     /// Returns the label each entry is currently showing, in model order.
     #[cfg(test)]
-    pub fn labels(&self) -> Vec<String> {
+    fn labels(&self) -> Vec<String> {
         let bar = self.bar.iter().map(Submenu::text);
         let items = self.items.iter().map(|entry| match entry {
             Entry::Check(entry) => entry.text(),
@@ -226,7 +227,7 @@ impl MenuHost {
 
     /// Flips every check mark, as the platform does when one is activated.
     #[cfg(test)]
-    pub fn flip_checks(&self) {
+    fn flip_checks(&self) {
         for entry in &self.items {
             if let Entry::Check(entry) = entry {
                 entry.set_checked(!entry.is_checked());
@@ -236,7 +237,7 @@ impl MenuHost {
 
     /// Returns the state of each check entry, in model order.
     #[cfg(test)]
-    pub fn checks(&self) -> Vec<bool> {
+    fn checks(&self) -> Vec<bool> {
         self.items
             .iter()
             .filter_map(|entry| match entry {
@@ -247,7 +248,7 @@ impl MenuHost {
     }
 }
 
-fn structure_of(model: &[Menu]) -> Vec<Vec<Shape>> {
+fn structure_of<Action>(model: &[Menu<Action>]) -> Vec<Vec<Shape>> {
     model.iter().map(|menu| shapes(&menu.items)).collect()
 }
 
@@ -260,7 +261,7 @@ enum Shape {
     Separator,
 }
 
-fn shapes(items: &[Item]) -> Vec<Shape> {
+fn shapes<Action>(items: &[Item<Action>]) -> Vec<Shape> {
     items
         .iter()
         .map(|item| match item {
@@ -274,95 +275,4 @@ fn shapes(items: &[Item]) -> Vec<Shape> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        super::{flatten, model},
-        *,
-    };
-    use grayline_shell::i18n::Locale;
-
-    use crate::app::App;
-
-    /// The labels a menu should be showing, in [`MenuHost::labels`] order.
-    fn expected(model: &[Menu]) -> Vec<String> {
-        let bar = model.iter().map(|menu| menu.label.clone());
-        let items = flatten(model).into_iter().map(|item| match item {
-            Item::Submenu { label, .. }
-            | Item::Check { label, .. }
-            | Item::Command { label, .. }
-            | Item::Pending(label) => label.clone(),
-            Item::Separator => "-".to_owned(),
-        });
-        bar.chain(items).collect()
-    }
-
-    /// The check marks a menu should be showing, in [`MenuHost::checks`] order.
-    fn expected_checks(model: &[Menu]) -> Vec<bool> {
-        flatten(model)
-            .into_iter()
-            .filter_map(|item| match item {
-                Item::Check { checked, .. } => Some(*checked),
-                _ => None,
-            })
-            .collect()
-    }
-
-    #[test]
-    fn a_freshly_built_menu_shows_the_model() {
-        let model = model(&App::headless());
-        assert_eq!(MenuHost::detached(&model).labels(), expected(&model));
-    }
-
-    /// Activating a check entry flips its mark, so choosing the language that
-    /// is already selected clears it. The selection did not change, which
-    /// leaves `sync` with nothing to do, so the mark has to be written back
-    /// where the activation was noticed.
-    #[test]
-    fn choosing_the_selected_entry_again_keeps_its_mark() {
-        let mut app = App::headless();
-        let english = model(&app);
-        let mut native = MenuHost::detached(&english);
-        assert!(
-            expected_checks(&english).contains(&true),
-            "a selected entry is needed for this to be worth asserting"
-        );
-
-        native.flip_checks();
-        assert_ne!(native.checks(), expected_checks(&english));
-        native.restore_checks();
-        assert_eq!(native.checks(), expected_checks(&english));
-
-        app.select_locale(Locale::Ja);
-        let switched = model(&app);
-        native.sync(&switched);
-        assert_eq!(native.checks(), expected_checks(&switched));
-    }
-
-    #[test]
-    fn relabelling_lands_on_the_right_entries() {
-        let mut app = App::headless();
-        let english = model(&app);
-        let mut native = MenuHost::detached(&english);
-
-        app.select_locale(Locale::Ja);
-        let japanese = model(&app);
-        native.sync(&japanese);
-
-        assert_ne!(expected(&english), expected(&japanese));
-        assert_eq!(native.labels(), expected(&japanese));
-    }
-
-    #[test]
-    fn repeated_syncs_do_not_accumulate_drift() {
-        let mut app = App::headless();
-        let mut native = MenuHost::detached(&model(&app));
-        for locale in [Locale::Ja, Locale::En, Locale::Ja, Locale::En] {
-            app.select_locale(locale);
-            native.sync(&model(&app));
-        }
-        app.zoom_by(0.5);
-        let scaled = model(&app);
-        native.sync(&scaled);
-        assert_eq!(native.labels(), expected(&scaled));
-    }
-}
+mod tests;

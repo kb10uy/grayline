@@ -12,21 +12,12 @@
 use grayline_shell::{
     common::DEFAULT_UI_SCALE,
     i18n::{Locale, number},
+    menu as shared_menu,
 };
 
 use crate::{app::App, storage::paths::Folder};
 
-#[cfg(target_os = "windows")]
-mod native;
-
-#[cfg(not(target_os = "windows"))]
-mod in_window;
-
-#[cfg(target_os = "windows")]
-pub use native::MenuHost;
-
-#[cfg(not(target_os = "windows"))]
-pub use in_window::MenuHost;
+pub type MenuHost = shared_menu::MenuHost<Action>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
@@ -48,31 +39,8 @@ pub enum Action {
     Quit,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Item {
-    Submenu {
-        label: String,
-        items: Vec<Item>,
-    },
-    Check {
-        label: String,
-        checked: bool,
-        action: Action,
-    },
-    Command {
-        label: String,
-        action: Action,
-    },
-    /// An entry there is nothing to activate on.
-    Pending(String),
-    Separator,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Menu {
-    pub label: String,
-    pub items: Vec<Item>,
-}
+pub type Item = shared_menu::Item<Action>;
+pub type Menu = shared_menu::Menu<Action>;
 
 /// Describes the menu as it should currently appear.
 ///
@@ -271,82 +239,17 @@ pub fn apply(app: &mut App, action: Action) -> bool {
 
 const ZOOM_STEP: f32 = 0.1;
 
-/// Every item of every menu, in the order a renderer creates them.
-///
-/// Building the platform menu and updating it later both walk this, so the two
-/// cannot disagree about which entry corresponds to which item.
-#[cfg(any(target_os = "windows", test))]
+#[cfg(test)]
 pub fn flatten(menus: &[Menu]) -> Vec<&Item> {
-    fn walk<'a>(items: &'a [Item], out: &mut Vec<&'a Item>) {
-        for item in items {
-            out.push(item);
-            if let Item::Submenu { items, .. } = item {
-                walk(items, out);
-            }
-        }
-    }
-
-    let mut out = Vec::new();
-    for menu in menus {
-        walk(&menu.items, &mut out);
-    }
-    out
+    shared_menu::flatten(menus)
 }
 
 pub const fn is_in_window() -> bool {
-    !cfg!(target_os = "windows")
+    shared_menu::is_in_window()
 }
 
-/// Draws the menu bar as egui widgets.
-///
-/// Used where the platform has no menu bar to attach to.
 pub fn bar(ui: &mut egui::Ui, model: &[Menu]) -> Option<Action> {
-    let mut activated = None;
-    egui::MenuBar::new().ui(ui, |ui| {
-        for menu in model {
-            ui.menu_button(&menu.label, |ui| {
-                if let Some(action) = items(ui, &menu.items) {
-                    activated = Some(action);
-                }
-            });
-        }
-    });
-    activated
-}
-
-fn items(ui: &mut egui::Ui, items: &[Item]) -> Option<Action> {
-    let mut activated = None;
-    for item in items {
-        match item {
-            Item::Submenu { label, items: nested } => {
-                ui.menu_button(label, |ui| {
-                    if let Some(action) = self::items(ui, nested) {
-                        activated = Some(action);
-                    }
-                });
-            }
-            Item::Check { label, checked, action } => {
-                let mut checked = *checked;
-                if ui.checkbox(&mut checked, label).clicked() {
-                    activated = Some(action.clone());
-                    ui.close();
-                }
-            }
-            Item::Command { label, action } => {
-                if ui.button(label).clicked() {
-                    activated = Some(action.clone());
-                    ui.close();
-                }
-            }
-            Item::Pending(label) => {
-                ui.add_enabled(false, egui::Button::new(label));
-            }
-            Item::Separator => {
-                ui.separator();
-            }
-        }
-    }
-    activated
+    shared_menu::bar(ui, model)
 }
 
 #[cfg(test)]

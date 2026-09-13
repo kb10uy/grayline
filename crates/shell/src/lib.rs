@@ -5,12 +5,9 @@
 //! each application supplies what makes it itself through [`Identity`] and an
 //! [`i18n::Catalog`].
 //!
-//! What is deliberately absent is as informative as what is here. The menu
-//! model and the views still belong to the application, and so does almost all
-//! of its settings: a shared shape guessed from one caller is harder to
-//! correct later than one extracted from several. The exception is [`common`],
-//! which holds the two settings every application in the family answers the
-//! same way.
+//! Applications define their menu contents and action types; [`menu`] renders
+//! those models. Application-specific settings stay with each application,
+//! while [`common`] owns the language and scale shared by the family.
 
 #![deny(missing_docs)]
 // Not `forbid(unsafe_code)`, unlike the rest of this workspace: the Windows
@@ -23,6 +20,8 @@ pub mod common;
 pub mod i18n;
 /// The rolling log an application writes under its state directory.
 pub mod log;
+/// Shared menu models and platform renderers.
+pub mod menu;
 /// Everything that only makes sense on one operating system.
 pub mod platform;
 

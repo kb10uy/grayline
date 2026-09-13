@@ -40,13 +40,7 @@ thiserror.workspace = true
 toml_edit.workspace = true
 unic-langid.workspace = true
 
-# muda drives the platform menu bar, which needs a native window handle it can
-# own. The other platforms use the in-window menu bar on purpose: on Linux muda
-# only attaches to gtk windows, which winit does not create, and on macOS the
-# native bar's behavior cannot be verified regularly enough to vouch for.
 [target.'cfg(target_os = "windows")'.dependencies]
-muda.workspace = true
-raw-window-handle.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

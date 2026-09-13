@@ -41,6 +41,9 @@ itself — the `Waker` in `apps/wefax/src/worker.rs`, the mailbox, and the
 controls handle. Audio stays entirely inside `crates/audio`; the application
 adds no audio code of its own.
 
+The menu model and both renderers now live in `grayline-shell::menu`; each
+application supplies its own action type and menu contents.
+
 Genuinely new work is confined to three things: a receive-text scrollback
 widget, a transmit message queue with its worker, and the RTTY settings and
 controls themselves.

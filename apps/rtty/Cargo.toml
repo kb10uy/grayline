@@ -29,13 +29,6 @@ thiserror.workspace = true
 toml_edit.workspace = true
 unic-langid.workspace = true
 
-# muda drives the platform menu bar, which needs a native window handle it can
-# own. The other platforms use the in-window menu bar for the reasons recorded
-# beside the SSTV application's own manifest.
-[target.'cfg(target_os = "windows")'.dependencies]
-muda.workspace = true
-raw-window-handle.workspace = true
-
 [target.'cfg(target_os = "windows")'.build-dependencies]
 embed-resource.workspace = true
 
