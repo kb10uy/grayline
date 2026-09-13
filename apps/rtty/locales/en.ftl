@@ -88,3 +88,10 @@ hint-clear-contact = Empty the contact fields, ready for the next station
 station-title = My Station
 station-close = Close
 station-callsign-required = The callsign is what every macro signs with. The name and QTH fill in the macros that mention them.
+
+custom-title = Extra fields
+custom-name = name
+custom-value = value
+custom-add = Add field
+custom-invalid = A name may hold letters, digits, and underscores, in dot-separated parts starting with a letter
+custom-note = A field named here is written in a macro as ${ "{" }custom.name{ "}" }. Its value goes on the air, so it has to be sendable.

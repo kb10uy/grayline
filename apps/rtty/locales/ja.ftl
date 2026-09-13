@@ -88,3 +88,10 @@ hint-clear-contact = 交信相手の欄を空にし、次の局に備えます
 station-title = 自局情報
 station-close = 閉じる
 station-callsign-required = コールサインはすべてのマクロが署名に使います。名前と QTH はそれらを含むマクロに反映されます。
+
+custom-title = 追加フィールド
+custom-name = 名前
+custom-value = 値
+custom-add = フィールドを追加
+custom-invalid = 名前には英数字とアンダースコアが使えます。各区切りは英字で始めてください。
+custom-note = ここで付けた名前は、マクロ中で ${ "{" }custom.名前{ "}" } と書きます。値は電波に乗るため、送信できる文字である必要があります。

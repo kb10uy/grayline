@@ -11,7 +11,7 @@ use egui::{Align, Color32, ComboBox, Id, Layout, Panel, RichText, TextStyle, Ui}
 use grayline_rtty::code::Case;
 
 use crate::{
-    app::App,
+    app::{App, macros::valid_variable_name},
     ui::{
         menu::{self, Action, Menu},
         scrollback,

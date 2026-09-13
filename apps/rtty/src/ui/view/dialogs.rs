@@ -22,6 +22,8 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
     let labels = ["label-my-call", "label-my-name", "label-my-qth"].map(|key| app.i18n.text(key));
 
     let mut done = false;
+    let mut changed = false;
+    let mut removed = None;
     let response = egui::Modal::new(Id::new("station")).show(ui.ctx(), |ui| {
         ui.set_max_width(360.0);
         ui.heading(title);
@@ -45,11 +47,94 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
         }
         ui.add_space(4.0);
         ui.label(RichText::new(note).size(LABEL).weak());
+
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(4.0);
+        (changed, removed) = custom_fields(ui, app);
+
         ui.add_space(16.0);
         done = ui.button(close).clicked();
     });
 
-    if done || response.should_close() {
+    if let Some(index) = removed {
+        app.variables_draft.remove(index);
+        changed = true;
+    }
+    let closing = done || response.should_close();
+    if changed || closing {
+        app.commit_custom_variables();
+    }
+    if closing {
         app.station_dialog_open = false;
     }
+}
+
+/// The fields the operator invented, which only their own macros name.
+///
+/// Everything above this window is something the application already knows to
+/// ask for; these are the ones only the operator does, which is why both the
+/// name and what it stands for are typed here.
+///
+/// Returns whether a row changed and which row was struck out, rather than
+/// acting on either: the rows are borrowed while they are being drawn.
+fn custom_fields(ui: &mut Ui, app: &mut App) -> (bool, Option<usize>) {
+    let heading_text = app.i18n.text("custom-title");
+    let note = app.i18n.text("custom-note");
+    let invalid = app.i18n.text("custom-invalid");
+    let add = app.i18n.text("custom-add");
+    let name_hint = app.i18n.text("custom-name");
+    let value_hint = app.i18n.text("custom-value");
+
+    let mut changed = false;
+    let mut removed = None;
+    heading(ui, &heading_text);
+    ui.add_space(4.0);
+
+    let remove_width = ui.spacing().interact_size.y;
+    let gaps = ui.spacing().item_spacing.x * 2.0;
+    let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
+    let value_width = ui.available_width() - remove_width - gaps - name_width;
+    for (index, (name, value)) in app.variables_draft.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            let usable = valid_variable_name(name);
+            let field = egui::TextEdit::singleline(name)
+                .id(Id::new(("custom-name", index)))
+                .desired_width(name_width)
+                .hint_text(&name_hint)
+                .text_color_opt((!usable).then_some(ERROR_COLOR));
+            let mut response = ui.add(field);
+            if !usable {
+                response = response.on_hover_text(&invalid);
+            }
+            // Taken up once the field is left rather than on every keystroke:
+            // half a name is a different field, and a macro would read it.
+            changed |= response.lost_focus();
+
+            // The value goes on the air through whichever macro names it, so
+            // it runs the filter every other sendable field runs; the name
+            // never leaves the configuration, so it does not.
+            let value_id = Id::new(("custom-value", index));
+            crate::ui::input::sanitize(ui.ctx(), value_id);
+            changed |= ui
+                .add(
+                    egui::TextEdit::singleline(value)
+                        .id(value_id)
+                        .desired_width(value_width)
+                        .hint_text(&value_hint),
+                )
+                .changed();
+            if ui.button("✖").clicked() {
+                removed = Some(index);
+            }
+        });
+    }
+
+    ui.add_space(4.0);
+    if ui.button(add).clicked() {
+        app.add_custom_variable();
+    }
+    ui.add_space(4.0);
+    ui.label(RichText::new(note).size(LABEL).weak());
+    (changed, removed)
 }

@@ -1,9 +1,9 @@
-use std::{fs, io, path::PathBuf};
+use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
 use grayline_shell::log;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
-use crate::app::macros::{Macro, Station, default_macros};
+use crate::app::macros::{Macro, Station, default_macros, valid_variable_name};
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -65,6 +65,8 @@ pub struct Settings {
     pub station: Station,
     /// The buttons under the message field, in the order they are drawn.
     pub macros: Vec<Macro>,
+    /// The operator's own fields, read from a macro as `${custom.<name>}`.
+    pub custom_variables: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -97,6 +99,7 @@ impl Default for Settings {
             tx_level: 0.95,
             station: Station::default(),
             macros: default_macros(),
+            custom_variables: BTreeMap::new(),
         }
     }
 }
@@ -231,6 +234,8 @@ impl Config {
         // Written once and then left alone. There is no editor for them here,
         // so the file is where they are changed, and rewriting the array on
         // every save would reformat what the operator had written in it.
+        store_custom_variables(table, &settings.custom_variables);
+
         if !table.contains_key("macros") {
             let mut macros = ArrayOfTables::new();
             for shipped in &settings.macros {
@@ -311,7 +316,46 @@ fn read(document: &DocumentMut) -> Settings {
     if let Some(macros) = table.get("macros").and_then(Item::as_array_of_tables) {
         settings.macros = macros.iter().filter_map(read_macro).collect();
     }
+    settings.custom_variables = read_custom_variables(table);
     settings.clamped()
+}
+
+/// Reads the operator's own fields.
+///
+/// A name no `${...}` expression could ever hold is dropped rather than
+/// carried around unreachable, which is the treatment every other unusable
+/// value in the file gets.
+fn read_custom_variables(table: &toml_edit::Table) -> BTreeMap<String, String> {
+    let Some(variables) = table.get("variables").and_then(Item::as_table) else {
+        return BTreeMap::new();
+    };
+    variables
+        .iter()
+        .filter(|(name, _)| valid_variable_name(name))
+        .filter_map(|(name, item)| Some((name.to_owned(), item.as_value()?.as_str()?.to_owned())))
+        .collect()
+}
+
+/// Writes the fields back, leaving the keys that survived in place.
+///
+/// Keys are assigned rather than the table being rebuilt, so a comment written
+/// beside one by hand outlives a save that did not touch it.
+fn store_custom_variables(table: &mut Table, variables: &BTreeMap<String, String>) {
+    if variables.is_empty() {
+        table.remove("variables");
+        return;
+    }
+    let Some(stored) = table
+        .entry("variables")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+    else {
+        return;
+    };
+    stored.retain(|name, _| variables.contains_key(name));
+    for (name, text) in variables {
+        stored[name.as_str()] = value(text.as_str());
+    }
 }
 
 /// Reads one macro, skipping an entry with nothing to press or to send.
@@ -387,6 +431,7 @@ mod tests {
                 qth: "TOKYO".to_owned(),
             },
             macros: default_macros(),
+            custom_variables: BTreeMap::from([("grid".to_owned(), "PM95".to_owned())]),
         };
         Config::load(path.clone()).0.save(&wanted);
 
@@ -467,5 +512,87 @@ mod tests {
         let (_, settings) = Config::load(path);
         assert_eq!(settings.shift_hz, 425.0);
         assert_eq!(settings.baud, 75.0);
+    }
+
+    /// Editing the file by hand is how macros are written, so the fields they
+    /// read have to survive being written and read back.
+    #[test]
+    fn operator_fields_survive_a_round_trip() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        let wanted = Settings {
+            custom_variables: BTreeMap::from([
+                ("grid".to_owned(), "PM95UQ".to_owned()),
+                ("club".to_owned(), "JARL".to_owned()),
+            ]),
+            ..Settings::default()
+        };
+        Config::load(path.clone()).0.save(&wanted);
+
+        let (_, read_back) = Config::load(path);
+        assert_eq!(read_back.custom_variables, wanted.custom_variables);
+    }
+
+    /// A name no macro could ever name is dropped rather than carried around
+    /// unreachable, the way every other unusable value in the file is.
+    #[test]
+    fn an_unusable_field_name_is_dropped() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        fs::write(
+            &path,
+            "[variables]
+grid = \"PM95UQ\"
+\"my grid\" = \"NO\"
+",
+        )
+        .unwrap();
+
+        let (_, settings) = Config::load(path);
+
+        assert_eq!(settings.custom_variables.len(), 1);
+        assert_eq!(settings.custom_variables["grid"], "PM95UQ");
+    }
+
+    /// A field struck out in the window has to leave the file too.
+    #[test]
+    fn a_removed_field_leaves_the_file() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        let mut settings = Settings {
+            custom_variables: BTreeMap::from([
+                ("grid".to_owned(), "PM95UQ".to_owned()),
+                ("club".to_owned(), "JARL".to_owned()),
+            ]),
+            ..Settings::default()
+        };
+        let (mut config, _) = Config::load(path.clone());
+        config.save(&settings);
+
+        settings.custom_variables.remove("club");
+        config.save(&settings);
+
+        let (_, read_back) = Config::load(path.clone());
+        assert_eq!(read_back.custom_variables.len(), 1);
+        assert!(!fs::read_to_string(&path).unwrap().contains("JARL"));
+    }
+
+    /// With nothing in it the table goes altogether, rather than an empty
+    /// heading being left behind in the operator's file.
+    #[test]
+    fn no_fields_leaves_no_table() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        let mut settings = Settings {
+            custom_variables: BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]),
+            ..Settings::default()
+        };
+        let (mut config, _) = Config::load(path.clone());
+        config.save(&settings);
+
+        settings.custom_variables.clear();
+        config.save(&settings);
+
+        assert!(!fs::read_to_string(&path).unwrap().contains("variables"));
     }
 }

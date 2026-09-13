@@ -220,7 +220,7 @@ fn locale_items(app: &App) -> Vec<Item> {
 /// Returns whether the application was asked to close.
 pub fn apply(app: &mut App, action: Action) -> bool {
     match action {
-        Action::ShowStation => app.station_dialog_open = true,
+        Action::ShowStation => app.open_station(),
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),

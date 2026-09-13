@@ -4,7 +4,7 @@
 //! draws. Keeping the two apart is what lets the whole of the state be driven
 //! from a test without a window.
 
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use grayline_audio::Playback;
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
@@ -17,7 +17,7 @@ use grayline_shell::{
 
 use crate::{
     app::{
-        macros::{Contact, Macro, Station, expand},
+        macros::{Contact, Macro, MacroContext, Station, expand, valid_variable_name},
         transmit::{Sending, Transmit},
     },
     error::AppError,
@@ -84,8 +84,17 @@ pub struct App {
     pub contact: Contact,
     /// The buttons under the message field.
     pub macros: Vec<Macro>,
+    /// The operator's own fields, reached from a macro as `${custom.<name>}`.
+    pub custom_variables: BTreeMap<String, String>,
     /// Whether the window naming this station is open.
     pub station_dialog_open: bool,
+    /// The rows the window is editing.
+    ///
+    /// Edited apart from `custom_variables` because a name is half typed for
+    /// as long as it takes to type it, and a half-typed name is a different
+    /// field: the rows are taken up once they are usable, and an unusable one
+    /// stays on screen to be corrected rather than disappearing.
+    pub variables_draft: Vec<(String, String)>,
 
     /// The last thing worth telling the operator, shown on the status bar.
     pub notice: Option<String>,
@@ -169,7 +178,9 @@ impl App {
             station: settings.station.clone(),
             contact: Contact::default(),
             macros: settings.macros.clone(),
+            custom_variables: settings.custom_variables.clone(),
             station_dialog_open: false,
+            variables_draft: Vec::new(),
             notice: None,
             session,
             paths,
@@ -322,6 +333,7 @@ impl App {
             tx_level: self.tx_level,
             station: self.station.clone(),
             macros: self.macros.clone(),
+            custom_variables: self.custom_variables.clone(),
         }
         .clamped()
     }
@@ -427,6 +439,34 @@ impl App {
         crate::ui::input::first_unsendable(&self.transmit.draft)
     }
 
+    /// Opens the window naming this station, with its fields loaded.
+    pub fn open_station(&mut self) {
+        self.variables_draft = self
+            .custom_variables
+            .iter()
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
+        self.station_dialog_open = true;
+    }
+
+    pub fn add_custom_variable(&mut self) {
+        self.variables_draft.push((String::new(), String::new()));
+    }
+
+    /// Takes the edited rows as the fields the macros may read.
+    ///
+    /// A row whose name no `${...}` expression could hold is kept in the
+    /// window to be corrected but left out of what the macros see, so a name
+    /// still being typed never briefly becomes a field of its own.
+    pub fn commit_custom_variables(&mut self) {
+        self.custom_variables = self
+            .variables_draft
+            .iter()
+            .filter(|(name, _)| valid_variable_name(name))
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
+    }
+
     /// Writes a macro out with this station's and the contact's details in it.
     ///
     /// Filled in when the button is pressed rather than when the message is
@@ -434,11 +474,15 @@ impl App {
     /// what is about to go out can still be read and edited.
     pub fn expand_macro(&self, index: usize) -> Option<String> {
         let template = self.macros.get(index)?;
+        let now = jiff::Zoned::now();
         Some(crate::ui::input::normalize(&expand(
             &template.text,
-            &self.station,
-            &self.contact,
-            &jiff::Zoned::now(),
+            &MacroContext {
+                station: &self.station,
+                contact: &self.contact,
+                custom: &self.custom_variables,
+                now: &now,
+            },
         )))
     }
 

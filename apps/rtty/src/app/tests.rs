@@ -473,3 +473,59 @@ fn a_message_that_cannot_be_started_is_given_back() {
     assert_eq!(app.transmit.draft, "FIRST\nSECOND");
     assert!(app.notice.is_some());
 }
+
+/// A name still being typed is not a field yet: it stays on screen to be
+/// finished rather than briefly becoming one of its own.
+#[test]
+fn only_usable_rows_become_fields_the_macros_can_read() {
+    let mut app = App::headless();
+    app.open_station();
+    app.add_custom_variable();
+    app.add_custom_variable();
+    app.variables_draft[0] = ("grid".to_owned(), "PM95UQ".to_owned());
+    app.variables_draft[1] = ("2bad".to_owned(), "NO".to_owned());
+
+    app.commit_custom_variables();
+
+    assert_eq!(app.custom_variables.len(), 1);
+    assert_eq!(app.custom_variables["grid"], "PM95UQ");
+    // The unusable row is still there to be corrected.
+    assert_eq!(app.variables_draft.len(), 2);
+}
+
+/// The window edits a copy, so what it is given back is what was already
+/// stored rather than an empty list.
+#[test]
+fn opening_the_window_loads_the_fields_that_are_stored() {
+    let mut app = App::headless();
+    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+
+    app.open_station();
+
+    assert!(app.station_dialog_open);
+    assert_eq!(app.variables_draft, [("grid".to_owned(), "PM95UQ".to_owned())]);
+}
+
+/// A field the operator added is what their own macros are written from.
+#[test]
+fn a_macro_reads_the_fields_the_operator_added() {
+    let mut app = App::headless();
+    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.macros = vec![crate::app::macros::Macro {
+        label: "GRID".to_owned(),
+        text: "MY GRID IS ${custom.grid}".to_owned(),
+        send: false,
+    }];
+
+    assert_eq!(app.expand_macro(0).as_deref(), Some("MY GRID IS PM95UQ"));
+}
+
+#[test]
+fn the_operator_fields_are_stored_and_read_back() {
+    let mut app = App::headless();
+    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+
+    let settings = app.settings();
+
+    assert_eq!(settings.custom_variables["grid"], "PM95UQ");
+}

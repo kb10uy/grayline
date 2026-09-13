@@ -255,3 +255,29 @@ fn the_settings_menu_names_the_station_window() {
         "the station window is not on any menu"
     );
 }
+
+/// The operator's own fields are edited in the same window their station is,
+/// which is what the Settings menu opens.
+#[rstest]
+#[case(Locale::En)]
+#[case(Locale::Ja)]
+fn the_extra_fields_are_edited_in_the_station_window(#[case] locale: Locale) {
+    let mut app = App::headless();
+    app.select_locale(locale);
+    app.custom_variables = std::collections::BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    let i18n = I18n::new(locale, &crate::locales::CATALOG);
+
+    menu::apply(&mut app, menu::Action::ShowStation);
+    let harness = render(&mut app);
+
+    harness.get_by_label(&i18n.text("custom-title"));
+    harness.get_by_label(&i18n.text("custom-add"));
+    // Both halves of the stored row are there to be edited. A text field
+    // reports its value on more than one node, so the query is by count.
+    for value in ["grid", "PM95UQ"] {
+        assert!(
+            harness.query_all_by_value(value).next().is_some(),
+            "{value} is not in the window"
+        );
+    }
+}

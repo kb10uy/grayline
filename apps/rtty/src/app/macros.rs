@@ -12,6 +12,12 @@ use std::collections::BTreeMap;
 
 use jiff::Zoned;
 
+/// The prefix the operator's own names are reached through.
+///
+/// Kept apart from the built-in names so that adding one here later cannot
+/// take a name an operator was already using out from under their macros.
+pub const CUSTOM_PREFIX: &str = "custom";
+
 /// What stands in for a name that was never asked for.
 ///
 /// The original's own fallback: a message that greets somebody by name should
@@ -68,6 +74,33 @@ impl Contact {
     }
 }
 
+/// Whether `name` is a name a `${...}` expression could hold.
+///
+/// Deliberately the same rule as `grayline_sstv_template::valid_variable_name`,
+/// written out again rather than shared: that crate is the SSTV template
+/// engine, and a character class is a cheaper thing to repeat than a
+/// dependency on one application's renderer is to carry into another.
+pub fn valid_variable_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.split('.').all(|segment| {
+            let mut characters = segment.chars();
+            characters
+                .next()
+                .is_some_and(|character| character.is_ascii_alphabetic() || character == '_')
+                && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+        })
+}
+
+/// Everything a macro is written from, at the moment it is written.
+#[derive(Clone, Copy, Debug)]
+pub struct MacroContext<'a> {
+    pub station: &'a Station,
+    pub contact: &'a Contact,
+    /// The operator's own fields, reached as `${custom.<name>}`.
+    pub custom: &'a BTreeMap<String, String>,
+    pub now: &'a Zoned,
+}
+
 /// One button, and the message behind it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Macro {
@@ -122,8 +155,8 @@ pub fn default_macros() -> Vec<Macro> {
 /// button held, which is where a mistake in a macro should stop. For the same
 /// reason there is nothing to escape a literal `${` into: it could not have
 /// been sent either way.
-pub fn expand(template: &str, station: &Station, contact: &Contact, now: &Zoned) -> String {
-    let values = values(station, contact, now);
+pub fn expand(template: &str, context: &MacroContext<'_>) -> String {
+    let values = values(context);
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(start) = rest.find("${") {
@@ -147,10 +180,17 @@ pub fn expand(template: &str, station: &Station, contact: &Contact, now: &Zoned)
 /// Every name a macro may use, and what it stands for right now.
 ///
 /// Ordered so that listing them for the operator lists them the same way
-/// every time.
-pub fn values(station: &Station, contact: &Contact, now: &Zoned) -> BTreeMap<&'static str, String> {
+/// every time. The operator's own fields are folded in under the prefix, so
+/// one of them can never quietly shadow a built-in name.
+pub fn values(context: &MacroContext<'_>) -> BTreeMap<String, String> {
+    let MacroContext {
+        station,
+        contact,
+        custom,
+        now,
+    } = context;
     let utc = now.with_time_zone(jiff::tz::TimeZone::UTC);
-    BTreeMap::from([
+    let mut values: BTreeMap<String, String> = [
         ("station.callsign", station.callsign.clone()),
         ("station.name", station.name.clone()),
         ("station.qth", station.qth.clone()),
@@ -162,7 +202,14 @@ pub fn values(station: &Station, contact: &Contact, now: &Zoned) -> BTreeMap<&'s
         ("date.utc", utc.strftime("%Y-%m-%d").to_string()),
         ("time.utc", utc.strftime("%H%M").to_string()),
         ("greeting", greeting(now).to_owned()),
-    ])
+    ]
+    .into_iter()
+    .map(|(name, value)| (name.to_owned(), value))
+    .collect();
+    for (name, value) in custom.iter() {
+        values.insert(format!("{CUSTOM_PREFIX}.{name}"), value.clone());
+    }
+    values
 }
 
 fn or_else(value: &str, fallback: &str) -> String {
@@ -218,13 +265,29 @@ mod tests {
             .expect("a valid instant")
     }
 
+    fn no_custom() -> BTreeMap<String, String> {
+        BTreeMap::new()
+    }
+
+    fn context<'a>(
+        station: &'a Station,
+        contact: &'a Contact,
+        custom: &'a BTreeMap<String, String>,
+        now: &'a Zoned,
+    ) -> MacroContext<'a> {
+        MacroContext {
+            station,
+            contact,
+            custom,
+            now,
+        }
+    }
+
     #[test]
     fn a_macro_is_written_from_the_station_and_the_contact() {
         let expanded = expand(
             "${contact.callsign} DE ${station.callsign} UR ${contact.rst.sent}",
-            &station(),
-            &contact(),
-            &at(9),
+            &context(&station(), &contact(), &no_custom(), &at(9)),
         );
         assert_eq!(expanded, "JA1ZZZ DE JL1HIS UR 579");
     }
@@ -234,7 +297,13 @@ mod tests {
     fn an_unknown_name_falls_back_to_the_customary_one() {
         let mut contact = contact();
         contact.name.clear();
-        assert_eq!(expand("HI ${contact.name}", &station(), &contact, &at(9)), "HI OM");
+        assert_eq!(
+            expand(
+                "HI ${contact.name}",
+                &context(&station(), &contact, &no_custom(), &at(9))
+            ),
+            "HI OM"
+        );
     }
 
     #[test]
@@ -242,7 +311,10 @@ mod tests {
         let mut contact = contact();
         contact.rst_sent.clear();
         assert_eq!(
-            expand("RST ${contact.rst.sent}", &station(), &contact, &at(9)),
+            expand(
+                "RST ${contact.rst.sent}",
+                &context(&station(), &contact, &no_custom(), &at(9))
+            ),
             "RST 599"
         );
     }
@@ -253,7 +325,13 @@ mod tests {
     #[test]
     fn an_unset_callsign_expands_to_nothing() {
         let contact = Contact::default();
-        assert_eq!(expand("[${contact.callsign}]", &station(), &contact, &at(9)), "[]");
+        assert_eq!(
+            expand(
+                "[${contact.callsign}]",
+                &context(&station(), &contact, &no_custom(), &at(9))
+            ),
+            "[]"
+        );
     }
 
     /// A misspelled name survives into the field, where the braces it carries
@@ -261,7 +339,10 @@ mod tests {
     /// operator can see it.
     #[test]
     fn an_unknown_name_is_left_where_it_was_written() {
-        let expanded = expand("DE ${station.kallsign}", &station(), &contact(), &at(9));
+        let expanded = expand(
+            "DE ${station.kallsign}",
+            &context(&station(), &contact(), &no_custom(), &at(9)),
+        );
         assert_eq!(expanded, "DE ${station.kallsign}");
         assert_eq!(crate::ui::input::first_unsendable(&expanded), Some('{'));
     }
@@ -271,24 +352,28 @@ mod tests {
     #[test]
     fn an_unclosed_name_is_left_as_it_stands() {
         assert_eq!(
-            expand("DE ${station.callsign and more", &station(), &contact(), &at(9)),
+            expand(
+                "DE ${station.callsign and more",
+                &context(&station(), &contact(), &no_custom(), &at(9))
+            ),
             "DE ${station.callsign and more"
         );
     }
 
     #[test]
     fn text_with_no_names_in_it_is_unchanged() {
-        assert_eq!(expand("RYRYRY", &station(), &contact(), &at(9)), "RYRYRY");
-        assert_eq!(expand("", &station(), &contact(), &at(9)), "");
+        assert_eq!(
+            expand("RYRYRY", &context(&station(), &contact(), &no_custom(), &at(9))),
+            "RYRYRY"
+        );
+        assert_eq!(expand("", &context(&station(), &contact(), &no_custom(), &at(9))), "");
     }
 
     #[test]
     fn names_are_filled_in_wherever_they_appear() {
         let expanded = expand(
             "${station.callsign} ${station.callsign} ${station.callsign}",
-            &station(),
-            &contact(),
-            &at(9),
+            &context(&station(), &contact(), &no_custom(), &at(9)),
         );
         assert_eq!(expanded, "JL1HIS JL1HIS JL1HIS");
     }
@@ -301,7 +386,10 @@ mod tests {
     #[case(18, "GE")]
     #[case(23, "GE")]
     fn the_greeting_follows_the_time_of_day(#[case] hour: i8, #[case] expected: &str) {
-        assert_eq!(expand("${greeting}", &station(), &contact(), &at(hour)), expected);
+        assert_eq!(
+            expand("${greeting}", &context(&station(), &contact(), &no_custom(), &at(hour))),
+            expected
+        );
     }
 
     /// The date and the time are the ones a contact is logged by, so they are
@@ -312,8 +400,14 @@ mod tests {
             .at(1, 5, 0, 0)
             .in_tz("Asia/Tokyo")
             .expect("a valid instant");
-        assert_eq!(expand("${date.utc}", &station(), &contact(), &now), "2026-09-12");
-        assert_eq!(expand("${time.utc}", &station(), &contact(), &now), "1605");
+        assert_eq!(
+            expand("${date.utc}", &context(&station(), &contact(), &no_custom(), &now)),
+            "2026-09-12"
+        );
+        assert_eq!(
+            expand("${time.utc}", &context(&station(), &contact(), &no_custom(), &now)),
+            "1605"
+        );
     }
 
     /// Every macro that ships has to be sendable once it is filled in, or the
@@ -321,7 +415,7 @@ mod tests {
     #[test]
     fn the_macros_that_ship_are_sendable_once_they_are_written() {
         for shipped in default_macros() {
-            let expanded = expand(&shipped.text, &station(), &contact(), &at(9));
+            let expanded = expand(&shipped.text, &context(&station(), &contact(), &no_custom(), &at(9)));
             assert_eq!(
                 crate::ui::input::first_unsendable(&expanded),
                 None,
@@ -336,7 +430,10 @@ mod tests {
     #[test]
     fn the_macros_that_ship_are_sendable_before_anything_is_filled_in() {
         for shipped in default_macros() {
-            let expanded = expand(&shipped.text, &Station::default(), &Contact::default(), &at(9));
+            let expanded = expand(
+                &shipped.text,
+                &context(&Station::default(), &Contact::default(), &no_custom(), &at(9)),
+            );
             assert_eq!(
                 crate::ui::input::first_unsendable(&expanded),
                 None,
@@ -350,10 +447,10 @@ mod tests {
     /// or the documentation written from it would name one that does nothing.
     #[test]
     fn every_name_in_the_table_is_a_name_that_expands() {
-        for name in values(&station(), &contact(), &at(9)).into_keys() {
+        for name in values(&context(&station(), &contact(), &no_custom(), &at(9))).into_keys() {
             let written = format!("${{{name}}}");
             assert_ne!(
-                expand(&written, &station(), &contact(), &at(9)),
+                expand(&written, &context(&station(), &contact(), &no_custom(), &at(9))),
                 written,
                 "{name} is in the table but not filled in"
             );
@@ -366,5 +463,55 @@ mod tests {
         contact.clear();
         assert!(contact.is_empty());
         assert_eq!(contact.rst_sent, DEFAULT_RST);
+    }
+
+    /// A field the operator invented is reached under the prefix, so their
+    /// own names and the built-in ones cannot collide.
+    #[test]
+    fn an_operator_field_is_reached_through_the_prefix() {
+        let custom = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+        let expanded = expand(
+            "QTH ${station.qth} GRID ${custom.grid}",
+            &context(&station(), &contact(), &custom, &at(9)),
+        );
+        assert_eq!(expanded, "QTH TOKYO GRID PM95UQ");
+    }
+
+    /// A field named after a built-in one is still reached under the prefix,
+    /// so it cannot take that name out from under a macro already using it.
+    #[test]
+    fn an_operator_field_cannot_shadow_a_built_in_name() {
+        let custom = BTreeMap::from([("station.callsign".to_owned(), "WRONG".to_owned())]);
+        let expanded = expand(
+            "${station.callsign} ${custom.station.callsign}",
+            &context(&station(), &contact(), &custom, &at(9)),
+        );
+        assert_eq!(expanded, "JL1HIS WRONG");
+    }
+
+    #[test]
+    fn a_field_that_was_never_named_is_left_where_it_was_written() {
+        let expanded = expand(
+            "GRID ${custom.grid}",
+            &context(&station(), &contact(), &no_custom(), &at(9)),
+        );
+        assert_eq!(expanded, "GRID ${custom.grid}");
+    }
+
+    #[rstest]
+    #[case("grid", true)]
+    #[case("my_grid", true)]
+    #[case("_grid", true)]
+    #[case("grid2", true)]
+    #[case("club.name", true)]
+    #[case("", false)]
+    #[case("2grid", false)]
+    #[case("my grid", false)]
+    #[case("my-grid", false)]
+    #[case("grid.", false)]
+    #[case(".grid", false)]
+    #[case("グリッド", false)]
+    fn a_field_name_is_one_an_expression_could_hold(#[case] name: &str, #[case] expected: bool) {
+        assert_eq!(valid_variable_name(name), expected);
     }
 }

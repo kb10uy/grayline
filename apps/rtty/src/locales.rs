@@ -60,6 +60,17 @@ mod tests {
         assert_eq!(formatted, "48000 Hz");
     }
 
+    /// The note tells the operator how to write a field into a macro, so the
+    /// braces it shows have to survive Fluent's own use of them.
+    #[rstest]
+    #[case(Locale::En)]
+    #[case(Locale::Ja)]
+    fn the_extra_field_note_shows_the_syntax_it_describes(#[case] locale: Locale) {
+        let note = I18n::new(locale, &CATALOG).text("custom-note");
+        assert!(note.contains("${"), "{note}");
+        assert!(note.contains("}"), "{note}");
+    }
+
     #[test]
     fn missing_keys_fall_back_to_the_key() {
         assert_eq!(I18n::new(Locale::En, &CATALOG).text("no-such-key"), "no-such-key");

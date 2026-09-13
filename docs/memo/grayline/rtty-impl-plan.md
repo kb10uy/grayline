@@ -89,6 +89,25 @@ everything on the panel is worked at every exchange. The window runs the same
 keyboard filter the message field does, since what is typed into it reaches
 the air through the macros that read it.
 
+The same window carries **the fields the operator invents**, which the SSTV
+application keeps in a second dialog of its own. One window here rather than
+two, because the RTTY list is short and everything in it is the same kind of
+thing: something this station says about itself that a macro signs with. A
+field is named and given a value in two columns with a row per field, reached
+from a macro as `${custom.<name>}`. The prefix is what keeps the operator's
+names and the built-in ones apart, so a name added to the built-in set later
+cannot take one out from under a macro already using it.
+
+A name is taken up when the field is left rather than on every keystroke,
+because half a name is a different field; a name no `${...}` expression could
+hold is drawn in the fault colour and kept out of what the macros see, but left
+on screen to be corrected. The name never leaves the configuration, so it does
+not run the keyboard filter; the value does, because it goes on the air through
+whichever macro names it. Storage is a `[variables]` table whose keys are
+assigned rather than rewritten, so a comment written beside one by hand
+survives a save that did not touch it, and an unusable key in a hand-edited
+file is dropped the way every other unusable value is.
+
 Panel claim order, which egui makes load-bearing, is: status bar at the bottom,
 then the right panel so it runs the full height above the status bar, then the
 transmit panel at the bottom of what is left, and finally the central panel,
