@@ -18,6 +18,7 @@ output-device = 出力デバイス
 
 section-tuning = 同調
 section-squelch = スケルチ
+section-transmit = 送信操作
 
 label-mark = マーク
 label-shift = シフト
@@ -56,6 +57,7 @@ error-wav = 録音を読み込めませんでした
 label-on-air = 送信中
 label-queued = 送信待ち
 label-level = 出力
+label-templates = 定型文
 
 action-send = 送信
 action-stop = 中止
@@ -65,6 +67,7 @@ status-remaining = 残り { $seconds } 秒
 hint-draft = ここに本文を入力します。Enter で改行、Ctrl+Enter で送信します。
 hint-stop = 送信を中止し、送り終えていない部分を本文に戻します
 hint-drop-queued = この本文を送信待ちから外します
+hint-templates = templates.toml に登録した定型文を本文に書き込みます。先頭 9 件は Ctrl+F1〜Ctrl+F9 でも選べます。
 hint-unsendable = { $character } はボドー符号にありません。取り除いてから送信してください。
 
 error-no-output = 出力デバイスが選択されていません

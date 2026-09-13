@@ -171,6 +171,87 @@ fn the_macro_buttons_are_the_ones_the_configuration_names() {
     harness.get_by_label("SIGN");
 }
 
+/// Putting the station on the air is done from the panel beside the text
+/// rather than from under the message, so that a press cannot land among the
+/// macros the operator is typing between.
+#[test]
+fn sending_is_done_from_the_panel_beside_the_text() {
+    let mut app = App::headless();
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+
+    let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+
+    let panel = egui::PanelState::load(&harness.ctx, Id::new("side-panel"))
+        .expect("the side panel is drawn")
+        .outer_rect;
+    for control in ["action-send", "action-stop", "label-level"] {
+        let rect = harness.get_by_label(&i18n.text(control)).rect();
+        assert!(panel.contains_rect(rect), "{control} is not in the side panel");
+    }
+}
+
+/// The set messages are listed beside the buttons, in every locale, because
+/// the list is drawn from a file the operator writes in their own language.
+#[rstest]
+#[case(Locale::En)]
+#[case(Locale::Ja)]
+fn the_set_messages_are_listed_beside_the_buttons(#[case] locale: Locale) {
+    let mut app = App::headless();
+    app.select_locale(locale);
+    let i18n = I18n::new(locale, &crate::locales::CATALOG);
+
+    let harness = render(&mut app);
+
+    // A list reports what it is showing as its value rather than its label,
+    // the way every other one in the window does.
+    assert!(
+        harness
+            .query_all_by_value(&i18n.text("label-templates"))
+            .next()
+            .is_some(),
+        "the set messages are not listed"
+    );
+}
+
+/// The row is drawn for whichever of the two lists has something in it, so a
+/// station that has emptied one still reaches the other.
+#[test]
+fn the_list_is_drawn_even_where_there_are_no_buttons() {
+    let mut app = App::headless();
+    app.macros.clear();
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+
+    let harness = render(&mut app);
+
+    assert!(
+        harness
+            .query_all_by_value(&i18n.text("label-templates"))
+            .next()
+            .is_some(),
+        "the set messages are not listed"
+    );
+}
+
+/// A station that has emptied both files gets no row at all rather than an
+/// empty one.
+#[test]
+fn a_station_with_neither_draws_no_row() {
+    let mut app = App::headless();
+    app.macros.clear();
+    app.templates.clear();
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+
+    let harness = render(&mut app);
+
+    assert!(
+        harness
+            .query_all_by_value(&i18n.text("label-templates"))
+            .next()
+            .is_none()
+    );
+    harness.get_by_label(&i18n.text("action-send"));
+}
+
 /// A station with no macros at all draws no button row rather than an empty
 /// one, and everything else still lays out.
 #[test]
@@ -264,6 +345,26 @@ fn the_stack_coming_and_going_leaves_the_identifiers_under_it_alone() {
         }
         let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
         format!("{:?}", harness.get_by_label(printed).accesskit_node().id())
+    };
+    assert_eq!(identifier(false), identifier(true));
+}
+
+/// The same on the status bar, where a fault turning up on the left must
+/// leave the reading on the right — which has not moved — as the widget it
+/// already was.
+#[test]
+fn a_fault_leaves_the_reading_beside_it_alone() {
+    use egui_kittest::kittest::NodeT as _;
+
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+    let reading = i18n.text("status-no-audio");
+    let identifier = |noticed: bool| {
+        let mut app = App::headless();
+        if noticed {
+            app.notice = Some("A NOTICE".to_owned());
+        }
+        let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+        format!("{:?}", harness.get_by_label(&reading).accesskit_node().id())
     };
     assert_eq!(identifier(false), identifier(true));
 }

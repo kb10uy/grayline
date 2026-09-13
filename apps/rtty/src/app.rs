@@ -17,13 +17,14 @@ use grayline_shell::{
 
 use crate::{
     app::{
-        macros::{Contact, Macro, MacroContext, Station, expand, valid_variable_name},
+        macros::{Contact, Macro, MacroContext, Station, Template, expand, valid_variable_name},
         transmit::{Sending, Transmit},
     },
     error::AppError,
     locales::CATALOG,
     storage::{
         config::{Config, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
+        library,
         paths::{AppPaths, Folder},
     },
     ui::scrollback::Scrollback,
@@ -47,6 +48,16 @@ pub const MARK_STEP_HZ: f64 = 5.0;
 
 /// One second of playback queue at the preferred rate.
 const PLAYBACK_CAPACITY_SAMPLES: usize = 48_000;
+
+/// The two lists of messages, as their files were read.
+///
+/// Passed in together rather than read here, because the application is also
+/// built for tests that touch no disk at all.
+#[derive(Default)]
+struct Library {
+    macros: Vec<Macro>,
+    templates: Vec<Template>,
+}
 
 /// Everything the application is, other than the pixels on screen.
 pub struct App {
@@ -84,6 +95,9 @@ pub struct App {
     pub contact: Contact,
     /// The buttons under the message field.
     pub macros: Vec<Macro>,
+    /// The set messages listed beside the buttons, in the order they are
+    /// offered.
+    pub templates: Vec<Template>,
     /// The operator's own fields, reached from a macro as `${custom.<name>}`.
     pub custom_variables: BTreeMap<String, String>,
     /// Whether the window naming this station is open.
@@ -123,6 +137,8 @@ pub struct App {
 impl App {
     pub fn new(paths: AppPaths, waker: Waker) -> Self {
         let (config, settings) = Config::load(paths.config_file().to_path_buf());
+        let macros = library::load_macros(&paths.macros_file());
+        let templates = library::load_templates(&paths.templates_file());
         let common = CommonConfig::discover();
         let audio = AudioState::new(
             settings.device.as_deref(),
@@ -135,6 +151,7 @@ impl App {
             paths,
             config,
             &settings,
+            Library { macros, templates },
             common,
             grayline_shell::platform::host(),
         );
@@ -153,6 +170,7 @@ impl App {
         paths: AppPaths,
         config: Config,
         settings: &Settings,
+        library: Library,
         common: CommonConfig,
         platform: Box<dyn Platform>,
     ) -> Self {
@@ -177,7 +195,8 @@ impl App {
             transmit: Transmit::default(),
             station: settings.station.clone(),
             contact: Contact::default(),
-            macros: settings.macros.clone(),
+            macros: library.macros,
+            templates: library.templates,
             custom_variables: settings.custom_variables.clone(),
             station_dialog_open: false,
             variables_draft: Vec::new(),
@@ -209,6 +228,10 @@ impl App {
             AppPaths::from_roots(scratch.join("config"), scratch.join("state")),
             Config::detached(),
             &settings,
+            Library {
+                macros: crate::app::macros::default_macros(),
+                templates: crate::app::macros::default_templates(),
+            },
             CommonConfig::detached(),
             platform,
         )
@@ -332,7 +355,6 @@ impl App {
             tx_unshift_on_space: self.tx_unshift_on_space,
             tx_level: self.tx_level,
             station: self.station.clone(),
-            macros: self.macros.clone(),
             custom_variables: self.custom_variables.clone(),
         }
         .clamped()
@@ -473,22 +495,28 @@ impl App {
     /// keyed, so the time it names is the time the operator wrote it and so
     /// what is about to go out can still be read and edited.
     pub fn expand_macro(&self, index: usize) -> Option<Result<String, AppError>> {
-        let template = self.macros.get(index)?;
+        Some(self.written(&self.macros.get(index)?.text))
+    }
+
+    /// The same, for one of the set messages listed beside the buttons.
+    pub fn expand_template(&self, index: usize) -> Option<Result<String, AppError>> {
+        Some(self.written(&self.templates.get(index)?.text))
+    }
+
+    /// Fills a message's names in from the station, the contact, and the clock.
+    fn written(&self, text: &str) -> Result<String, AppError> {
         let now = jiff::Zoned::now();
-        let written = expand(
-            &template.text,
+        expand(
+            text,
             &MacroContext {
                 station: &self.station,
                 contact: &self.contact,
                 custom: &self.custom_variables,
                 now: &now,
             },
-        );
-        Some(
-            written
-                .map(|text| crate::ui::input::normalize(&text))
-                .map_err(AppError::from),
         )
+        .map(|text| crate::ui::input::normalize(&text))
+        .map_err(AppError::from)
     }
 
     /// Presses a macro button.
@@ -519,6 +547,33 @@ impl App {
             self.transmit.queue(text.trim_end_matches(['\r', '\n']).to_owned());
             return None;
         }
+        Some(self.write_into_draft(&text, insert_at))
+    }
+
+    /// Picks one of the set messages out of the list beside the buttons.
+    ///
+    /// It replaces the draft rather than joining it, which is the difference
+    /// between the two lists: a macro is pressed to add a line to what is
+    /// being written, while one of these is picked because it is the whole of
+    /// what is about to be said. Never sent, though — it lands in the field to
+    /// be read once more, and edited if the moment has moved on.
+    ///
+    /// Returns where the caret should end up, which is the end of it.
+    pub fn apply_template(&mut self, index: usize) -> Option<usize> {
+        let text = match self.expand_template(index)? {
+            Ok(text) => text,
+            Err(error) => {
+                self.report(&error);
+                return None;
+            }
+        };
+        self.transmit.draft = text;
+        Some(self.transmit.draft.chars().count())
+    }
+
+    /// Writes `text` into the draft at `insert_at`, and says where that left
+    /// the caret.
+    fn write_into_draft(&mut self, text: &str, insert_at: usize) -> usize {
         let at = insert_at.min(self.transmit.draft.chars().count());
         let byte = self
             .transmit
@@ -526,8 +581,8 @@ impl App {
             .char_indices()
             .nth(at)
             .map_or(self.transmit.draft.len(), |(index, _)| index);
-        self.transmit.draft.insert_str(byte, &text);
-        Some(at + text.chars().count())
+        self.transmit.draft.insert_str(byte, text);
+        at + text.chars().count()
     }
 
     /// Takes the callsign of the station being worked from the received text.

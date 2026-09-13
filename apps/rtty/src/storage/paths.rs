@@ -13,6 +13,14 @@ use crate::identity::APP_DIRECTORY;
 /// The settings file, named here because a test writes one directly.
 pub const CONFIG_FILE: &str = "config.toml";
 
+/// The buttons under the message field, and the list beside them.
+///
+/// Beside the settings rather than in them: they are written by hand and
+/// never by the application, and one file each is what makes them findable
+/// in the directory the File menu opens.
+pub const MACRO_FILE: &str = "macros.toml";
+pub const TEMPLATE_FILE: &str = "templates.toml";
+
 /// The rolling log the application writes under its state directory.
 const LOG_FILE: &str = "grayline-rtty.log";
 
@@ -90,6 +98,14 @@ impl AppPaths {
 
     pub fn config_dir(&self) -> &Path {
         self.config_file.parent().unwrap_or(&self.config_file)
+    }
+
+    pub fn macros_file(&self) -> PathBuf {
+        self.config_dir().join(MACRO_FILE)
+    }
+
+    pub fn templates_file(&self) -> PathBuf {
+        self.config_dir().join(TEMPLATE_FILE)
     }
 
     /// Returns the directory `folder` names.

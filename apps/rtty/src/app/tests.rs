@@ -227,6 +227,7 @@ fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
         AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
         Config::detached(),
         &settings,
+        Library::default(),
         CommonConfig::load(shared.clone()),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
@@ -428,6 +429,62 @@ fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
     }];
 
     assert_eq!(app.expand_macro(0).unwrap().unwrap(), "CQ DE JL1HIS\n");
+}
+
+/// A set message replaces the draft rather than joining it: it is picked
+/// because it is the whole of what is about to be said.
+#[test]
+fn a_set_message_takes_the_draft_over() {
+    let mut app = App::headless();
+    app.station.callsign = "JL1HIS".to_owned();
+    app.templates = vec![crate::app::macros::Template {
+        name: "BK".to_owned(),
+        text: "BK DE ${station.callsign} BK".to_owned(),
+    }];
+    app.transmit.draft = "HALF WRITTEN".to_owned();
+
+    let caret = app.apply_template(0);
+
+    assert_eq!(app.transmit.draft, "BK DE JL1HIS BK");
+    assert_eq!(caret, Some(15));
+}
+
+/// Never sent, whatever it says: it is picked to be read once more against
+/// what is already in the field.
+#[test]
+fn a_set_message_is_written_rather_than_sent() {
+    let mut app = App::headless();
+    app.templates = vec![crate::app::macros::Template {
+        name: "RY".to_owned(),
+        text: "RYRY".to_owned(),
+    }];
+
+    app.apply_template(0);
+
+    assert_eq!(app.transmit.draft, "RYRY");
+    assert_eq!(app.transmit.queued().len(), 0);
+}
+
+/// One naming something this station cannot fill in is reported rather than
+/// written into the field half finished, which is what a macro does.
+#[test]
+fn a_set_message_that_cannot_be_written_is_reported() {
+    let mut app = App::headless();
+    app.templates = vec![crate::app::macros::Template {
+        name: "CLUB".to_owned(),
+        text: "CLUB ${custom.club}".to_owned(),
+    }];
+
+    assert_eq!(app.apply_template(0), None);
+    assert!(app.transmit.draft.is_empty());
+    assert!(app.notice.is_some());
+}
+
+#[test]
+fn a_set_message_that_is_not_there_does_nothing() {
+    let mut app = App::headless();
+    assert!(app.expand_template(99).is_none());
+    assert_eq!(app.apply_template(99), None);
 }
 
 #[test]

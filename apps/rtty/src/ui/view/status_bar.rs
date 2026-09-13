@@ -16,22 +16,31 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
     };
 
     ui.horizontal(|ui| {
-        if snapshot.dropped_samples > 0 {
-            let dropped = app.i18n.text_with(
-                "status-dropped",
-                &[("samples", number(snapshot.dropped_samples as u32))],
-            );
-            ui.label(RichText::new(dropped).size(LABEL).color(ERROR_COLOR));
-        }
-        for error in [app.audio.error.as_ref(), snapshot.error.as_ref()]
-            .into_iter()
-            .flatten()
-        {
-            ui.label(RichText::new(error.to_string()).size(LABEL).color(ERROR_COLOR));
-        }
-        if let Some(notice) = app.notice.as_deref() {
-            ui.label(RichText::new(notice.to_owned()).size(LABEL));
-        }
+        // The faults are drawn inside one scope of their own rather than
+        // straight into the row. egui hands identifiers out by position, so a
+        // fault turning up on the left would otherwise renumber the reading on
+        // the right, which has not moved: it would lose what the window knew
+        // about it, and a debug build draws a red frame around a widget it
+        // catches changing identity. A scope takes one place in the row
+        // whether it draws three labels or none.
+        ui.scope(|ui| {
+            if snapshot.dropped_samples > 0 {
+                let dropped = app.i18n.text_with(
+                    "status-dropped",
+                    &[("samples", number(snapshot.dropped_samples as u32))],
+                );
+                ui.label(RichText::new(dropped).size(LABEL).color(ERROR_COLOR));
+            }
+            for error in [app.audio.error.as_ref(), snapshot.error.as_ref()]
+                .into_iter()
+                .flatten()
+            {
+                ui.label(RichText::new(error.to_string()).size(LABEL).color(ERROR_COLOR));
+            }
+            if let Some(notice) = app.notice.as_deref() {
+                ui.label(RichText::new(notice.to_owned()).size(LABEL));
+            }
+        });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.label(RichText::new(audio).size(LABEL));
         });

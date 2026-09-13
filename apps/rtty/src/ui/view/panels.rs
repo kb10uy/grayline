@@ -2,9 +2,15 @@
 
 use super::*;
 
+use grayline_shell::i18n::{number, owned};
+
 use crate::{
     app::MARK_STEP_HZ,
-    storage::config::{BAUD_RATES, MAXIMUM_MARK_HZ, MAXIMUM_SQUELCH, MINIMUM_MARK_HZ, MINIMUM_SQUELCH, SHIFTS_HZ},
+    storage::config::{
+        BAUD_RATES, MAXIMUM_MARK_HZ, MAXIMUM_SQUELCH, MAXIMUM_TX_LEVEL, MINIMUM_MARK_HZ, MINIMUM_SQUELCH,
+        MINIMUM_TX_LEVEL, SHIFTS_HZ,
+    },
+    ui::scrollback::sent_color,
 };
 
 pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
@@ -17,6 +23,9 @@ pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
         ui.add_space(12.0);
         let squelch_title = app.i18n.text("section-squelch");
         section(ui, &squelch_title, |ui| squelch_panel(ui, app));
+        ui.add_space(12.0);
+        let transmit_title = app.i18n.text("section-transmit");
+        section(ui, &transmit_title, |ui| transmit_controls(ui, app));
         ui.add_space(12.0);
         let contact_title = app.i18n.text("section-contact");
         section(ui, &contact_title, |ui| contact_panel(ui, app));
@@ -143,6 +152,79 @@ fn squelch_panel(ui: &mut Ui, app: &mut App) {
 
     if changed {
         app.push_settings();
+    }
+}
+
+/// Putting the message on the air, stopping it, and how hard it is driven.
+///
+/// Beside the message rather than under it, where SSTV keeps the same two
+/// controls: the button that puts the station on the air is one press away
+/// from the macros if it stands among them, and the level belongs with the
+/// other settings that decide what leaves the sound card.
+fn transmit_controls(ui: &mut Ui, app: &mut App) {
+    let send_label = app.i18n.text("action-send");
+    let stop_label = app.i18n.text("action-stop");
+    let can_send = app.can_send();
+    let refused = app.unsendable_character();
+    let busy = app.transmit.is_busy();
+    let gap = ui.spacing().item_spacing.x;
+    let height = ui.spacing().interact_size.y;
+    let width = (ui.available_width() - gap) / 2.0;
+
+    let mut sending = false;
+    let mut stopping = false;
+    ui.horizontal(|ui| {
+        let button = egui::Button::new(RichText::new(send_label).size(SMALL));
+        let response = ui
+            .add_enabled_ui(can_send, |ui| ui.add_sized([width, height], button))
+            .inner;
+        sending = response.clicked();
+        if let Some(character) = refused {
+            response.on_hover_text(
+                app.i18n
+                    .text_with("hint-unsendable", &[("character", owned(character.to_string()))]),
+            );
+        } else if app.audio.output_device.is_none() {
+            response.on_hover_text(app.i18n.text("error-no-output"));
+        }
+
+        let stop = egui::Button::new(RichText::new(stop_label).size(SMALL));
+        stopping = ui
+            .add_enabled_ui(busy, |ui| ui.add_sized([width, height], stop))
+            .inner
+            .on_hover_text(app.i18n.text("hint-stop"))
+            .clicked();
+    });
+
+    ui.add_space(4.0);
+    let level_label = app.i18n.text("label-level");
+    ui.horizontal(|ui| {
+        field_label(ui, &level_label);
+        // The slider is given the rest of the row the way every other field in
+        // the panel is, rather than the fixed width a slider asks for.
+        ui.spacing_mut().slider_width = ui.available_width();
+        ui.add(
+            egui::Slider::new(&mut app.tx_level, MINIMUM_TX_LEVEL..=MAXIMUM_TX_LEVEL)
+                .show_value(false)
+                .max_decimals(2),
+        );
+    });
+
+    // Last in the section, because it comes and goes with the transmission:
+    // egui hands identifiers out by position, and anything drawn after it
+    // would be renumbered every time a message started or ended.
+    if let Some(remaining) = app.transmission_remaining() {
+        let left = app
+            .i18n
+            .text_with("status-remaining", &[("seconds", number(remaining.as_secs() as u32))]);
+        ui.label(RichText::new(left).size(LABEL).color(sent_color(ui.visuals())));
+    }
+
+    if sending {
+        app.send_draft();
+    }
+    if stopping {
+        app.abort_transmission();
     }
 }
 

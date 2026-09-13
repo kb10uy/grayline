@@ -6,11 +6,8 @@
 
 use super::*;
 
-use grayline_shell::i18n::{number, owned};
-
 use crate::{
     app::transmit::SentProgress,
-    storage::config::{MAXIMUM_TX_LEVEL, MINIMUM_TX_LEVEL},
     ui::{input, scrollback::sent_color},
 };
 
@@ -64,6 +61,13 @@ pub fn draft_id() -> Id {
     Id::new("transmit-draft")
 }
 
+/// How wide the list of set messages is, in points.
+///
+/// Wide enough for a name and the arrow, and no wider: it stands in the row
+/// of buttons, and a list that took the width of its longest entry would move
+/// the buttons every time one was added to the file.
+const TEMPLATE_LIST_WIDTH: f32 = 96.0;
+
 /// The function keys the macro buttons answer to, in order.
 const FUNCTION_KEYS: [egui::Key; 12] = [
     egui::Key::F1,
@@ -80,13 +84,16 @@ const FUNCTION_KEYS: [egui::Key; 12] = [
     egui::Key::F12,
 ];
 
-/// Draws the whole transmit area.
+/// Draws the whole transmit area: the field, and the buttons and list that
+/// write into it.
+///
+/// Putting it on the air is not here but in the panel beside the text, where
+/// SSTV keeps the same control.
 pub(super) fn transmit_panel(ui: &mut Ui, app: &mut App) {
     ui.add_space(2.0);
     draft(ui, app);
     macro_buttons(ui, app);
     ui.add_space(2.0);
-    controls(ui, app);
 }
 
 /// Whether anything is on the air or waiting behind it.
@@ -152,14 +159,15 @@ fn stack_label(ui: &mut Ui, label: RichText, drop_hint: Option<&str>) -> bool {
     dropped
 }
 
-/// The macro buttons, and the function keys that press them.
+/// The row under the field: the macro buttons, the list of set messages
+/// beside them, and the keys that reach both.
 ///
 /// A press writes the message into the field at the caret rather than sending
 /// it, so what is about to go out can be read and edited first; a macro marked
-/// to send in the configuration is the exception, and goes out as a message of
-/// its own rather than joining whatever is half written.
+/// to send in `macros.toml` is the exception, and goes out as a message of its
+/// own rather than joining whatever is half written.
 fn macro_buttons(ui: &mut Ui, app: &mut App) {
-    if app.macros.is_empty() {
+    if app.macros.is_empty() && app.templates.is_empty() {
         return;
     }
     let mut pressed = None;
@@ -182,6 +190,7 @@ fn macro_buttons(ui: &mut Ui, app: &mut App) {
             (template.label.clone(), shortcut)
         })
         .collect();
+    let mut picked = None;
     ui.horizontal_wrapped(|ui| {
         for (index, (label, shortcut)) in labels.iter().enumerate() {
             let button = egui::Button::new(RichText::new(label).size(SMALL));
@@ -193,25 +202,79 @@ fn macro_buttons(ui: &mut Ui, app: &mut App) {
                 pressed = Some(index);
             }
         }
+        picked = template_list(ui, app);
     });
 
     if let Some(index) = pressed {
-        press_macro(ui, app, index);
+        write_at_caret(ui, app, |app, caret| app.apply_macro(index, caret));
+    }
+    if let Some(index) = picked {
+        // The caret it was handed is ignored: a set message replaces the
+        // draft, and the caret lands at the end of what it wrote.
+        write_at_caret(ui, app, |app, _| app.apply_template(index));
     }
 }
 
-/// Writes a macro into the field at the caret, and leaves the caret after it.
-fn press_macro(ui: &Ui, app: &mut App, index: usize) {
+/// The set messages, listed beside the buttons.
+///
+/// A list rather than more buttons, which is where MMTTY puts the same thing:
+/// these are the messages said in the middle of a contact rather than the ones
+/// that open and close it, and there are more of them than a row of buttons
+/// could hold without becoming something to read instead of press.
+///
+/// Returns the one that was chosen.
+fn template_list(ui: &mut Ui, app: &App) -> Option<usize> {
+    if app.templates.is_empty() {
+        return None;
+    }
+    let mut picked = None;
+    // The first nine answer to the function keys the buttons use, held down
+    // with the modifier, as the original's own list does.
+    for (index, key) in FUNCTION_KEYS.iter().enumerate().take(app.templates.len().min(9)) {
+        let struck = ui.input_mut(|input| {
+            input.consume_key(egui::Modifiers::COMMAND, *key) || input.consume_key(egui::Modifiers::CTRL, *key)
+        });
+        if struck {
+            picked = Some(index);
+        }
+    }
+
+    let label = app.i18n.text("label-templates");
+    let hint = app.i18n.text("hint-templates");
+    ComboBox::from_id_salt("templates")
+        .selected_text(RichText::new(label).size(SMALL))
+        .width(TEMPLATE_LIST_WIDTH)
+        .show_ui(ui, |ui| {
+            for (index, template) in app.templates.iter().enumerate() {
+                let row = ui.selectable_label(false, RichText::new(&template.name).size(SMALL));
+                // What it will write, because a name is what the operator
+                // gave it rather than what it says.
+                if row.on_hover_text(one_line(&template.text)).clicked() {
+                    picked = Some(index);
+                }
+            }
+        })
+        .response
+        .on_hover_text(hint);
+    picked
+}
+
+/// Writes a message into the field at the caret, and leaves the caret after
+/// it.
+///
+/// `apply` is handed where the caret was and answers with where it should end
+/// up, or with nothing for a message that went out rather than being written.
+fn write_at_caret(ui: &Ui, app: &mut App, apply: impl FnOnce(&mut App, usize) -> Option<usize>) {
     let id = draft_id();
     let mut state = egui::TextEdit::load_state(ui.ctx(), id);
     let caret = state.as_ref().and_then(|state| state.cursor.char_range()).map_or_else(
         || app.transmit.draft.chars().count(),
         |range| range.primary.index.max(range.secondary.index).into(),
     );
-    let Some(after) = app.apply_macro(index, caret) else {
+    let Some(after) = apply(app, caret) else {
         return;
     };
-    // The caret lands after what was written, so a macro pressed mid-message
+    // The caret lands after what was written, so a message put in mid-sentence
     // leaves the operator where they would have typed next.
     if let Some(state) = state.as_mut() {
         state
@@ -402,64 +465,6 @@ fn draft(ui: &mut Ui, app: &mut App) {
     // only from the button: it is the key reached for when something is going
     // out that should not be.
     if app.transmit.is_busy() && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-        app.abort_transmission();
-    }
-}
-
-/// Send, stop, the level, and what is left to go.
-fn controls(ui: &mut Ui, app: &mut App) {
-    let send_label = app.i18n.text("action-send");
-    let stop_label = app.i18n.text("action-stop");
-    let level_label = app.i18n.text("label-level");
-    let can_send = app.can_send();
-    let refused = app.unsendable_character();
-    let busy = app.transmit.is_busy();
-    let height = ui.spacing().interact_size.y;
-
-    let mut sending = false;
-    let mut stopping = false;
-    ui.horizontal(|ui| {
-        let button = egui::Button::new(RichText::new(send_label).size(SMALL));
-        let response = ui
-            .add_enabled_ui(can_send, |ui| ui.add_sized([72.0, height], button))
-            .inner;
-        sending = response.clicked();
-        if let Some(character) = refused {
-            response.on_hover_text(
-                app.i18n
-                    .text_with("hint-unsendable", &[("character", owned(character.to_string()))]),
-            );
-        } else if app.audio.output_device.is_none() {
-            response.on_hover_text(app.i18n.text("error-no-output"));
-        }
-
-        let stop = egui::Button::new(RichText::new(stop_label).size(SMALL));
-        stopping = ui
-            .add_enabled_ui(busy, |ui| ui.add_sized([72.0, height], stop))
-            .inner
-            .on_hover_text(app.i18n.text("hint-stop"))
-            .clicked();
-
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if let Some(remaining) = app.transmission_remaining() {
-                let left = app
-                    .i18n
-                    .text_with("status-remaining", &[("seconds", number(remaining.as_secs() as u32))]);
-                ui.label(RichText::new(left).size(LABEL).color(sent_color(ui.visuals())));
-            }
-            ui.add(
-                egui::Slider::new(&mut app.tx_level, MINIMUM_TX_LEVEL..=MAXIMUM_TX_LEVEL)
-                    .show_value(false)
-                    .max_decimals(2),
-            );
-            ui.label(RichText::new(level_label).size(LABEL).weak());
-        });
-    });
-
-    if sending {
-        app.send_draft();
-    }
-    if stopping {
         app.abort_transmission();
     }
 }

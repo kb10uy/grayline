@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
 use grayline_shell::log;
-use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
+use toml_edit::{DocumentMut, Item, Table, value};
 
-use crate::app::macros::{Macro, Station, default_macros, valid_variable_name};
+use crate::app::macros::{Station, valid_variable_name};
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -63,8 +63,6 @@ pub struct Settings {
     pub tx_level: f64,
     /// Who this station is, for the macros that say so.
     pub station: Station,
-    /// The buttons under the message field, in the order they are drawn.
-    pub macros: Vec<Macro>,
     /// The operator's own fields, read from a macro as `${custom.<name>}`.
     pub custom_variables: BTreeMap<String, String>,
 }
@@ -98,7 +96,6 @@ impl Default for Settings {
             tx_unshift_on_space: true,
             tx_level: 0.95,
             station: Station::default(),
-            macros: default_macros(),
             custom_variables: BTreeMap::new(),
         }
     }
@@ -196,8 +193,7 @@ impl Config {
 
     /// Writes `settings` into the document and saves it.
     pub fn save(&mut self, settings: &Settings) {
-        let Some(path) = self.path.clone() else { return };
-        if self.read_only {
+        if self.path.is_none() || self.read_only {
             return;
         }
         let table = self.document.as_table_mut();
@@ -237,19 +233,15 @@ impl Config {
         // every save would reformat what the operator had written in it.
         store_custom_variables(table, &settings.custom_variables);
 
-        if !table.contains_key("macros") {
-            let mut macros = ArrayOfTables::new();
-            for shipped in &settings.macros {
-                let mut entry = Table::new();
-                entry["label"] = value(shipped.label.as_str());
-                entry["text"] = value(shipped.text.as_str());
-                entry["send"] = value(shipped.send);
-                macros.push(entry);
-            }
-            table["macros"] = Item::ArrayOfTables(macros);
-        }
+        self.write();
+    }
 
-        if let Err(error) = fs::write(&path, self.document.to_string()) {
+    fn write(&self) {
+        let Some(path) = self.path.as_ref() else { return };
+        if self.read_only {
+            return;
+        }
+        if let Err(error) = fs::write(path, self.document.to_string()) {
             log::note(&format!("could not save {}: {error}", path.display()));
         }
     }
@@ -315,9 +307,6 @@ fn read(document: &DocumentMut) -> Settings {
             grid: field("grid"),
         };
     }
-    if let Some(macros) = table.get("macros").and_then(Item::as_array_of_tables) {
-        settings.macros = macros.iter().filter_map(read_macro).collect();
-    }
     settings.custom_variables = read_custom_variables(table);
     settings.clamped()
 }
@@ -358,29 +347,6 @@ fn store_custom_variables(table: &mut Table, variables: &BTreeMap<String, String
     for (name, text) in variables {
         stored[name.as_str()] = value(text.as_str());
     }
-}
-
-/// Reads one macro, skipping an entry with nothing to press or to send.
-///
-/// A button with no text behind it would do nothing, and one with no label
-/// would be a button nobody could tell apart from the next; either is a
-/// half-written entry rather than a reason to start on no macros at all.
-fn read_macro(entry: &Table) -> Option<Macro> {
-    let field = |key: &str| entry.get(key).and_then(Item::as_value).and_then(|value| value.as_str());
-    let label = field("label")?;
-    let body = field("text")?;
-    if label.is_empty() || body.is_empty() {
-        return None;
-    }
-    Some(Macro {
-        label: label.to_owned(),
-        text: body.to_owned(),
-        send: entry
-            .get("send")
-            .and_then(Item::as_value)
-            .and_then(|value| value.as_bool())
-            .unwrap_or(false),
-    })
 }
 
 /// Reads a TOML number however it was written, ignoring one that is not
@@ -433,7 +399,6 @@ mod tests {
                 qth: "TOKYO".to_owned(),
                 grid: "PM95UQ".to_owned(),
             },
-            macros: default_macros(),
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95".to_owned())]),
         };
         Config::load(path.clone()).0.save(&wanted);

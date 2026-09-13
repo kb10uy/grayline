@@ -104,6 +104,21 @@ pub struct Macro {
     pub send: bool,
 }
 
+/// One entry of the list beside the buttons, and the message behind it.
+///
+/// MMTTY's drop list of set messages: what is said often enough to be kept,
+/// but not often enough to be worth one of the twelve keys. It is written
+/// into the field rather than sent — there is no switch for that here,
+/// because a message picked out of a list by name is picked to be read once
+/// more before it goes on the air.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Template {
+    /// What the list calls it.
+    pub name: String,
+    /// The message, before its names are filled in.
+    pub text: String,
+}
+
 /// The macros an operator starts with.
 ///
 /// A first-time station can call CQ, answer, and sign off without writing a
@@ -137,6 +152,31 @@ pub fn default_macros() -> Vec<Macro> {
             send: true,
         },
     ]
+}
+
+/// The set messages an operator starts with.
+///
+/// The questions and the answers a contact is actually made of, which is what
+/// MMTTY ships its own list with: the buttons carry the message that opens a
+/// contact, and these are what is said in the middle of one. Short, because
+/// what is picked out of a list is picked while the other station is waiting.
+pub fn default_templates() -> Vec<Template> {
+    [
+        ("AGN", "PSE AGN AGN"),
+        ("CALL?", "UR CALL PSE? AGN AGN"),
+        ("NAME?", "UR NAME PSE?"),
+        ("QTH?", "UR QTH PSE?"),
+        ("QRZ", "QRZ? DE ${station.callsign} K"),
+        ("QSL", "QSL ES TNX ${contact.name}"),
+        ("QRX", "PSE QRX A MOMENT"),
+        ("BK", "BK ${contact.callsign} DE ${station.callsign} BK"),
+    ]
+    .into_iter()
+    .map(|(name, text)| Template {
+        name: name.to_owned(),
+        text: text.to_owned(),
+    })
+    .collect()
 }
 
 /// Fills a macro's names in from the station, the contact, and the clock.
@@ -493,20 +533,43 @@ mod tests {
         }
     }
 
+    /// The same of the set messages: one picked out of the list in the middle
+    /// of a contact has to be sendable, or it is picked at the worst moment to
+    /// find out that it is not.
+    #[test]
+    fn the_set_messages_that_ship_are_sendable_once_they_are_written() {
+        for shipped in default_templates() {
+            let expanded = written(&shipped.text);
+            assert_eq!(
+                crate::ui::input::first_unsendable(&expanded),
+                None,
+                "{} expands to {expanded:?}",
+                shipped.name
+            );
+        }
+    }
+
     /// A station that has filled nothing in still gets text it could send,
     /// rather than a message that will not expand at all.
     #[test]
     fn the_macros_that_ship_are_sendable_before_anything_is_filled_in() {
         let empty = Station::default();
         let no_contact = Contact::default();
-        for shipped in default_macros() {
-            let expanded = expand(&shipped.text, &context(&empty, &no_contact, &no_custom(), &at(9)))
-                .unwrap_or_else(|error| panic!("{} does not expand: {error}", shipped.label));
+        let shipped_text = default_macros()
+            .into_iter()
+            .map(|shipped| (shipped.label, shipped.text))
+            .chain(
+                default_templates()
+                    .into_iter()
+                    .map(|shipped| (shipped.name, shipped.text)),
+            );
+        for (name, text) in shipped_text {
+            let expanded = expand(&text, &context(&empty, &no_contact, &no_custom(), &at(9)))
+                .unwrap_or_else(|error| panic!("{name} does not expand: {error}"));
             assert_eq!(
                 crate::ui::input::first_unsendable(&expanded),
                 None,
-                "{} expands to {expanded:?}",
-                shipped.label
+                "{name} expands to {expanded:?}"
             );
         }
     }

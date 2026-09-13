@@ -18,6 +18,7 @@ output-device = Output device
 
 section-tuning = Tuning
 section-squelch = Squelch
+section-transmit = Transmit
 
 label-mark = Mark
 label-shift = Shift
@@ -56,6 +57,7 @@ error-wav = The recording could not be read
 label-on-air = Sending
 label-queued = Queued
 label-level = Level
+label-templates = Templates
 
 action-send = Send
 action-stop = Stop
@@ -65,6 +67,7 @@ status-remaining = { $seconds } s left
 hint-draft = Write a message here. Enter starts a new line; Ctrl+Enter sends.
 hint-stop = Stop sending and put whatever did not go out back in the message
 hint-drop-queued = Drop this message from the queue
+hint-templates = Write one of the messages kept in templates.toml into the field. Ctrl+F1 to Ctrl+F9 pick the first nine.
 hint-unsendable = { $character } has no Baudot code. Remove it before sending.
 
 error-no-output = No output device is selected
