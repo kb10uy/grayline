@@ -187,11 +187,7 @@ fn a_station_with_no_macros_still_draws_the_panel() {
 #[test]
 fn the_message_on_the_air_and_the_queue_are_both_drawn() {
     let mut app = App::headless();
-    let text = "CQ CQ DE JL1HIS";
-    let schedule = grayline_rtty::TxSchedule::new(text, 48_000, &app.tx_config()).unwrap();
-    app.transmit
-        .begin(crate::app::transmit::Sending::new(text.to_owned(), schedule));
-    app.transmit.queue("SECOND MESSAGE".to_owned());
+    sending(&mut app);
     let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
 
     let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
@@ -199,6 +195,106 @@ fn the_message_on_the_air_and_the_queue_are_both_drawn() {
     harness.get_by_label(&i18n.text("label-on-air"));
     harness.get_by_label(&i18n.text("label-queued"));
     harness.get_by_label(&i18n.text("action-stop"));
+}
+
+/// The field is a fixed four rows: a long message scrolls inside it rather
+/// than growing the panel, so the buttons under it never move while an
+/// operator is typing between them.
+#[test]
+fn the_field_keeps_its_height_however_long_the_message_is() {
+    let height = |draft: &str| {
+        let mut app = App::headless();
+        app.transmit.draft = draft.to_owned();
+        let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+        let state = egui::PanelState::load(&harness.ctx, Id::new("transmit-panel"));
+        state.expect("the transmit panel is drawn").size().y
+    };
+    assert_eq!(
+        height("CQ"),
+        height(
+            &"RY RY DE JL1HIS
+"
+            .repeat(40)
+        )
+    );
+}
+
+/// What is on the air is a pane of its own above the field, so a message
+/// arriving in the queue takes its height from the text rather than pushing
+/// the field and its buttons down the window.
+#[test]
+fn the_stack_is_a_pane_of_its_own_and_leaves_the_field_where_it_was() {
+    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
+    let mut idle = App::headless();
+    let harness = render_sized(&mut idle, egui::vec2(1_100.0, 720.0));
+    assert!(harness.query_by_label(&i18n.text("label-on-air")).is_none());
+    assert!(egui::PanelState::load(&harness.ctx, Id::new("pending-panel")).is_none());
+    let quiet = egui::PanelState::load(&harness.ctx, Id::new("transmit-panel"))
+        .expect("the transmit panel is drawn")
+        .size()
+        .y;
+
+    let mut busy = App::headless();
+    sending(&mut busy);
+    let harness = render_sized(&mut busy, egui::vec2(1_100.0, 720.0));
+    assert!(egui::PanelState::load(&harness.ctx, Id::new("pending-panel")).is_some());
+    let keyed = egui::PanelState::load(&harness.ctx, Id::new("transmit-panel"))
+        .expect("the transmit panel is drawn")
+        .size()
+        .y;
+
+    assert_eq!(quiet, keyed);
+}
+
+/// egui hands out widget identifiers by position, so a pane that comes and
+/// goes renumbers everything claimed after it: the text pane would be built
+/// as a different widget every time a message was queued, losing what it had
+/// scrolled to and selected, and a debug build would draw a red frame around
+/// each widget it caught changing identity.
+#[test]
+fn the_stack_coming_and_going_leaves_the_identifiers_under_it_alone() {
+    use egui_kittest::kittest::NodeT as _;
+
+    let printed = "CQ DE JA1ZZZ K";
+    let identifier = |busy: bool| {
+        let mut app = App::headless();
+        app.columns[0].push_str(printed);
+        if busy {
+            sending(&mut app);
+        }
+        let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+        format!("{:?}", harness.get_by_label(printed).accesskit_node().id())
+    };
+    assert_eq!(identifier(false), identifier(true));
+}
+
+/// The stack is read down its left edge, so what is waiting starts where what
+/// is on the air starts however each row is introduced.
+///
+/// Both locales, because the column the labels sit in is a fixed width and
+/// the labels are not: a translation that outgrew it would push its own
+/// messages out of line.
+#[rstest]
+#[case(Locale::En)]
+#[case(Locale::Ja)]
+fn the_stack_lines_its_messages_up_on_one_left_edge(#[case] locale: Locale) {
+    let mut app = App::headless();
+    app.select_locale(locale);
+    sending(&mut app);
+    let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
+
+    let air = harness.get_by_label("CQ CQ DE JL1HIS").rect().left();
+    let waiting = harness.get_by_label("SECOND MESSAGE").rect().left();
+    assert!((air - waiting).abs() < 1.0, "{air} against {waiting}");
+}
+
+/// Puts a message on the air with another waiting behind it.
+fn sending(app: &mut App) {
+    let text = "CQ CQ DE JL1HIS";
+    let schedule = grayline_rtty::TxSchedule::new(text, 48_000, &app.tx_config()).unwrap();
+    app.transmit
+        .begin(crate::app::transmit::Sending::new(text.to_owned(), schedule));
+    app.transmit.queue("SECOND MESSAGE".to_owned());
 }
 
 /// What a station sent is printed with what it received, so an exchange reads

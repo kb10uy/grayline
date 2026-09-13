@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use egui::{Color32, Context, Event, FontSelection, Galley, Id, ImeEvent, TextFormat, Ui, text::LayoutJob};
+use egui::{Color32, Context, Event, FontId, Galley, Id, ImeEvent, TextFormat, Ui, text::LayoutJob};
 
 use grayline_rtty::code::Ita2Encoder;
 
@@ -97,16 +97,19 @@ pub fn sanitize(context: &Context, id: Id) {
 ///
 /// Built as one job of two formats rather than per character, so a message
 /// with nothing wrong in it is laid out as a single run.
-pub fn layout(ui: &Ui, text: &str, wrap_width: f32) -> Arc<Galley> {
+///
+/// The font is the caller's rather than the style's, because a field whose
+/// contents go on the air is monospaced: what is written is read back against
+/// the text the same message printed in the pane above it.
+pub fn layout(ui: &Ui, text: &str, font: &FontId, wrap_width: f32) -> Arc<Galley> {
     let mut job = LayoutJob::default();
-    let font = FontSelection::default().resolve(ui.style());
     let plain = TextFormat {
         font_id: font.clone(),
         color: ui.visuals().text_color(),
         ..TextFormat::default()
     };
     let refused = TextFormat {
-        font_id: font,
+        font_id: font.clone(),
         color: REFUSED_COLOR,
         underline: egui::Stroke::new(1.0, REFUSED_COLOR),
         ..TextFormat::default()

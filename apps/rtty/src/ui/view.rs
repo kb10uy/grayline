@@ -4,7 +4,8 @@
 //! The panels are claimed in the order egui makes load-bearing: the status bar
 //! first so it runs the full width, then the settings panel so it runs the
 //! full height above it, then the transmit area along the bottom of what is
-//! left, and the received text last, taking the rest.
+//! left, then what is on the air above that, and the received text last,
+//! taking the rest.
 
 use egui::{Align, Color32, ComboBox, Id, Layout, Panel, RichText, TextStyle, Ui};
 
@@ -27,7 +28,7 @@ mod transmit;
 use dialogs::station_dialog;
 use panels::side_panel;
 use status_bar::status_bar;
-use transmit::transmit_panel;
+use transmit::{has_pending, pending_panel, transmit_panel};
 
 /// Fixed and exact, for the reason recorded beside the SSTV application's own
 /// side panel: everything in it is laid out from the width it is given, and a
@@ -61,12 +62,27 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
         .exact_size(SIDE_PANEL_WIDTH)
         .show(ui, |ui| side_panel(ui, app));
     // Claimed after the side panel so the settings run the full height beside
-    // it, and before the central panel so the text takes what is left.
+    // it, and before the central panel so the text takes what is left. Its
+    // height is what it holds rather than what the operator dragged it to:
+    // the field inside is a fixed four rows, so the buttons under it are
+    // always in the same place.
     Panel::bottom(Id::new("transmit-panel"))
-        .resizable(true)
-        .default_size(transmit::DEFAULT_HEIGHT)
-        .min_size(transmit::MINIMUM_HEIGHT)
+        .resizable(false)
         .show(ui, |ui| transmit_panel(ui, app));
+    // Above the field, because it is claimed after it, and only while there is
+    // something on the air or waiting behind it.
+    if has_pending(app) {
+        Panel::bottom(Id::new("pending-panel"))
+            .resizable(false)
+            .show(ui, |ui| pending_panel(ui, app));
+    } else {
+        // A panel takes one of the identifiers egui hands out by position,
+        // so the text pane below would be built from different ones each
+        // time the pane came and went: it would lose what it had scrolled
+        // to and selected, and a debug build draws a red frame around every
+        // widget it caught changing identity.
+        ui.skip_ahead_auto_ids(1);
+    }
     let picked = egui::CentralPanel::default().show(ui, |ui| columns(ui, app)).inner;
     // A callsign is read off the line that printed it and worked from the
     // field beside it, so the way across is the one gesture that means "this
