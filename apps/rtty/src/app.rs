@@ -27,7 +27,7 @@ use crate::{
         library,
         paths::{AppPaths, Folder},
     },
-    ui::scrollback::Scrollback,
+    ui::{scope::Scope, scrollback::Scrollback},
     worker::{
         Waker,
         audio::{AudioState, TxState},
@@ -152,6 +152,13 @@ pub struct App {
     /// changing it asks nobody a second time.
     contact_requested: String,
 
+    /// The window the band and the two channels are drawn in.
+    ///
+    /// Held here rather than by the interface because it is a thing the
+    /// operator opened, not a thing a frame drew: it outlives any one of
+    /// them, and what it shows is fed to it from here.
+    pub scope: Scope,
+
     /// The last thing worth telling the operator, shown on the status bar.
     pub notice: Option<String>,
 
@@ -215,7 +222,7 @@ impl App {
     }
 
     fn from_parts(
-        audio: AudioState,
+        mut audio: AudioState,
         paths: AppPaths,
         Stored {
             config,
@@ -229,6 +236,11 @@ impl App {
     ) -> Self {
         let session = audio.session();
         let shared = common.settings();
+        // A window that was open when the application last closed is opened
+        // again, and the tap it is drawn from with it.
+        audio.set_scope(settings.scope);
+        let mut scope = Scope::default();
+        scope.set_open(settings.scope);
         Self {
             i18n: I18n::new(shared.locale, &CATALOG),
             audio,
@@ -260,6 +272,7 @@ impl App {
             contact_paths,
             contact_waker: waker,
             contact_requested: String::new(),
+            scope,
             notice: None,
             session,
             paths,
@@ -352,6 +365,9 @@ impl App {
                 column.push_str(&text);
             }
         }
+        // After the snapshot has been adopted, so that what the window draws
+        // is the block the text on screen was decoded from.
+        self.pump_scope();
         if let Some(error) = self.audio.snapshot().error.clone() {
             self.report(&error);
         }
@@ -372,6 +388,35 @@ impl App {
             self.activity = activity;
             self.platform.set_activity(activity);
         }
+    }
+
+    /// Feeds the scope window, and closes it when the operator did.
+    ///
+    /// Everything it draws is taken from the same snapshot the rest of the
+    /// interface reads, so the two cannot disagree about what is arriving.
+    fn pump_scope(&mut self) {
+        if self.scope.take_close_request() {
+            self.set_scope_open(false);
+        }
+        if !self.scope.is_open() {
+            return;
+        }
+        self.scope.describe(&self.i18n);
+        let tones = self.column(0).map_or_else(|| self.tones(), |column| column.tones);
+        self.scope.retune(tones);
+        if let Some(frame) = self.audio.take_scope_frame() {
+            self.scope.push(frame);
+        }
+    }
+
+    /// Opens or closes the scope window.
+    ///
+    /// The receiver is told as well as the window: what it costs to tap the
+    /// channels and transform the band is only worth paying while something
+    /// is drawing them.
+    pub fn set_scope_open(&mut self, open: bool) {
+        self.scope.set_open(open);
+        self.audio.set_scope(open);
     }
 
     /// Returns how long the interface may sleep for.
@@ -421,6 +466,7 @@ impl App {
             station: self.station.clone(),
             custom_variables: self.custom_variables.clone(),
             contact: self.contact_settings.clone(),
+            scope: self.scope.is_open(),
         }
         .clamped()
     }

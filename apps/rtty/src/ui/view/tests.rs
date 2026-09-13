@@ -118,6 +118,21 @@ fn the_header_readings_share_one_baseline() {
     assert_eq!(reading.height(), case.height());
 }
 
+/// The window is opened from the panel, which is where the operator is while
+/// they are tuning.
+#[test]
+fn the_panel_opens_the_scope() {
+    let mut app = App::headless();
+    let label = app.i18n.text("action-scope");
+    {
+        let mut harness = render(&mut app);
+        harness.get_by_label(&label).click();
+        harness.run();
+    }
+    assert!(app.scope.is_open());
+    assert!(app.audio.scope());
+}
+
 /// The panel is laid out from the width it is given, so a window too narrow
 /// for it still has to draw every control.
 #[test]

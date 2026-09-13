@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use grayline_rtty::ToneSet;
+use grayline_rtty::{ToneSet, rx::ChannelLevels};
 use grayline_shell::{
     common::{COMMON_FILE, DEFAULT_UI_SCALE},
     i18n::Locale,
@@ -37,6 +37,73 @@ impl Platform for RecordingPlatform {
         self.visited.lock().unwrap().push(url.to_owned());
         Ok(())
     }
+}
+
+/// The tap and the transform are only worth paying for while something is
+/// drawing them, so the receiver is told whenever the window opens or closes.
+#[test]
+fn opening_the_scope_taps_the_receiver() {
+    let mut app = App::headless();
+    assert!(!app.scope.is_open());
+    assert!(!app.audio.scope());
+
+    app.set_scope_open(true);
+    assert!(app.scope.is_open());
+    assert!(app.audio.scope());
+
+    app.set_scope_open(false);
+    assert!(!app.scope.is_open());
+    assert!(!app.audio.scope());
+}
+
+#[test]
+fn what_the_worker_tapped_reaches_the_window() {
+    use crate::worker::receive::{RxSnapshot, ScopeFrame};
+
+    let mut app = App::headless();
+    app.set_scope_open(true);
+    app.audio.seed_snapshot(RxSnapshot {
+        columns: vec![ColumnSnapshot {
+            tones: ToneSet::AFSK_170,
+            ..ColumnSnapshot::default()
+        }],
+        scope: Some(ScopeFrame {
+            points: vec![ChannelLevels { mark: 0.5, space: 0.1 }; 4],
+            sequence: 1,
+            ..ScopeFrame::default()
+        }),
+        ..RxSnapshot::default()
+    });
+
+    app.poll_workers();
+    assert_eq!(app.scope.drawn_points(), 4);
+    // Taken rather than read: a frame drawn twice would draw the same stretch
+    // of the trace twice.
+    app.poll_workers();
+    assert_eq!(app.scope.drawn_points(), 4);
+}
+
+/// The operator closes the window from its own frame, and the application is
+/// what stops the tap behind them.
+#[test]
+fn closing_the_window_from_its_own_frame_stops_the_tap() {
+    let mut app = App::headless();
+    app.set_scope_open(true);
+    app.scope.request_close();
+
+    app.poll_workers();
+    assert!(!app.scope.is_open());
+    assert!(!app.audio.scope());
+}
+
+/// An operator who works with the window open should not have to open it
+/// again every session.
+#[test]
+fn a_window_left_open_is_written_to_the_settings() {
+    let mut app = App::headless();
+    assert!(!app.settings().scope);
+    app.set_scope_open(true);
+    assert!(app.settings().scope);
 }
 
 #[test]

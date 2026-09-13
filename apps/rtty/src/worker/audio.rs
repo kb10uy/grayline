@@ -1,12 +1,14 @@
 use std::path::Path;
 
-use grayline_audio::{AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault};
+use grayline_audio::{
+    AudioHost, Capture, CaptureReader, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault,
+};
 
 use crate::{
     error::AppError,
     worker::{
         Waker,
-        receive::{RxSnapshot, RxWorker, WorkerSettings},
+        receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
         transmit::{TxSnapshot, TxWorker},
         wav::WavSource,
     },
@@ -37,6 +39,11 @@ pub struct AudioState {
     worker: Option<RxWorker>,
     snapshot: RxSnapshot,
     settings: WorkerSettings,
+    /// Whether the scope window is open.
+    ///
+    /// Kept here rather than only in the worker, because a device change
+    /// starts a new one and a window that is open stays open across it.
+    scope: bool,
     /// Counts the receive sessions this state has started.
     session: u64,
     waker: Waker,
@@ -86,6 +93,7 @@ impl AudioState {
             worker: None,
             snapshot: RxSnapshot::default(),
             settings,
+            scope: false,
             session: 0,
             waker,
         };
@@ -113,6 +121,7 @@ impl AudioState {
             worker: None,
             snapshot: RxSnapshot::default(),
             settings,
+            scope: false,
             session: 0,
             waker: Waker::default(),
         }
@@ -151,7 +160,7 @@ impl AudioState {
         let (source, reader) = WavSource::open(path, QUEUE_CAPACITY_SAMPLES)?;
         self.close();
         self.session += 1;
-        self.worker = Some(RxWorker::spawn(reader, self.settings, self.waker.clone()));
+        self.worker = Some(self.start(reader));
         self.file = Some(source);
         self.error = None;
         Ok(())
@@ -172,12 +181,19 @@ impl AudioState {
         self.session += 1;
         match self.host.open_capture(device, QUEUE_CAPACITY_SAMPLES) {
             Ok((capture, reader)) => {
-                self.worker = Some(RxWorker::spawn(reader, self.settings, self.waker.clone()));
+                self.worker = Some(self.start(reader));
                 self.capture = Some(capture);
                 self.error = None;
             }
             Err(error) => self.error = Some(error.into()),
         }
+    }
+
+    /// Starts a worker on `reader`, in the state the interface is in.
+    fn start(&self, reader: CaptureReader) -> RxWorker {
+        let worker = RxWorker::spawn(reader, self.settings, self.waker.clone());
+        worker.set_scope(self.scope);
+        worker
     }
 
     /// Adopts the newest worker snapshot.
@@ -201,6 +217,30 @@ impl AudioState {
         &self.snapshot
     }
 
+    /// Takes the scope frame the newest snapshot carried, if it carried one.
+    ///
+    /// Taken rather than read, for the reason the decoded text is: the
+    /// display appends the pairs it is given, and a frame handed over twice
+    /// would draw the same stretch of the trace twice.
+    pub fn take_scope_frame(&mut self) -> Option<ScopeFrame> {
+        self.snapshot.scope.take()
+    }
+
+    /// Opens or closes the tap the scope window is drawn from.
+    ///
+    /// Not part of [`set_settings`](Self::set_settings): the receiver is
+    /// built from its settings and would be rebuilt by a change to them,
+    /// which is not what opening a window should cost.
+    pub fn set_scope(&mut self, open: bool) {
+        if self.scope == open {
+            return;
+        }
+        self.scope = open;
+        if let Some(worker) = self.worker.as_ref() {
+            worker.set_scope(open);
+        }
+    }
+
     /// Puts a snapshot in place of one a worker would have published.
     ///
     /// Tests draw the readings the interface takes from a running receiver
@@ -220,6 +260,11 @@ impl AudioState {
         if let Some(worker) = self.worker.as_ref() {
             worker.settings(settings);
         }
+    }
+
+    #[cfg(test)]
+    pub const fn scope(&self) -> bool {
+        self.scope
     }
 
     #[cfg(test)]

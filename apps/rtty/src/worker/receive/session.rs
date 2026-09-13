@@ -5,11 +5,13 @@ use std::{
 };
 
 use grayline_audio::CaptureReader;
-use grayline_rtty::{ReceivePipeline, RxEvent, code::Case};
+use grayline_rtty::{ReceivePipeline, RxEvent, code::Case, rx::MonitorConfig};
 
 use crate::{
     error::AppError,
-    worker::receive::{ColumnSnapshot, Controls, DecodePath, Mailbox, RxSnapshot, WorkerSettings},
+    worker::receive::{
+        ColumnSnapshot, Controls, DecodePath, Mailbox, RxSnapshot, ScopeFrame, WorkerSettings, spectrum::Spectrum,
+    },
 };
 
 /// Samples taken from the capture queue in one read.
@@ -22,6 +24,25 @@ const IDLE_POLL: Duration = Duration::from_millis(2);
 /// readouts; it exists so a burst of queued audio cannot publish faster than
 /// the interface can draw.
 const PUBLISH_INTERVAL: Duration = Duration::from_millis(33);
+
+/// Channel pairs the monitor tap keeps per second, for the scope.
+///
+/// About ninety to a bit at 45.45 baud, which is more than the width of the
+/// picture they are drawn into. MMTTY interpolates its own channels up before
+/// drawing them (`docs/memo/mmtty/dsp.md`); these run at the capture rate, so
+/// the same resolution is had by throwing fewer of them away.
+const MONITOR_POINT_RATE_HZ: u32 = 4_000;
+
+/// About a second of pairs.
+///
+/// The tap drops its oldest when it fills, so this is how long the interface
+/// may look away for without the trace it comes back to having a gap in it.
+const MONITOR_CAPACITY: usize = 4_096;
+
+/// How many pairs are dropped for each one kept, at `sample_rate_hz`.
+fn monitor_decimation(sample_rate_hz: u32) -> usize {
+    sample_rate_hz.div_ceil(MONITOR_POINT_RATE_HZ).max(1) as usize
+}
 
 /// Decodes from `reader` until asked to stop.
 pub(super) fn run(mut reader: CaptureReader, mailbox: &Mailbox, stop: &AtomicBool, controls: &Controls) {
@@ -114,6 +135,15 @@ struct Session {
     columns: Vec<Column>,
     sample_rate_hz: u32,
     settings: WorkerSettings,
+    /// Whether the scope window is open, and what it is drawn from.
+    ///
+    /// Neither of these is part of the settings: the tap is a setting on a
+    /// pipeline that is already running, and the transform is this worker's
+    /// own rather than the receiver's.
+    scope: bool,
+    spectrum: Option<Spectrum>,
+    /// Counts the frames handed to the scope.
+    sequence: u64,
 }
 
 impl Session {
@@ -126,6 +156,9 @@ impl Session {
             columns,
             sample_rate_hz,
             settings,
+            scope: false,
+            spectrum: None,
+            sequence: 0,
         })
     }
 
@@ -144,11 +177,39 @@ impl Session {
             // The count is not reset: it says where in the capture stream a
             // failure happened, and the stream did not start over.
         }
+        // The rebuilt pipeline is a new one, and a tap is something a
+        // pipeline carries rather than something it is built from.
+        self.tap();
         Ok(())
+    }
+
+    /// Opens or closes the monitor tap, following the scope window.
+    ///
+    /// Only the first path is tapped: every column is fed the same audio, and
+    /// the scope is a picture of what is arriving rather than of what one
+    /// demodulator made of it.
+    fn tap(&mut self) {
+        let config = self.scope.then(|| MonitorConfig {
+            decimation: monitor_decimation(self.sample_rate_hz),
+            capacity: MONITOR_CAPACITY,
+        });
+        if let Some(column) = self.columns.first_mut() {
+            column.pipeline.set_monitor(config);
+        }
     }
 
     /// Acts on whatever the interface asked for since the last block.
     fn obey(&mut self, controls: &Controls) -> Option<AppError> {
+        let scope = controls.scope.load(Ordering::Relaxed);
+        if scope != self.scope {
+            self.scope = scope;
+            self.tap();
+            // A window that closed and opened again is watching what is
+            // arriving now, so the transform starts on what it hears from
+            // here rather than on what was in the buffer when it left.
+            self.spectrum = scope.then(|| Spectrum::new(self.sample_rate_hz)).flatten();
+        }
+
         let wanted = controls.settings();
         let reset = controls.reset.swap(false, Ordering::Relaxed);
         if wanted == self.settings && !reset {
@@ -159,6 +220,9 @@ impl Session {
     }
 
     fn process(&mut self, samples: &[f32]) -> Option<AppError> {
+        if let Some(spectrum) = self.spectrum.as_mut() {
+            spectrum.observe(samples);
+        }
         let mut failure = None;
         for column in &mut self.columns {
             let sample = column.processed;
@@ -179,8 +243,27 @@ impl Session {
         failure
     }
 
+    /// The pairs and the band the scope window draws, while one is open.
+    fn scope_frame(&mut self) -> Option<ScopeFrame> {
+        if !self.scope {
+            return None;
+        }
+        self.sequence += 1;
+        Some(ScopeFrame {
+            points: self
+                .columns
+                .first_mut()
+                .map(|column| column.pipeline.drain_monitor().collect())
+                .unwrap_or_default(),
+            spectrum: self.spectrum.as_mut().map(Spectrum::magnitudes).unwrap_or_default(),
+            bin_hz: self.spectrum.as_ref().map_or(0.0, Spectrum::bin_hz),
+            sequence: self.sequence,
+        })
+    }
+
     fn snapshot(&mut self, dropped_samples: u64, error: Option<AppError>) -> RxSnapshot {
         RxSnapshot {
+            scope: self.scope_frame(),
             columns: self
                 .columns
                 .iter_mut()
@@ -312,6 +395,99 @@ mod tests {
 
         assert!(session.obey(&controls).is_none());
         assert_eq!(session.columns[0].case, Case::default());
+    }
+
+    /// Nothing is tapped and nothing is transformed until a window is open,
+    /// because a display nobody is looking at is work nobody asked for.
+    #[test]
+    fn a_closed_scope_is_published_nothing() {
+        let mut session = Session::new(RATE, settings()).unwrap();
+        session.process(&transmission("RY"));
+        assert!(session.snapshot(0, None).scope.is_none());
+    }
+
+    #[test]
+    fn an_open_scope_is_given_the_pairs_the_comparator_compared() {
+        let controls = controls(settings());
+        controls.scope.store(true, Ordering::Relaxed);
+        let mut session = Session::new(RATE, settings()).unwrap();
+        assert!(session.obey(&controls).is_none());
+        session.process(&tone(ToneSet::AFSK_170.mark_hz, RATE as usize / 2));
+
+        let frame = session.snapshot(0, None).scope.expect("an open scope is fed");
+        assert!(!frame.points.is_empty());
+        // The second half, because the front end's filters settle over the
+        // first few milliseconds of any tone and read neither channel yet.
+        let settled = &frame.points[frame.points.len() / 2..];
+        assert!(
+            settled.iter().all(|pair| pair.mark > pair.space),
+            "the mark tone was the one playing"
+        );
+        assert!(!frame.spectrum.is_empty(), "half a second fills the transform");
+        assert!(frame.bin_hz > 0.0);
+    }
+
+    /// The frames are what tells the interface a picture is worth drawing, so
+    /// two of them must not look alike.
+    #[test]
+    fn every_frame_says_it_is_a_new_one() {
+        let controls = controls(settings());
+        controls.scope.store(true, Ordering::Relaxed);
+        let mut session = Session::new(RATE, settings()).unwrap();
+        session.obey(&controls);
+
+        let first = session.snapshot(0, None).scope.unwrap().sequence;
+        assert_eq!(session.snapshot(0, None).scope.unwrap().sequence, first + 1);
+    }
+
+    /// A settings change rebuilds every pipeline, and a pipeline is built
+    /// without a tap: the window would go blank for the rest of the reception.
+    #[test]
+    fn a_rebuilt_path_is_tapped_again() {
+        let controls = controls(settings());
+        controls.scope.store(true, Ordering::Relaxed);
+        let mut session = Session::new(RATE, settings()).unwrap();
+        session.obey(&controls);
+
+        controls.apply(WorkerSettings {
+            baud: 50.0,
+            ..settings()
+        });
+        assert!(session.obey(&controls).is_none());
+        session.process(&tone(ToneSet::AFSK_170.mark_hz, RATE as usize / 4));
+        assert!(!session.snapshot(0, None).scope.unwrap().points.is_empty());
+    }
+
+    #[test]
+    fn closing_the_scope_stops_the_tap() {
+        let controls = controls(settings());
+        controls.scope.store(true, Ordering::Relaxed);
+        let mut session = Session::new(RATE, settings()).unwrap();
+        session.obey(&controls);
+        session.process(&tone(ToneSet::AFSK_170.mark_hz, RATE as usize / 4));
+
+        controls.scope.store(false, Ordering::Relaxed);
+        assert!(session.obey(&controls).is_none());
+        assert!(session.snapshot(0, None).scope.is_none());
+        // And the reception it was watching is still the same one.
+        assert!(!session.columns[0].pipeline.tones().mark_hz.is_nan());
+    }
+
+    /// The tap is decimated by the caller, and every rate a device offers has
+    /// to land near the rate the picture is drawn at.
+    #[test]
+    fn the_tap_keeps_about_the_same_rate_whatever_the_device_runs_at() {
+        for rate in [8_000, 11_025, 22_050, 44_100, 48_000, 96_000] {
+            let kept = f64::from(rate) / monitor_decimation(rate) as f64;
+            assert!(
+                kept <= f64::from(MONITOR_POINT_RATE_HZ),
+                "{rate} Hz keeps {kept} pairs a second"
+            );
+            assert!(
+                kept >= f64::from(MONITOR_POINT_RATE_HZ) / 2.0,
+                "{rate} Hz keeps only {kept} pairs a second"
+            );
+        }
     }
 
     #[test]

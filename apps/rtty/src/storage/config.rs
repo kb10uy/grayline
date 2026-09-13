@@ -68,6 +68,12 @@ pub struct Settings {
     pub custom_variables: BTreeMap<String, String>,
     /// Where the contact directory looks a callsign up.
     pub contact: ContactSettings,
+    /// Whether the scope window was open.
+    ///
+    /// A display rather than a receiver setting, and remembered for the same
+    /// reason the device is: an operator who works with it open should not
+    /// have to open it again every session.
+    pub scope: bool,
 }
 
 /// Where the contact directory looks a callsign up.
@@ -151,6 +157,7 @@ impl Default for Settings {
             station: Station::default(),
             custom_variables: BTreeMap::new(),
             contact: ContactSettings::default(),
+            scope: false,
         }
     }
 }
@@ -269,6 +276,7 @@ impl Config {
         table["atc"] = value(settings.atc);
         table["tx_unshift_on_space"] = value(settings.tx_unshift_on_space);
         table["tx_level"] = value(settings.tx_level);
+        table["scope"] = value(settings.scope);
 
         let station = table
             .entry("station")
@@ -339,6 +347,7 @@ fn read(document: &DocumentMut) -> Settings {
         ("unshift_on_space", &mut settings.unshift_on_space),
         ("atc", &mut settings.atc),
         ("tx_unshift_on_space", &mut settings.tx_unshift_on_space),
+        ("scope", &mut settings.scope),
     ] {
         if let Some(flag) = get(key).and_then(|value| value.as_bool()) {
             *target = flag;
@@ -528,6 +537,7 @@ mod tests {
                 wavelog_url: "https://log.example/".to_owned(),
                 fields: vec!["!ja".to_owned(), "note".to_owned()],
             },
+            scope: true,
         };
         Config::load(path.clone()).0.save(&wanted);
 

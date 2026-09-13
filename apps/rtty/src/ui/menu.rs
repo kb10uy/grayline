@@ -36,6 +36,7 @@ pub enum Action {
     SelectDevice(String),
     SelectOutputDevice(String),
     SelectLocale(Locale),
+    ToggleScope,
     ToggleUnshiftOnSpace,
     ToggleAtc,
     ClearText,
@@ -87,6 +88,15 @@ pub fn model(app: &App) -> Vec<Menu> {
         Menu {
             label: text("menu-view"),
             items: vec![
+                // The one window the operator opens rather than works in, so
+                // it is named where windows are named and on the panel it is
+                // read beside.
+                Item::Check {
+                    label: text("action-scope"),
+                    checked: app.scope.is_open(),
+                    action: Action::ToggleScope,
+                },
+                Item::Separator,
                 Item::Command {
                     label: text("menu-zoom-in"),
                     action: Action::ZoomIn,
@@ -242,6 +252,10 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),
+        Action::ToggleScope => {
+            let open = app.scope.is_open();
+            app.set_scope_open(!open);
+        }
         Action::ToggleUnshiftOnSpace => {
             app.unshift_on_space = !app.unshift_on_space;
             app.push_settings();

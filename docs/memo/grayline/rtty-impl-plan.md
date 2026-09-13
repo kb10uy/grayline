@@ -8,17 +8,17 @@ is written down so the decisions survive between working sessions. The
 RTTY items listed under Planned Gaps in
 [grayline/architecture.md](../grayline/architecture.md).
 
-**Progress.** Steps 1, 2, 3, and 5 of the order below are implemented, so
-`apps/rtty` both receives and transmits: the skeleton, the receive worker and
-its session, the scrollback pane, the tuning and squelch panel, the transmit
-panel with its queue and macros, and the station and contact fields, together
-with the repository work step 2 drags with it. The contact directory is wired
-in as well, which the plan below never named; it is described under Macros and
-Templates and in [qso-directory.md](qso-directory.md). The scope window is
-written on a branch of its own and not yet merged here. Aligned save, the
-received-text history log, the rig frequency readout, and the release workflow
-are not written. Where the implementation departs from what is described
-below, the departure is recorded in the section it belongs to.
+**Progress.** Steps 1 through 5 of the order below are implemented, so
+`apps/rtty` receives, transmits, and can be watched: the skeleton, the receive
+worker and its session, the scrollback pane, the tuning and squelch panel, the
+scope window, the transmit panel with its queue and macros, and the station and
+contact fields, together with the repository work step 2 drags with it. The
+contact directory is wired in as well, which the plan below never named; it is
+described under Macros and Templates and in
+[qso-directory.md](qso-directory.md). Aligned save, the received-text history
+log, the rig frequency readout, and the release workflow are not written. Where
+the implementation departs from what is described below, the departure is
+recorded in the section it belongs to.
 
 Everything the core already offers is assumed rather than restated here:
 [grayline/rtty.md](../grayline/rtty.md) covers the crate and where it parts from
@@ -167,18 +167,56 @@ block rather than acting on a change flag.
 ## Scope Window
 
 A separate window rather than a panel: an egui 0.35 deferred viewport with the
-always-on-top flag, opened on demand from the right pane.
+always-on-top flag, opened from the panel beside the text or from the View
+menu, and remembered in the configuration, because an operator who works with
+it open should not have to open it every session. Deferred rather than
+immediate: the main window sleeps between the frames a reception gives it, and
+the two windows should not have to wake together. That is what the lock in
+`ui/scope.rs` is for — the callback egui runs is handed the state rather than
+the application — and the application fills that state once per frame from the
+same snapshot the rest of the interface reads, so the two cannot disagree
+about what is arriving.
 
 It shows two things. The band spectrum is computed application-side with the
-`grayline-dsp` FFT over raw PCM, using its own transform length — about 2048 —
-and its own frame-rate throttle of roughly 30 fps, deliberately independent of
-the pipeline's own analysis and of AFC, so that changing one does not silently
-change the other.
+`grayline-dsp` FFT over raw PCM, with its own transform length of 2048 and its
+own cadence, deliberately independent of the pipeline's own analysis and of
+AFC, so that changing one does not silently change the other. It is computed
+in the receive worker rather than in the interface, which departs from the
+plan and not from its reasons: the raw PCM is already there, the publish
+interval is the frame-rate throttle the plan asked for — one snapshot every
+33 ms — and a closed window then costs nothing whatever, because neither the
+transform nor the samples it reads exist while it is closed. Magnitudes are
+published to 4000 Hz, MMTTY's own wider display ceiling
+([../mmtty/dsp.md](../mmtty/dsp.md)), which is what a 3000 Hz mark and an
+850 Hz shift need; the decibel scale they are drawn on is the interface's.
 
-The XY scope is the one part that the core cannot supply today. It needs a
-monitor tap exposing the decimated mark and space resonator output pairs from
-`crates/rtty/src/rx/frontend.rs`, whose `FrontEndOutput` is `pub(crate)` today.
-This is one of only two core additions the application requires.
+The XY scope draws the monitor tap's channel pairs, the core addition listed
+below, which was written first. The tap is opened and closed through a control
+of the worker's own rather than through `WorkerSettings`, because a settings
+change rebuilds every pipeline and opening a window must not throw away the
+reception being watched — the same reason the core made it a setting rather
+than a construction argument. Only the first decode path is tapped, every
+column being fed the same audio, and the pairs are decimated to about four
+thousand a second, which is already more than the width of the picture. MMTTY
+interpolates its own channels up to get that resolution because it demodulates
+at half rate; this path does not decimate, so it throws pairs away instead
+([../grayline/rtty.md](rtty.md)).
+
+Two things the picture does that the plan did not say. The trace is scaled by
+the strongest pair on it, because a channel carries a rectified envelope whose
+height depends on how much of the band-pass the tones fill, and what is read
+off the picture is the shape rather than the level — the level is the meter
+beside the text. And the line where the two channels are equal is drawn under
+it, because that line is the comparator's own decision: a pair on the tones
+swings between the axes either side of it, and a mistuned one collapses onto
+it.
+
+Every frame carries a sequence number. Nothing on a scope is compared against
+a threshold — a trace that looks like the last one is still a new trace — so
+the number is what tells the interface, whose `Visible` comparison otherwise
+keeps it asleep through a band that has not moved, that there is a picture
+worth drawing. The window is then asked for a frame of its own rather than
+left polling for one.
 
 ## Transmit
 

@@ -425,6 +425,7 @@ grayline-wefax ----------+
 grayline-audio ----------+
 grayline-shell ----------+-> grayline-rtty-app
 grayline-rtty -----------+
+grayline-dsp ------------+
 ```
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this
@@ -648,8 +649,8 @@ implementations:
   FIR, PLL, and sliding-DFT discriminators, the center-sampling framing
   machine, the zero-crossing limiter AGC, the prefilter notch and LMS chain,
   6-to-8-bit pipelines, CW identification, and serial FSK keying.
-- The rest of `apps/rtty`, whose receive and transmit halves are implemented:
-  the scope window, the received-text history log, the aligned save, and the
+- The rest of `apps/rtty`, whose receive and transmit halves and scope window
+  are implemented: the received-text history log, the aligned save, and the
   rig frequency readout. The design is
   [rtty-impl-plan.md](rtty-impl-plan.md).
 

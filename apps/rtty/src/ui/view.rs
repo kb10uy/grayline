@@ -15,7 +15,7 @@ use crate::{
     app::{App, macros::valid_variable_name},
     ui::{
         menu::{self, Action, Menu},
-        scrollback,
+        scope, scrollback,
     },
     worker::{
         contact::ContactState,
@@ -104,6 +104,9 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     }
     station_dialog(ui, app);
     contact_dialog(ui, app);
+    // Shown after the window it is opened from, so that a frame which closed
+    // it does not open it again on its way out.
+    scope::window(ui.ctx(), &app.scope);
     activated
 }
 
