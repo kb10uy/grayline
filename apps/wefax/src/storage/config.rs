@@ -1,20 +1,16 @@
 use std::{fs, io, path::PathBuf};
 
-use grayline_shell::{i18n::Locale, log};
+use grayline_shell::log;
 use grayline_wefax::{Ioc, LinesPerMinute};
 use toml_edit::{DocumentMut, Item, value};
 
-/// The zoom the interface is laid out at.
-pub const DEFAULT_UI_SCALE: f32 = 1.0;
-/// Bounds on the zoom.
-pub const MINIMUM_UI_SCALE: f32 = 0.5;
-pub const MAXIMUM_UI_SCALE: f32 = 3.0;
-
 /// Everything the application remembers between sessions.
+///
+/// The language and the interface scale are not here: they are the same in
+/// every application of this family and are kept once, in
+/// `grayline_shell::common`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
-    pub locale: Locale,
-    pub ui_scale: f32,
     pub device: Option<String>,
     pub ioc: Ioc,
     pub lines_per_minute: LinesPerMinute,
@@ -30,8 +26,6 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            locale: Locale::default(),
-            ui_scale: DEFAULT_UI_SCALE,
             device: None,
             ioc: Ioc::Ioc576,
             lines_per_minute: LinesPerMinute::L120,
@@ -124,8 +118,6 @@ impl Config {
             return;
         }
         let table = self.document.as_table_mut();
-        table["language"] = value(settings.locale.tag());
-        table["ui_scale"] = value(f64::from(settings.ui_scale));
         match &settings.device {
             Some(device) => table["device"] = value(device.as_str()),
             None => {
@@ -158,14 +150,6 @@ fn read(document: &DocumentMut) -> Settings {
     let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
-    if let Some(tag) = get("language").and_then(|value| value.as_str())
-        && let Some(locale) = Locale::from_tag(tag)
-    {
-        settings.locale = locale;
-    }
-    if let Some(scale) = get("ui_scale").and_then(|value| value.as_float()) {
-        settings.ui_scale = (scale as f32).clamp(MINIMUM_UI_SCALE, MAXIMUM_UI_SCALE);
-    }
     if let Some(device) = get("device").and_then(|value| value.as_str()) {
         settings.device = Some(device.to_owned());
     }
@@ -212,7 +196,6 @@ mod tests {
 
         config.save(&settings);
         let written = fs::read_to_string(&path).unwrap();
-        assert!(written.contains("language = \"en\""));
         assert!(written.contains("ioc = 576"));
     }
 
@@ -221,8 +204,6 @@ mod tests {
         let root = TempDir::new();
         let path = root.path().join("config.toml");
         let wanted = Settings {
-            locale: Locale::Ja,
-            ui_scale: 1.25,
             device: Some("Line In".to_owned()),
             ioc: Ioc::Ioc288,
             lines_per_minute: LinesPerMinute::L240,
@@ -246,10 +227,10 @@ mod tests {
     fn saving_preserves_comments_and_unknown_keys() {
         let root = TempDir::new();
         let path = root.path().join("config.toml");
-        fs::write(&path, "# the station's own note\nunknown = 7\nlanguage = \"ja\"\n").unwrap();
+        fs::write(&path, "# the station's own note\nunknown = 7\ninverted = true\n").unwrap();
 
         let (mut config, settings) = Config::load(path.clone());
-        assert_eq!(settings.locale, Locale::Ja);
+        assert!(settings.inverted);
         config.save(&settings);
 
         let written = fs::read_to_string(&path).unwrap();
@@ -277,24 +258,11 @@ mod tests {
     fn unusable_values_fall_back_without_discarding_the_rest() {
         let root = TempDir::new();
         let path = root.path().join("config.toml");
-        fs::write(
-            &path,
-            "language = 7\nioc = 999\nlines_per_minute = 5\ninverted = true\n",
-        )
-        .unwrap();
+        fs::write(&path, "ioc = 999\nlines_per_minute = 5\ninverted = true\n").unwrap();
 
         let (_, settings) = Config::load(path);
-        assert_eq!(settings.locale, Locale::default());
         assert_eq!(settings.ioc, Ioc::Ioc576);
         assert_eq!(settings.lines_per_minute, LinesPerMinute::L120);
         assert!(settings.inverted);
-    }
-
-    #[test]
-    fn the_stored_zoom_is_bounded() {
-        let root = TempDir::new();
-        let path = root.path().join("config.toml");
-        fs::write(&path, "ui_scale = 99.0\n").unwrap();
-        assert_eq!(Config::load(path).1.ui_scale, MAXIMUM_UI_SCALE);
     }
 }

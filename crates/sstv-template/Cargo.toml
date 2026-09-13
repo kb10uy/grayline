@@ -11,6 +11,7 @@ jiff.workspace = true
 kdl.workspace = true
 resvg.workspace = true
 grayline-sstv = { path = "../sstv" }
+grayline-variables = { path = "../variables" }
 thiserror = { workspace = true, features = ["std"] }
 
 [dev-dependencies]

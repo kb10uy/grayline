@@ -1,0 +1,54 @@
+name: Release RTTY
+
+on:
+  push:
+    tags: ["rtty-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The existing tag to build, such as rtty-v0.1.0
+        required: true
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-app.yml
+    permissions:
+      contents: write
+    with:
+      app: rtty
+      title: Grayline RTTY
+      ref: ${{ inputs.tag || github.ref_name }}
+      templates: false
+      notes: |
+        Each download holds the `grayline-rtty` application, this project's
+        license, and the licenses of its dependencies as `licenses.html`. The
+        manual is on the web, at <https://grayline.jl1his.radio/rtty/>, which
+        the Help menu opens.
+
+        | Platform | Download |
+        | --- | --- |
+        | Windows x86_64 | `grayline-rtty-@VERSION@-x86_64-pc-windows-msvc.zip` |
+        | Linux x86_64 | `grayline-rtty-@VERSION@-x86_64-unknown-linux-gnu.tar.gz` |
+        | macOS Apple Silicon | `grayline-rtty-@VERSION@-aarch64-apple-darwin.dmg` |
+
+        The macOS disk image installs by dragging `GraylineRTTY.app` into
+        `Applications`. The bundle is ad-hoc signed rather than notarized,
+        so open the first launch from the context menu, or clear the
+        quarantine attribute:
+
+        ```text
+        xattr -dr com.apple.quarantine /Applications/GraylineRTTY.app
+        ```
+
+        The Linux archive carries `assets/grayline-rtty.desktop` and
+        `assets/icon.png`; installing both is what makes the window icon
+        appear.
+
+        Downloads can be checked against `SHA256SUMS`.

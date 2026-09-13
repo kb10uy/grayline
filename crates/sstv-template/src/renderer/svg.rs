@@ -1,11 +1,12 @@
 use std::{collections::HashMap, fmt::Write};
 
+use grayline_variables::interpolate;
+
 use crate::{
     RenderSize, TemplateError,
     renderer::{
         RenderContext,
         asset::{Resource, encode_received_image, validate_asset},
-        variable::interpolate,
     },
     scene::{
         Anchor, Clip, Color, Gradient, GradientKind, GroupLayer, ImageFit, ImageLayer, Layer, LayerSize, Length, Paint,

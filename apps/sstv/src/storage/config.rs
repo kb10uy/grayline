@@ -16,8 +16,6 @@ use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
-use grayline_shell::i18n::Locale;
-
 use crate::storage::history::HistoryFormat;
 
 /// The serial number a fresh log starts from.
@@ -46,17 +44,11 @@ impl Default for DspFlags {
 
 pub const DEFAULT_RX_MODE: Mode = Mode::Pd120;
 pub const DEFAULT_TX_MODE: Mode = Mode::Scottie2;
-pub const DEFAULT_UI_SCALE: f32 = 1.0;
 /// Transmit level a first run starts at.
 ///
 /// Full scale, because the modulator already produces normalized PCM and the
 /// operator's own output mixer is what the level is usually set against.
 pub const DEFAULT_TX_VOLUME: f32 = 1.0;
-/// How far the interface may be scaled.
-///
-/// A stored value is clamped to this, so a hand-edited file cannot shrink the
-/// interface past the point where the setting could be changed back.
-pub const UI_SCALE_RANGE: core::ops::RangeInclusive<f32> = 0.5..=3.0;
 /// How often the rig is asked what it is tuned to, in seconds.
 pub const DEFAULT_POLL_SECONDS: f32 = 1.0;
 /// How long the rig is given to settle between keying and the first sample.
@@ -82,9 +74,12 @@ pub const POLL_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=60.0;
 /// Selections that name something outside the configuration file, such as a
 /// capture device or a library file, are stored by name: the identifiers
 /// behind them are assigned per run and mean nothing to a later one.
+///
+/// The language and the interface scale are not here: they are the same in
+/// every application of this family and are kept once, in
+/// `grayline_shell::common`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
-    pub locale: Locale,
     pub input_device: Option<String>,
     pub output_device: Option<String>,
     pub station_callsign: String,
@@ -120,7 +115,6 @@ pub struct Settings {
     pub tx_volume: f32,
     pub auto_history: bool,
     pub history_format: HistoryFormat,
-    pub ui_scale: f32,
     pub rig: RigSettings,
     pub contact: ContactSettings,
 }
@@ -222,7 +216,6 @@ impl Default for RigSettings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            locale: Locale::default(),
             input_device: None,
             output_device: None,
             station_callsign: String::new(),
@@ -247,7 +240,6 @@ impl Default for Settings {
             tx_volume: DEFAULT_TX_VOLUME,
             auto_history: true,
             history_format: HistoryFormat::default(),
-            ui_scale: DEFAULT_UI_SCALE,
             rig: RigSettings::default(),
             contact: ContactSettings::default(),
         }
@@ -310,9 +302,6 @@ impl Config {
     pub fn settings(&self) -> Settings {
         let defaults = Settings::default();
         Settings {
-            locale: string(&self.document, None, "language")
-                .and_then(Locale::from_tag)
-                .unwrap_or(defaults.locale),
             input_device: owned(&self.document, Some("audio"), "input-device"),
             output_device: owned(&self.document, Some("audio"), "output-device"),
             station_callsign: owned(&self.document, Some("station"), "callsign").unwrap_or_default(),
@@ -345,9 +334,6 @@ impl Config {
             history_format: string(&self.document, Some("receive"), "history-format")
                 .and_then(HistoryFormat::from_config)
                 .unwrap_or(defaults.history_format),
-            ui_scale: float(&self.document, None, "ui-scale")
-                .map(|scale| scale.clamp(*UI_SCALE_RANGE.start(), *UI_SCALE_RANGE.end()))
-                .unwrap_or(defaults.ui_scale),
             rig: rig_settings(&self.document),
             contact: contact_settings(&self.document),
         }
@@ -359,15 +345,6 @@ impl Config {
             return;
         }
         let document = &mut self.document;
-        set(document, None, "language", Some(value(settings.locale.tag())));
-        // Rounded on the way out: widening the f32 directly writes the likes
-        // of 1.2999999523162842 into a file meant to be readable by hand.
-        set(
-            document,
-            None,
-            "ui-scale",
-            Some(value((f64::from(settings.ui_scale) * 100.0).round() / 100.0)),
-        );
         set(
             document,
             Some("audio"),
@@ -716,7 +693,6 @@ mod tests {
 
     fn populated() -> Settings {
         Settings {
-            locale: Locale::Ja,
             input_device: Some("Line In (Interface)".to_owned()),
             output_device: Some("Speakers (Interface)".to_owned()),
             station_callsign: "JA1ABC".to_owned(),
@@ -744,7 +720,6 @@ mod tests {
             },
             auto_history: false,
             history_format: HistoryFormat::Jpeg,
-            ui_scale: 1.5,
             rig: RigSettings {
                 enabled: true,
                 ports: BTreeMap::from([
@@ -877,7 +852,6 @@ fields = []
     #[case("[rig]\ntail = -inf\n")]
     #[case("[rig]\npoll = nan\n")]
     #[case("[transmit]\nvolume = nan\n")]
-    #[case("ui-scale = inf\n")]
     fn a_non_finite_number_reads_as_the_default(#[case] contents: &str) {
         let root = TempDir::new();
         fs::write(config_path(&root), contents).unwrap();
@@ -921,14 +895,14 @@ fields = []
     #[test]
     fn a_malformed_file_reports_the_error_and_is_not_overwritten() {
         let root = TempDir::new();
-        fs::write(config_path(&root), "language = \n").unwrap();
+        fs::write(config_path(&root), "input-device = \n").unwrap();
 
         let mut config = Config::load(&config_path(&root));
         assert!(config.error().is_some());
         assert_eq!(config.settings(), Settings::default());
 
         config.store(&populated());
-        assert_eq!(fs::read_to_string(config_path(&root)).unwrap(), "language = \n");
+        assert_eq!(fs::read_to_string(config_path(&root)).unwrap(), "input-device = \n");
     }
 
     #[test]
@@ -937,7 +911,6 @@ fields = []
         fs::write(
             config_path(&root),
             concat!(
-                "language = \"tlh\"\n",
                 "[receive]\n",
                 "mode = \"Scottie 9\"\n",
                 "afc = \"yes\"\n",
@@ -950,34 +923,6 @@ fields = []
         let config = Config::load(&config_path(&root));
         assert!(config.error().is_none());
         assert_eq!(config.settings(), Settings::default());
-    }
-
-    #[rstest]
-    #[case("ui-scale = 1.5\n", 1.5)]
-    // An integer is what a hand-edited file is likely to hold.
-    #[case("ui-scale = 2\n", 2.0)]
-    // Out of range values are clamped rather than ignored, so the interface
-    // cannot be left too small to reach the setting that fixes it.
-    #[case("ui-scale = 0.01\n", 0.5)]
-    #[case("ui-scale = 99\n", 3.0)]
-    #[case("ui-scale = \"big\"\n", DEFAULT_UI_SCALE)]
-    fn the_ui_scale_is_read_within_range(#[case] stored: &str, #[case] expected: f32) {
-        let root = TempDir::new();
-        fs::write(config_path(&root), stored).unwrap();
-        assert_eq!(Config::load(&config_path(&root)).settings().ui_scale, expected);
-    }
-
-    #[test]
-    fn the_ui_scale_is_written_readably() {
-        let root = TempDir::new();
-        let mut config = Config::load(&config_path(&root));
-        config.store(&Settings {
-            ui_scale: 1.3,
-            ..Settings::default()
-        });
-
-        let stored = fs::read_to_string(config_path(&root)).unwrap();
-        assert!(stored.contains("ui-scale = 1.3"), "the scale was written as {stored}");
     }
 
     /// The ports are what the operator edits, so they have to be in the file

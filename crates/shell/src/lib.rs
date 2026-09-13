@@ -5,17 +5,20 @@
 //! each application supplies what makes it itself through [`Identity`] and an
 //! [`i18n::Catalog`].
 //!
-//! What is deliberately absent is as informative as what is here. Settings,
-//! the menu model, and the views still belong to the application: with one
-//! application written there is no second reading to generalize from, and a
-//! shared shape guessed from one caller is harder to correct later than one
-//! extracted from two.
+//! What is deliberately absent is as informative as what is here. The menu
+//! model and the views still belong to the application, and so does almost all
+//! of its settings: a shared shape guessed from one caller is harder to
+//! correct later than one extracted from several. The exception is [`common`],
+//! which holds the two settings every application in the family answers the
+//! same way.
 
 #![deny(missing_docs)]
 // Not `forbid(unsafe_code)`, unlike the rest of this workspace: the Windows
 // integration calls the Win32 API directly, which is the whole reason this
 // module is separated from everything that can be written safely.
 
+/// The settings shared by every application in the family, and their file.
+pub mod common;
 /// Fluent-backed message lookup, and the languages an application offers.
 pub mod i18n;
 /// The rolling log an application writes under its state directory.

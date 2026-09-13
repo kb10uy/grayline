@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use grayline_shell::i18n::Locale;
+use grayline_shell::{common::DEFAULT_UI_SCALE, i18n::Locale};
 use grayline_wefax::{Format, Ioc, LinesPerMinute};
 use rstest::rstest;
 
@@ -74,11 +74,11 @@ fn switching_the_language_relabels_the_interface(#[case] locale: Locale) {
 fn the_zoom_stays_inside_what_the_settings_allow() {
     let mut app = App::headless();
     app.zoom_by(10.0);
-    assert_eq!(app.ui_scale, MAXIMUM_UI_SCALE);
+    assert_eq!(app.ui_scale, *UI_SCALE_RANGE.end());
     app.zoom_by(-10.0);
-    assert_eq!(app.ui_scale, MINIMUM_UI_SCALE);
-    app.set_ui_scale(crate::storage::config::DEFAULT_UI_SCALE);
-    assert_eq!(app.ui_scale, crate::storage::config::DEFAULT_UI_SCALE);
+    assert_eq!(app.ui_scale, *UI_SCALE_RANGE.start());
+    app.set_ui_scale(DEFAULT_UI_SCALE);
+    assert_eq!(app.ui_scale, DEFAULT_UI_SCALE);
 }
 
 #[test]

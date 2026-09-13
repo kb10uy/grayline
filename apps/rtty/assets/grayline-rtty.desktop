@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Grayline RTTY
+GenericName=RTTY
+Comment=RTTY for amateur radio
+Exec=grayline-rtty
+Icon=grayline-rtty
+Terminal=false
+Categories=AudioVideo;Audio;HamRadio;
+Keywords=RTTY;radioteletype;Baudot;amateur radio;ham radio;
+StartupWMClass=grayline-rtty

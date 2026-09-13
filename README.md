@@ -15,7 +15,7 @@ interfaces are not.
 | --- | --- | --- |
 | [Grayline SSTV](apps/sstv/README.md) | `apps/sstv/` | Released |
 | Grayline WEFAX | `apps/wefax/` | Receive implemented |
-| Grayline RTTY | — | Planned |
+| Grayline RTTY | `apps/rtty/` | Receive implemented; transmit planned |
 | Grayline PSK | — | Planned |
 
 [apps/web-demo/](apps/web-demo/) builds the SSTV receive path for WebAssembly,
@@ -35,6 +35,8 @@ running at <https://rssstv.kb10uy.dev/>.
   [docs/memo/README.md](docs/memo/README.md).
 - `docs/reference/mmsstv/` — the original MMSSTV source, a submodule kept as
   the behavioral reference.
+- `docs/reference/mmtty/` — the original MMTTY source, a submodule kept as the
+  behavioral reference for RTTY.
 
 The libraries divide into a mode-independent core — `dsp`, `tone-tx`,
 `audio`, `rig`, and `shell` — and the crates implementing one mode, which

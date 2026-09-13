@@ -388,6 +388,42 @@ no catalogue was ever going to know. A field the operator empties is dropped
 rather than left alone: clearing a value is how a wrong one is taken back, and a
 write that only ever added would hand it straight back on the next lookup.
 
+## In the RTTY application
+
+The worker is `apps/sstv/src/worker/contact.rs` again, near enough verbatim, as
+is the dialog and the `[qso]` section of the settings file — deliberately the
+same section name, because one operator's two applications ask the same logger
+about the same stations and a station set up once should not have to be set up
+twice. What differs is everything downstream of the answer, and all of it
+follows from ITA2 having no kanji.
+
+**The default field list is `["!core", "!latin"]` rather than `["!core"]`.**
+`latin` exists for this mode, and a station that files only a kanji name has
+nothing a macro could put on the air; the dialog has to offer somewhere to put
+the spelling that can be sent.
+
+**An answer fills the panel in.** SSTV keeps the directory beside the QSO
+panel and lets the template read it; RTTY's `contact.name` and `contact.qth`
+are fields the operator types, so an answer that stayed in the directory would
+leave the operator typing a name the application already had. It is written
+into the fields they left empty, and only those: what is in the panel is what
+they heard on the air. `name_latin` is preferred to `name` and `qth_latin` to
+`qth`, and a value the transmitter has no code for is passed over rather than
+written into a field that would then hold the send button down — the record
+keeps it, and the SSTV application still prints it.
+
+**The dialog runs no keyboard filter**, unlike every other field here whose
+contents can reach the air. The store is the family's rather than this
+application's: a name in kanji is a good entry, and refusing to type one would
+file a worse record for the sake of a macro that reads the Latin spelling
+instead.
+
+A lookup is asked for when the callsign is committed, which is leaving any of
+the contact fields, and again when a callsign is double-clicked out of the
+received text, which does not pass through the field. The guard, the collapse,
+and the failure going to the status bar rather than in front of the interface
+are all as above.
+
 ## Open questions
 
 **Portable callsigns.** `JA1ABC/1` is a different key from `JA1ABC` today.

@@ -10,20 +10,19 @@ use resvg::{
     usvg::{self, ImageKind},
 };
 
+use grayline_variables::Variables;
+
 use crate::{
     AssetError, RenderSize, Rgba8, RgbaImage, TemplateError,
     renderer::{
         asset::{AssetFormat, validate_fonts},
         svg::SvgGenerator,
     },
-    scene::{Template, Variables},
+    scene::Template,
 };
 
 mod asset;
 mod svg;
-pub(crate) mod variable;
-
-pub use variable::valid_variable_name;
 
 /// Encoded image bytes returned by an [`AssetProvider`].
 ///

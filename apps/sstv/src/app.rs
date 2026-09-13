@@ -19,6 +19,7 @@ use jiff::{Timestamp, Zoned};
 use grayline_sstv_rx::SyncStart;
 
 use grayline_shell::{
+    common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale, owned},
     platform::{self, Activity, Platform},
 };
@@ -27,7 +28,7 @@ use crate::{
     error::AppError,
     storage::{
         bands::{BandDefinition, BandPlan},
-        config::{Config, ContactSettings, RigSettings, Settings, UI_SCALE_RANGE},
+        config::{Config, ContactSettings, RigSettings, Settings},
         paths::{AppPaths, Folder},
     },
     ui::raster::{Raster, test_pattern_image},
@@ -262,6 +263,8 @@ pub struct App {
     /// frame catches every change without the interface having to remember to
     /// announce one.
     saved: Settings,
+    /// The language and the scale, which the whole family shares.
+    common: CommonConfig,
     composition: Composition,
     /// The amplitude a running transmission reads, shared with its worker.
     tx_gain: Arc<TxGain>,
@@ -392,6 +395,16 @@ struct Composition {
     reading: Option<Reading>,
 }
 
+/// The two settings files an application is built out of.
+///
+/// Its own, and the one the whole family shares. Passed together because they
+/// are read together and saved together, and because a builder with one
+/// parameter for each of them is a builder nobody can read the call to.
+pub(crate) struct Stored {
+    pub config: Config,
+    pub common: CommonConfig,
+}
+
 impl App {
     pub fn new(paths: AppPaths, waker: Waker) -> Self {
         let config = Config::load(paths.config_file());
@@ -407,7 +420,10 @@ impl App {
         let mut app = Self::from_parts(
             audio,
             paths,
-            config,
+            Stored {
+                config,
+                common: CommonConfig::discover(),
+            },
             &settings,
             ContactPaths {
                 store: grayline_qso::default_store_path(),
@@ -445,7 +461,10 @@ impl App {
                 scratch.join("pictures"),
                 scratch.join("state"),
             ),
-            Config::detached(),
+            Stored {
+                config: Config::detached(),
+                common: CommonConfig::detached(),
+            },
             &Settings::default(),
             // Nothing named, so the store is held in memory and no logger is
             // reached: the suite must neither write into the directory the
@@ -460,16 +479,17 @@ impl App {
     fn from_parts(
         audio: AudioState,
         paths: AppPaths,
-        config: Config,
+        Stored { config, common }: Stored,
         settings: &Settings,
         contact_paths: ContactPaths,
         waker: Waker,
         platform: Box<dyn Platform>,
     ) -> Self {
         let (bands, bands_error) = BandPlan::load(paths.config_dir());
+        let shared = common.settings();
         Self {
             tab: Tab::default(),
-            i18n: I18n::new(settings.locale, &crate::locales::CATALOG),
+            i18n: I18n::new(shared.locale, &crate::locales::CATALOG),
             audio,
             auto_mode: settings.auto_mode,
             rx_mode: settings.rx_mode,
@@ -513,7 +533,7 @@ impl App {
             tx_snapshot: TxSnapshot::default(),
             tx_error: None,
             device_fault: None,
-            ui_scale: settings.ui_scale,
+            ui_scale: shared.ui_scale,
             rig: settings.rig.clone(),
             contact: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
@@ -528,6 +548,7 @@ impl App {
             paths,
             config,
             saved: settings.clone(),
+            common,
             composition: Composition {
                 composer: Composer::spawn(),
                 generation: 0,
@@ -571,7 +592,6 @@ impl App {
 
     fn settings(&self) -> Settings {
         Settings {
-            locale: self.i18n.locale(),
             input_device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
             output_device: self.audio.output_device.as_ref().map(|device| device.name().to_owned()),
             station_callsign: self.station.callsign.clone(),
@@ -592,7 +612,6 @@ impl App {
             tx_volume: self.tx_volume,
             auto_history: self.auto_history,
             history_format: self.history_format,
-            ui_scale: self.ui_scale,
             rig: self.rig.clone(),
             contact: self.contact_settings.clone(),
         }
@@ -601,8 +620,14 @@ impl App {
     /// Writes the settings back when anything the interface owns has changed.
     ///
     /// Called once at the end of every frame; a frame that changed nothing
-    /// does not touch the disk.
+    /// does not touch the disk. Both files: the shared one skips a write that
+    /// would change nothing itself, because the other applications write to it
+    /// too.
     pub fn persist(&mut self) {
+        self.common.save(&CommonSettings {
+            locale: self.i18n.locale(),
+            ui_scale: self.ui_scale,
+        });
         let settings = self.settings();
         if settings != self.saved {
             self.config.store(&settings);
@@ -610,8 +635,13 @@ impl App {
         }
     }
 
+    /// What went wrong reading either settings file, if anything did.
+    ///
+    /// The first of the two is the one reported: a status line carrying both
+    /// would say the same sentence twice, and either one is reason enough to
+    /// look at what is on disk.
     pub fn config_error(&self) -> Option<&str> {
-        self.config.error()
+        self.config.error().or_else(|| self.common.error())
     }
 
     pub fn set_ui_scale(&mut self, scale: f32) {

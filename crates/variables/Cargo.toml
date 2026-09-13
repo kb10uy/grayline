@@ -1,0 +1,15 @@
+[package]
+name = "grayline-variables"
+description = "Named-value interpolation for Grayline text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+jiff.workspace = true
+thiserror = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+rstest.workspace = true

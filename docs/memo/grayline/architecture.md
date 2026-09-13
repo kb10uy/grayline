@@ -52,14 +52,16 @@ platform integration, and application behavior.
 | Audio adapters | Platform-specific input and output streams | `grayline-audio`; capture and playback implemented |
 | Rig transport | How a rig is reached: a `rigctld` socket | `grayline-rig`; implemented |
 | Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-sstv` |
-| Integration | Composition of core stages for a particular environment | `gl-sstv`, `gl-wefax`, and `web-demo` |
+| Integration | Composition of core stages for a particular environment | `gl-sstv`, `gl-wefax`, `gl-rtty`, and `web-demo` |
 | Template composition | KDL scene parsing, variables, RGBA overlay rendering, and RGB composition | `grayline-sstv-template` |
 | Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv` receive interface; designed in [gui-design.md](gui-design.md) |
 
 These are responsibility boundaries, not a requirement that every row become a
 separate crate. Closely related protocol types currently live together in
 `grayline-sstv`; they should be split only when a concrete dependency or reuse
-need justifies it.
+need justifies it. The same layer names apply inside `grayline-wefax` and
+`grayline-rtty`, which hold their protocol model, front end, decoder, and (for
+RTTY) transmit encoder and modulator as modules of one crate each.
 
 ## Target Data Flow
 
@@ -370,6 +372,10 @@ The workspace currently contains seventeen packages:
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
+| `grayline-variables` | `${name}` interpolation shared by the SSTV templates and the RTTY macros | Implemented |
+| `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
+| `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
+| `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
@@ -410,9 +416,16 @@ grayline-qso ------------> grayline-qso-cli
 
 grayline-dsp ------------> grayline-wefax --> grayline-wefax-cli
 
+grayline-dsp ------------> grayline-rtty ---> grayline-rtty-cli
+
 grayline-audio ----------+
 grayline-shell ----------+-> grayline-wefax-app
 grayline-wefax ----------+
+
+grayline-audio ----------+
+grayline-shell ----------+-> grayline-rtty-app
+grayline-rtty -----------+
+grayline-dsp ------------+
 ```
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this
@@ -420,6 +433,10 @@ workspace. That it needs no part of `grayline-sstv` is the point of the split
 between a mode's crates and the core: WEFAX shares the numerical layer, and
 shares nothing of SSTV's protocol. Where it needed something the SSTV front end
 had, that piece moved down into `grayline-dsp` rather than across.
+`grayline-rtty` did the same: it shares the numerical layer, lifted the pieces
+it needed (`filter::MovingAverage`, `level::PeakNormalizer`) down into
+`grayline-dsp`, and shares nothing with SSTV — including `grayline-tone-tx`,
+whose contract does not fit continuous FSK keying ([rtty.md](rtty.md)).
 
 `grayline-audio` is the platform audio boundary. It exposes normalized mono
 `f32` samples with stream positions and keeps the host API out of its public
@@ -441,9 +458,9 @@ moment is a Lua script the application hosts, because what a rig wants around a
 transmission differs by rig and by station. The whole arrangement is described
 in [rig-control.md](rig-control.md).
 
-`grayline-dsp`, `grayline-sstv`, and `grayline-wefax` build as allocation-backed
-`no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
-remain in `grayline-sstv-cli` and `grayline-wefax-cli`, outside the portable core.
+`grayline-dsp`, `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` build as
+allocation-backed `no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
+remain in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
 `grayline-sstv-template` is a
 standard-library application-support crate: it depends on `grayline-sstv` only at
 the received-image and final RGB composition boundaries. It does not expose
@@ -455,9 +472,12 @@ rendering.
 `grayline-dsp` provides radix-2 FFT, windowed real spectra, FIR and IIR design and
 processing, Hilbert transforms, zero-crossing frequency measurement, a
 phase-continuous VCO, PLL and Hilbert phase-difference frequency discrimination,
-and resonator tone detection. The standalone FFT and PLL are not currently part
+resonator tone detection, a boxcar moving average, and a decaying peak-follower
+normalizer. The standalone FFT and PLL are not currently part
 of the WAV receive path; that path uses the Hilbert phase-difference
-discriminator.
+discriminator. The moving average and the peak normalizer are the RTTY
+integrator and level stage, the latter lifted from the SSTV front end when the
+second caller for it appeared.
 
 `frequency::HilbertDiscriminator` and `detector::ToneDetector` were the SSTV
 front end's own until a second mode needed them, which is the point at which
@@ -515,7 +535,12 @@ The live receive path does not resample or decimate PCM. Each captured mono
 sample produces one demodulated frequency and synchronization value after VIS
 detection. This matches MMSSTV's normal receive path; its rate-dependent Hilbert
 phase span still emits one result per input sample, while its explicit
-decimation is limited to displays and offline file conversion.
+decimation is limited to displays and offline file conversion. The RTTY path
+holds the same line even though its reference implementation does not: MMTTY
+demodulates at half the capture rate, and the reasons that decision was not
+ported — the 1998 performance ground has expired, and the decimation is where
+MMTTY's 2700 Hz space-tone ceiling comes from — are recorded in
+[rtty.md](rtty.md).
 
 Raster conversion intentionally differs from MMSSTV's first-sample selection.
 The Rust decoder averages the central five-eighths of the transmitted pixel
@@ -561,6 +586,7 @@ directories. Portable storage beside the executable is not supported.
 | Content | Windows | macOS | Linux |
 | --- | --- | --- | --- |
 | Configuration | `%APPDATA%\Grayline\sstv\config.toml` | `~/Library/Application Support/Grayline/sstv/config.toml` | `$XDG_CONFIG_HOME/grayline/sstv/config.toml` |
+| Shared settings | `%APPDATA%\Grayline\common.toml` | `~/Library/Application Support/Grayline/common.toml` | `$XDG_CONFIG_HOME/grayline/common.toml` |
 | Templates and assets | `%APPDATA%\Grayline\sstv\templates`, `%APPDATA%\Grayline\sstv\assets` | `~/Library/Application Support/Grayline/sstv/templates`, `~/Library/Application Support/Grayline/sstv/assets` | `$XDG_DATA_HOME/grayline/sstv/templates`, `$XDG_DATA_HOME/grayline/sstv/assets` |
 | User images | `Pictures\Grayline SSTV` | `~/Pictures/Grayline SSTV` | `$XDG_PICTURES_DIR/Grayline SSTV` |
 
@@ -572,13 +598,22 @@ other resources are stored under `assets`.
 At startup the application creates all of these directories and creates an
 empty, valid `config.toml` when it does not already exist. Existing
 configuration files are never replaced. The application preserves comments and
-unknown keys while saving its language, UI scale, device, library, mode, DSP,
-history, and station-callsign settings. A `[variables]` table holds the
-operator's own template variables as plain string keys, read by templates as
+unknown keys while saving its device, library, mode, DSP, history, and
+station-callsign settings. A `[variables]` table holds the operator's own
+template variables as plain string keys, read by templates as
 `${custom.<name>}`; a key that no `${...}` expression could hold is dropped on
 load the way every other unusable value in the file is. Keys are assigned
 rather than the table being rewritten, so a comment beside one survives a save
 that did not touch it.
+
+The language and the UI scale are not in it. They are the same answer in every
+application of the family, so they live once in `common.toml`, beside the
+per-application directories and beside the shared contact store's credentials,
+under the keys `language` and `ui-scale`. Every application reads it at startup
+and writes it back only when one of the two changes, so a language chosen in
+one is the language the next one opens in. `grayline_shell::common` is the only
+code that touches the file, and comments and unknown keys survive a save there
+too.
 
 The GUI template list is populated from regular `.kdl` files directly inside
 `templates`. The stock list is populated from regular files directly inside
@@ -610,6 +645,14 @@ implementations:
 - Contest FSK records, narrow N-VIS transmission, and optional CW identification.
 - Template editing.
 - Real-world received-audio regression fixtures.
+- The RTTY pieces deliberately deferred, listed in [rtty.md](rtty.md): the
+  FIR, PLL, and sliding-DFT discriminators, the center-sampling framing
+  machine, the zero-crossing limiter AGC, the prefilter notch and LMS chain,
+  6-to-8-bit pipelines, CW identification, and serial FSK keying.
+- The rest of `apps/rtty`, whose receive and transmit halves and scope window
+  are implemented: the received-text history log, the aligned save, and the
+  rig frequency readout. The design is
+  [rtty-impl-plan.md](rtty-impl-plan.md).
 
 These should extend the dependency structure above rather than placing platform
 or application behavior into the core crates.
@@ -624,6 +667,9 @@ a synthesized WAV-to-PNG integration path. The transmit integration test
 encodes a complete Robot 36 WAV and decodes its image and FSKID. Template tests
 cover strict KDL validation, all initial layer kinds, caller-resolved PNG and
 receive images, straight-alpha rendering, and RGB source-over composition.
+The RTTY suite round-trips text through its own transmitter and receiver
+across rates, speeds, and tone pairs, and checks the receiver against
+hand-derived bit vectors that never touch the transmitter.
 
 Run the complete verification set from the workspace root:
 
@@ -632,4 +678,8 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
+cargo build -p grayline-sstv --no-default-features
+cargo build -p grayline-wefax --no-default-features
+cargo build -p grayline-rtty --no-default-features
+cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown
 ```

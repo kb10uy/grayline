@@ -31,6 +31,14 @@ published standards rather than to anyone's source.
 - [wefax/protocol.md](wefax/protocol.md): modulation, index of cooperation,
   line rates, the framing tones, and the phasing signal.
 
+## `rtty/` — the protocols
+
+RTTY as it exists on the air. As with SSTV, the values are largely derived from
+the reference implementation — MMTTY — but the subject is the signal.
+
+- [rtty/protocol.md](rtty/protocol.md): modulation, shift and speed, start-stop
+  framing, the ITA2 character code, and the unshift-on-space convention.
+
 ## `mmsstv/` — the original implementation
 
 The behavior of the original MMSSTV source in `docs/reference/mmsstv`, which this
@@ -49,6 +57,22 @@ that program does, including where it departs from published descriptions.
 - [mmsstv/porting.md](mmsstv/porting.md): reading the original source for the
   Rust port.
 
+## `mmtty/` — the original implementation
+
+The behavior of the original MMTTY source in `docs/reference/mmtty`, which this
+project treats as the reference implementation for RTTY. MMTTY shares an author
+and much of its support code with MMSSTV, so these documents note where the two
+agree and where they part.
+
+- [mmtty/architecture.md](mmtty/architecture.md): the application's structure,
+  state, threads, transmit paths, and external interfaces.
+- [mmtty/dsp.md](mmtty/dsp.md): the four demodulators, the limiter, the
+  integrators, ATC, the prefilters, AFC, and the modulator.
+- [mmtty/framing.md](mmtty/framing.md): the start-stop framing state machines,
+  the Baudot conversion tables, diddle, and the CW identifier.
+- [mmtty/porting.md](mmtty/porting.md): reading the original source for the
+  Rust port.
+
 ## `grayline/` — this project
 
 The Rust implementation: what it is meant to be, and what it currently is.
@@ -60,6 +84,9 @@ The Rust implementation: what it is meant to be, and what it currently is.
 - [grayline/wefax.md](grayline/wefax.md): the WEFAX receive crate, what it took
   from the core on its way in, and where it deliberately parts company with the
   SSTV receive contract.
+- [grayline/rtty.md](grayline/rtty.md): the RTTY crate, what it lifted into the
+  core, and where it deliberately parts company with MMTTY — including that
+  nothing is decimated.
 - [grayline/rig-control.md](grayline/rig-control.md): the transports the rig is
   reached over, the script that decides what is sent, and the band plan both
   read. Describes a target design ahead of what is implemented.

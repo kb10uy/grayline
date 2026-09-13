@@ -37,6 +37,16 @@ use windows_sys::Win32::{
 
 pub const UI_FONTS: [&str; 3] = ["Yu Gothic UI", "Meiryo UI", "Segoe UI"];
 
+/// The coding fonts to look for, in the order they are preferred.
+///
+/// Monaspace leads the list on every platform. It is the one family here that
+/// an operator installs on purpose rather than finds already present, and the
+/// one that covers the arrows and box drawing a teleprinter transcript is
+/// annotated with: neither Consolas, Courier New, nor Segoe UI carries U+21B5,
+/// the mark a transmit message shows a line ending with, so without it that
+/// mark is drawn by a bundled fallback at a scale of its own.
+pub const MONOSPACE_FONTS: [&str; 4] = ["Monaspace Neon", "Cascadia Mono", "Consolas", "Courier New"];
+
 pub const FILE_MANAGER: Option<&str> = Some("explorer.exe");
 
 pub const FAMILY_DIRECTORY: &str = "Grayline";

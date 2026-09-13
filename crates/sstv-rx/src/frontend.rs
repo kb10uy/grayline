@@ -3,6 +3,7 @@ use grayline_dsp::{
     detector::{ToneDetector, ToneDetectorDesign},
     filter::{Fir, FirDesign, FirKind},
     frequency::{HilbertDiscriminator, HilbertDiscriminatorDesign, ZeroCrossingFrequency},
+    level::{PeakNormalizer, PeakNormalizerDesign},
 };
 
 use grayline_sstv::{mode::Mode, rx::RasterStart, signal::SYNC_HZ};
@@ -73,8 +74,7 @@ pub(crate) struct FrontEnd {
     band_pass: Fir,
     hilbert: HilbertDiscriminator,
     zero_crossing: ZeroCrossingFrequency,
-    level_peak: f64,
-    level_decay: f64,
+    normalizer: PeakNormalizer,
     detectors: Vec<ToneDetector>,
     vis: VisDecoder,
     sync_intervals: SyncIntervalDetector,
@@ -124,8 +124,11 @@ impl FrontEnd {
                 initial_hz: 1_900.0,
             })?,
             zero_crossing: ZeroCrossingFrequency::new(sample_rate_hz)?,
-            level_peak: 1.0e-6,
-            level_decay: (-1.0 / (sample_rate_hz * 0.1)).exp(),
+            normalizer: PeakNormalizer::new(PeakNormalizerDesign {
+                sample_rate_hz,
+                decay_seconds: 0.1,
+                floor: 1.0e-6,
+            })?,
             detectors,
             vis: VisDecoder::new(sample_rate_hz),
             sync_intervals: SyncIntervalDetector::new(sample_rate_hz),
@@ -140,8 +143,7 @@ impl FrontEnd {
         self.previous_input = input;
         let filtered = self.band_pass.process_sample(averaged);
 
-        self.level_peak = (self.level_peak * self.level_decay).max(filtered.abs());
-        let detector_input = (filtered / self.level_peak.max(1.0e-6)).clamp(-1.0, 1.0);
+        let detector_input = self.normalizer.process_sample(filtered);
         let mut envelopes = [0.0; 5];
         for (envelope, detector) in envelopes.iter_mut().zip(&mut self.detectors) {
             *envelope = detector.process_sample(detector_input);

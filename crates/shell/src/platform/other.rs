@@ -9,6 +9,22 @@ use crate::Identity;
 
 pub const UI_FONTS: [&str; 3] = ["Noto Sans CJK JP", "Noto Sans", "DejaVu Sans"];
 
+/// The coding fonts to look for, in the order they are preferred.
+///
+/// Monaspace leads the list on every platform. It is the one family here that
+/// an operator installs on purpose rather than finds already present, and the
+/// one that covers the arrows and box drawing a teleprinter transcript is
+/// annotated with: neither Consolas, Courier New, nor Segoe UI carries U+21B5,
+/// the mark a transmit message shows a line ending with, so without it that
+/// mark is drawn by a bundled fallback at a scale of its own.
+pub const MONOSPACE_FONTS: [&str; 5] = [
+    "Monaspace Neon",
+    "Noto Sans Mono CJK JP",
+    "Noto Sans Mono",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+];
+
 /// Only Linux has a file manager this can name. Another platform reaching
 /// here reports that revealing a directory is unsupported rather than
 /// spawning a command that does not exist.

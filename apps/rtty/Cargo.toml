@@ -1,0 +1,74 @@
+[package]
+name = "grayline-rtty-app"
+description = "RTTY for amateur radio"
+# Versioned on its own for the reason recorded beside the SSTV application's
+# own manifest. This one starts at 0.1.0 rather than inheriting the numbers
+# the other two had reached before it existed.
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# The package carries the `-app` suffix so it does not collide with the
+# `grayline-rtty` protocol library; the binary keeps the product's own name.
+[[bin]]
+name = "grayline-rtty"
+path = "src/main.rs"
+
+[dependencies]
+directories.workspace = true
+eframe.workspace = true
+egui.workspace = true
+fluent-bundle.workspace = true
+fontdb.workspace = true
+hound.workspace = true
+jiff.workspace = true
+grayline-audio = { path = "../../crates/audio" }
+grayline-dsp = { path = "../../crates/dsp", features = ["std"] }
+grayline-qso = { path = "../../crates/qso" }
+grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
+grayline-shell = { path = "../../crates/shell" }
+grayline-variables = { path = "../../crates/variables" }
+thiserror.workspace = true
+toml_edit.workspace = true
+unic-langid.workspace = true
+
+# muda drives the platform menu bar, which needs a native window handle it can
+# own. The other platforms use the in-window menu bar for the reasons recorded
+# beside the SSTV application's own manifest.
+[target.'cfg(target_os = "windows")'.dependencies]
+muda.workspace = true
+raw-window-handle.workspace = true
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true
+image.workspace = true
+rstest.workspace = true
+
+# `cargo deb -p grayline-rtty-app` builds the Debian package from this. Asset
+# sources are relative to this directory, except target/release/ paths, which
+# cargo-deb resolves against the workspace target directory.
+[package.metadata.deb]
+name = "grayline-rtty"
+section = "hamradio"
+priority = "optional"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+RTTY for amateur radio: decodes Baudot radioteletype from a capture device, \
+following the tone pair with automatic frequency control and printing what \
+it reads as it arrives."""
+# $auto covers what the binary links (glibc, ALSA, gcc-s); the graphics and
+# keyboard libraries are dlopen'd at runtime, which dpkg-shlibdeps cannot see,
+# so they are named explicitly.
+depends = ["$auto", "libxkbcommon0", "libxkbcommon-x11-0", "libegl1", "libgl1"]
+recommends = ["xdg-utils", "fonts-noto-cjk"]
+suggests = ["fonts-dejavu-core"]
+assets = [
+    ["target/release/grayline-rtty", "usr/bin/", "755"],
+    ["assets/grayline-rtty.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/512x512/apps/grayline-rtty.png", "644"],
+]

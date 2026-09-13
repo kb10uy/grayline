@@ -13,8 +13,8 @@ are planned.
 The repository contains:
 
 - `apps/`: one directory per shipped application, plus the browser demo.
-  `apps/sstv/` is the SSTV desktop application and `apps/wefax/` the WEFAX
-  one.
+  `apps/sstv/` is the SSTV desktop application, `apps/wefax/` the WEFAX one,
+  and `apps/rtty/` the RTTY one.
 - `crates/`: the libraries. Directory names carry no prefix; the packages they
   hold are named `grayline-*`. `crates/shell/` holds what every application
   needs and no mode decides: platform integration, the localization machinery,
@@ -28,16 +28,22 @@ The repository contains:
   subcommand stays a thin layer over a tested function.
 - `assets/`: data the repository ships outside any one crate, such as the
   ported MMSSTV templates under `assets/templates/`.
-- `docs/reference/mmsstv/`: the original MMSSTV source code, included as a Git
-  submodule and used as the behavioral reference.
+- `docs/reference/mmsstv/` and `docs/reference/mmtty/`: the original MMSSTV and
+  MMTTY source code, included as Git submodules and used as the behavioral
+  reference for SSTV and RTTY respectively.
 - `docs/memo/`: development documentation, divided by subject.
   `docs/memo/README.md` indexes it.
   - `docs/memo/sstv/`: the protocols themselves — modes, timing, VIS, and
     FSKID — independent of any one implementation.
   - `docs/memo/wefax/`: the WEFAX signal on the air — modulation, index of
     cooperation, line rates, framing tones, and the phasing signal.
+  - `docs/memo/rtty/`: the RTTY signal on the air — modulation, shift and
+    speed, start-stop framing, and the ITA2 character code.
   - `docs/memo/mmsstv/`: the behavior of the original application, including
     its DSP implementation and where it departs from published descriptions.
+  - `docs/memo/mmtty/`: the behavior of the original MMTTY, the reference
+    implementation for RTTY — its DSP, its framing, and its application
+    structure.
   - `docs/memo/grayline/`: this project — target architecture, the desktop
     application, and the transmit overlay format.
 
@@ -47,8 +53,9 @@ answers to its source, and a description of this project answers to this
 repository's code; a document that would answer to two of those belongs in two
 documents.
 
-Treat `docs/reference/mmsstv/` as reference material. Do not modify the submodule
-unless the task explicitly requires changes to the original source.
+Treat `docs/reference/mmsstv/` and `docs/reference/mmtty/` as reference
+material. Do not modify a submodule unless the task explicitly requires changes
+to the original source.
 
 ## Architecture
 
@@ -136,9 +143,11 @@ This repository uses a Cargo workspace. Run commands from the workspace root.
 
 - Build all workspace members with `cargo build --workspace`.
 - Run all tests with `cargo test --workspace`.
-- Check that `grayline-sstv` and `grayline-wefax` still build without `std`
-  using `cargo build -p grayline-sstv --no-default-features` and
-  `cargo build -p grayline-wefax --no-default-features`. A workspace build does
+- Check that `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` still
+  build without `std` using `cargo build -p grayline-sstv
+  --no-default-features`, `cargo build -p grayline-wefax
+  --no-default-features`, and `cargo build -p grayline-rtty
+  --no-default-features`. A workspace build does
   not cover this: another member enabling the `std` feature hides a core
   primitive used through `std` alone, so the crate can stop being `no_std`
   without any workspace command noticing.
@@ -164,6 +173,7 @@ cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
 cargo build -p grayline-wefax --no-default-features
+cargo build -p grayline-rtty --no-default-features
 cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown
 ```
 

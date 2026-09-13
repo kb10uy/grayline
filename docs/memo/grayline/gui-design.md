@@ -21,6 +21,15 @@ to the in-window rendering so every menu action stays reachable. System fonts
 are discovered through `fontdb`, with egui's bundled fonts retained as
 fallback.
 
+The coding fonts each platform looks for are listed in
+`crates/shell/src/platform/`, and Monaspace leads every one of them. It is the
+only family in those lists an operator installs on purpose rather than finds
+already present, and the only one that reliably carries the arrows a transcript
+is annotated with: neither Consolas, Courier New, nor Segoe UI has U+21B5, the
+mark a transmit message shows a line ending with, so on a machine without
+Monaspace that mark falls through to one of egui's bundled faces and is drawn
+at the scale that face was tweaked to.
+
 The model is rebuilt from application state every frame and the native menu is
 brought in line with it, so labels and check marks follow the interface without
 anything having to invalidate them. Two consequences are handled explicitly. A

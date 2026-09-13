@@ -18,12 +18,18 @@ pub enum DspError {
     /// A coefficient array is empty or has an unexpected length.
     #[error("coefficient count does not match the filter order")]
     InvalidCoefficientCount,
+    /// A duration or time constant is non-positive or not finite.
+    #[error("duration must be finite and positive")]
+    InvalidDuration,
     /// A frequency is non-finite or outside its valid Nyquist interval.
     #[error("frequency must be finite and within the Nyquist interval")]
     InvalidFrequency,
     /// Filter gain is not finite.
     #[error("gain must be finite")]
     InvalidGain,
+    /// A level or threshold is non-positive or not finite.
+    #[error("level must be finite and positive")]
+    InvalidLevel,
     /// Filter order is zero or unsupported by the selected design.
     #[error("filter order is invalid")]
     InvalidOrder,
