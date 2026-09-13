@@ -20,6 +20,13 @@ use crate::{
 /// invitation to reply.
 const DRAFT_ROWS: usize = 3;
 
+/// What stands in for a line ending where a message is drawn on one line.
+///
+/// U+21B5 rather than the return symbol at U+23CE: the arrow is the older
+/// character and the one a text face is far likelier to carry, and a glyph
+/// the font has no drawing for would put a box in the middle of a message.
+const LINE_BREAK_MARK: &str = "\u{21b5}";
+
 /// How tall the panel opens, in points.
 pub(super) const DEFAULT_HEIGHT: f32 = 132.0;
 pub(super) const MINIMUM_HEIGHT: f32 = 96.0;
@@ -159,17 +166,20 @@ fn sent_job(ui: &Ui, text: &str, progress: SentProgress) -> egui::text::LayoutJo
         .char_indices()
         .nth(progress.sent)
         .map_or(text.len(), |(index, _)| index);
-    let mut job = egui::text::LayoutJob::default();
-    let mut format = egui::TextFormat {
-        font_id: font,
+    let sent = egui::TextFormat {
+        font_id: font.clone(),
         color,
+        underline: egui::Stroke::new(1.0, sent_color(ui.visuals())),
         ..egui::TextFormat::default()
     };
-    format.underline = egui::Stroke::new(1.0, sent_color(ui.visuals()));
-    job.append(&text[..boundary].replace('\n', "⏎"), 0.0, format.clone());
-    format.underline = egui::Stroke::NONE;
-    format.color = ui.visuals().weak_text_color();
-    job.append(&text[boundary..].replace('\n', "⏎"), 0.0, format);
+    let waiting = egui::TextFormat {
+        font_id: font,
+        color: ui.visuals().weak_text_color(),
+        ..egui::TextFormat::default()
+    };
+    let mut job = egui::text::LayoutJob::default();
+    job.append(&text[..boundary].replace('\n', LINE_BREAK_MARK), 0.0, sent);
+    job.append(&text[boundary..].replace('\n', LINE_BREAK_MARK), 0.0, waiting);
     job
 }
 
@@ -199,7 +209,7 @@ fn queued(ui: &mut Ui, app: &mut App) {
 /// A message as one line, for a list that shows what is waiting rather than
 /// what it says.
 fn one_line(message: &str) -> String {
-    let flattened = message.replace('\n', " ⏎ ");
+    let flattened = message.replace('\n', &format!(" {LINE_BREAK_MARK} "));
     let mut characters = flattened.chars();
     let head: String = characters.by_ref().take(60).collect();
     if characters.next().is_some() {
@@ -306,5 +316,33 @@ fn controls(ui: &mut Ui, app: &mut App) {
     }
     if stopping {
         app.abort_transmission();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A queued message is listed to say what is waiting rather than to be
+    /// read, so its line endings become a mark and its length is capped.
+    #[test]
+    fn a_listed_message_is_one_line() {
+        assert_eq!(one_line("CQ CQ\nDE JL1HIS"), "CQ CQ ↵ DE JL1HIS");
+        assert_eq!(one_line("RY RY"), "RY RY");
+    }
+
+    #[test]
+    fn a_long_message_is_cut_rather_than_pushing_the_row_wide() {
+        let listed = one_line(&"RY".repeat(100));
+        assert!(listed.ends_with('…'), "{listed}");
+        assert_eq!(listed.chars().count(), 61);
+    }
+
+    /// The mark is the arrow at U+21B5, which is what a text face is likeliest
+    /// to have a glyph for.
+    #[test]
+    fn the_line_ending_mark_is_the_arrow() {
+        assert_eq!(LINE_BREAK_MARK, "\u{21b5}");
+        assert_eq!(LINE_BREAK_MARK.chars().count(), 1);
     }
 }
