@@ -17,7 +17,6 @@ eframe.workspace = true
 egui.workspace = true
 fluent-bundle.workspace = true
 fontdb.workspace = true
-hound.workspace = true
 image.workspace = true
 jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
@@ -31,6 +30,7 @@ unic-langid.workspace = true
 embed-resource.workspace = true
 
 [dev-dependencies]
+hound.workspace = true
 egui_kittest.workspace = true
 rstest.workspace = true
 

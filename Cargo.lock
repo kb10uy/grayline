@@ -1995,6 +1995,7 @@ name = "grayline-audio"
 version = "0.4.2"
 dependencies = [
  "cpal",
+ "hound",
  "ringbuf",
  "rstest",
  "thiserror 2.0.20",
@@ -2071,7 +2072,6 @@ dependencies = [
  "grayline-rtty",
  "grayline-shell",
  "grayline-variables",
- "hound",
  "image",
  "jiff",
  "rstest",

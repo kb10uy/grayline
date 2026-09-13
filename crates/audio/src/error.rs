@@ -2,6 +2,17 @@ use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
 
+/// Failure while opening a recording or starting its feeder.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum WavError {
+    /// The recording or queue configuration could not be opened.
+    #[error("{0}")]
+    Input(String),
+    /// The operating system could not start the feeder thread.
+    #[error("file reading state is unavailable")]
+    WorkerUnavailable,
+}
+
 /// Failure reported by an audio adapter.
 ///
 /// Backend types are deliberately not exposed: the host API is an

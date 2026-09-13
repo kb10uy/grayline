@@ -303,6 +303,9 @@ faster than the decoder takes it, which is what keeps a twenty-minute recording
 out of memory. There is no file dialog, for the same reason the application
 opens its directories in the operator's file manager rather than listing them.
 
+The feeder is `grayline-audio::WavSource`, shared with RTTY. The WEFAX
+application supplies its decoder's minimum sample rate when opening a file.
+
 Two things the file path exposed that a live device hides. A queue told more
 than it can hold counts the rest as dropped, which reads as a hole in the
 timeline and restarts the reception — so the feeder offers only what fits,

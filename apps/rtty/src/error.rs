@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use grayline_audio::AudioError;
+use grayline_audio::{AudioError, WavError};
 use grayline_qso::QsoError;
 use grayline_rtty::RttyError;
 use grayline_variables::VariableError;
@@ -43,8 +43,8 @@ pub enum AppError {
     #[error("the playback stream is closed")]
     PlaybackClosed,
     /// A recording could not be opened or read.
-    #[error("{0}")]
-    Wav(String),
+    #[error(transparent)]
+    Wav(#[from] WavError),
     /// A worker panicked while holding its snapshot, so its state is unknown.
     #[error("{0} state is unavailable")]
     WorkerUnavailable(&'static str),

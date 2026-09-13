@@ -1,13 +1,12 @@
 use std::path::Path;
 
-use grayline_audio::{AudioHost, Capture, InputDevice, StreamFault};
+use grayline_audio::{AudioHost, Capture, InputDevice, StreamFault, WavSource};
 
 use crate::{
     error::AppError,
     worker::{
         Waker,
         receive::{Chart, RxSnapshot, RxWorker, StripUpdate, WorkerSettings},
-        wav::WavSource,
     },
 };
 
@@ -110,7 +109,12 @@ impl AudioState {
     /// the receive worker is the one that runs on a device and needs no path
     /// of its own.
     pub fn play_file(&mut self, path: &Path) -> Result<(), AppError> {
-        let (source, reader) = WavSource::open(path, QUEUE_CAPACITY_SAMPLES)?;
+        let (source, reader) = WavSource::open(
+            path,
+            QUEUE_CAPACITY_SAMPLES,
+            grayline_wefax::rx::MINIMUM_SAMPLE_RATE_HZ,
+            "grayline-wefax-file".to_owned(),
+        )?;
         self.close();
         self.session += 1;
         self.worker = Some(RxWorker::spawn(reader, self.settings, self.waker.clone()));

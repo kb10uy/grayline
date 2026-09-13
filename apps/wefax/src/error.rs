@@ -3,7 +3,7 @@
 //! The receive worker runs on its own thread and publishes what went wrong in
 //! a snapshot, so an error has to survive being cloned out of a mutex.
 
-use grayline_audio::AudioError;
+use grayline_audio::{AudioError, WavError};
 use grayline_wefax::WefaxError;
 use thiserror::Error;
 
@@ -24,8 +24,8 @@ pub enum AppError {
     #[error("reception could not be restarted after a capture overrun")]
     CaptureRestartFailed,
     /// A recording could not be opened or read.
-    #[error("{0}")]
-    Wav(String),
+    #[error(transparent)]
+    Wav(#[from] WavError),
     /// A worker panicked while holding its snapshot, so its state is unknown.
     #[error("{0} state is unavailable")]
     WorkerUnavailable(&'static str),

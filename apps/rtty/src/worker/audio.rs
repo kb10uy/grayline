@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use grayline_audio::{
-    AudioHost, Capture, CaptureReader, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault,
+    AudioHost, Capture, CaptureReader, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault, WavSource,
 };
 
 use crate::{
@@ -10,7 +10,6 @@ use crate::{
         Waker,
         receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
         transmit::{TxSnapshot, TxWorker},
-        wav::WavSource,
     },
 };
 
@@ -157,7 +156,12 @@ impl AudioState {
     /// the receive worker is the one that runs on a device and needs no path
     /// of its own.
     pub fn play_file(&mut self, path: &Path) -> Result<(), AppError> {
-        let (source, reader) = WavSource::open(path, QUEUE_CAPACITY_SAMPLES)?;
+        let (source, reader) = WavSource::open(
+            path,
+            QUEUE_CAPACITY_SAMPLES,
+            grayline_rtty::rx::MINIMUM_SAMPLE_RATE_HZ,
+            "grayline-rtty-file".to_owned(),
+        )?;
         self.close();
         self.session += 1;
         self.worker = Some(self.start(reader));

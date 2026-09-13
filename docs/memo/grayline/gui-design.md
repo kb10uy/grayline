@@ -177,11 +177,18 @@ unreachable. A shared name takes the host's own identifier beside it, which is
 the ALSA PCM name, as in `sof-hda-dsp (hw:CARD=0,DEV=6)`, or the WASAPI
 interface. Namesakes that even that cannot separate are numbered.
 
-`grayline-audio` owns device enumeration, stream formats, and
+`grayline-audio` owns device enumeration, stream formats, WAV input, and
 callback scheduling, and exposes only normalized mono `f32` blocks with sample
 positions. Keeping it separate preserves the rule that platform types must not
 appear in reusable core APIs, and lets the offline `gl-sstv` integrations
 remain unaffected.
+
+RTTY and WEFAX use `grayline-audio::WavSource` to feed recordings through a
+`CaptureReader`. Each application supplies its decoder's minimum sample rate;
+the adapter validates the recording, normalizes its first channel, and waits
+for queue space without dropping samples. Completion is reported only after
+the consumer empties the queue, and dropping the source stops and joins the
+feeder thread.
 
 The interface depends on `grayline-audio`, `grayline-sstv`, `grayline-sstv-rx`,
 `grayline-tone-tx`, `grayline-sstv-fskid`, and `grayline-sstv-template`. No core crate gains

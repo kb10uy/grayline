@@ -17,7 +17,6 @@ eframe.workspace = true
 egui.workspace = true
 fluent-bundle.workspace = true
 fontdb.workspace = true
-hound.workspace = true
 jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
 grayline-dsp = { path = "../../crates/dsp", features = ["std"] }
