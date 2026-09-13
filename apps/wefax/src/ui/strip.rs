@@ -115,9 +115,7 @@ impl Strip {
         let first = self.lines;
         self.lines += update.lines();
 
-        if self.grow(ctx) {
-            self.redraw(ctx);
-        } else if update.replaces_all || update.first_line == 0 {
+        if self.grow(ctx) || update.replaces_all || update.first_line == 0 {
             self.redraw(ctx);
         } else {
             self.upload(ctx, first, self.lines);
