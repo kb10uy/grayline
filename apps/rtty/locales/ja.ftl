@@ -68,3 +68,19 @@ hint-unsendable = { $character } はボドー符号にありません。取り�
 
 error-no-output = 出力デバイスが選択されていません
 error-underrun = サウンドカードへの供給が間に合わず、送信内容に欠落が生じました
+
+section-station = 自局
+section-contact = 交信相手
+
+label-my-call = 自局コール
+label-my-name = 自局名
+label-my-qth = 自局 QTH
+label-his-call = 相手コール
+label-his-name = 相手名
+label-his-qth = 相手 QTH
+label-rst-sent = 送信 RST
+label-rst-received = 受信 RST
+
+action-clear-contact = 相手情報を消去
+
+hint-clear-contact = 交信相手の欄を空にし、次の局に備えます

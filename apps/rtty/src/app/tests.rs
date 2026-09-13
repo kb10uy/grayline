@@ -366,3 +366,111 @@ fn the_transmit_level_is_stored_and_read_back() {
     assert_eq!(settings.tx_level, 0.25);
     assert!(!settings.tx_unshift_on_space);
 }
+
+/// A macro is written into the message field where the caret is, so one
+/// pressed in the middle of a reply lands in the reply.
+#[test]
+fn a_macro_is_written_into_the_draft_at_the_caret() {
+    let mut app = App::headless();
+    app.station.callsign = "JL1HIS".to_owned();
+    app.macros = vec![crate::app::macros::Macro {
+        label: "CALL".to_owned(),
+        text: "DE ${station.callsign}".to_owned(),
+        send: false,
+    }];
+    app.transmit.draft = "RR ".to_owned();
+
+    let caret = app.apply_macro(0, 3);
+
+    assert_eq!(app.transmit.draft, "RR DE JL1HIS");
+    assert_eq!(caret, Some(12));
+}
+
+#[test]
+fn a_macro_written_into_the_middle_of_a_draft_stays_in_the_middle() {
+    let mut app = App::headless();
+    app.station.callsign = "JL1HIS".to_owned();
+    app.macros = vec![crate::app::macros::Macro {
+        label: "CALL".to_owned(),
+        text: "${station.callsign}".to_owned(),
+        send: false,
+    }];
+    app.transmit.draft = "DE  K".to_owned();
+
+    app.apply_macro(0, 3);
+
+    assert_eq!(app.transmit.draft, "DE JL1HIS K");
+}
+
+/// A macro that sends goes out on its own rather than taking a half-written
+/// reply with it.
+#[test]
+fn a_sending_macro_does_not_disturb_the_draft() {
+    let mut app = App::headless();
+    app.macros = vec![crate::app::macros::Macro {
+        label: "RY".to_owned(),
+        text: "RYRY
+"
+        .to_owned(),
+        send: true,
+    }];
+    app.transmit.draft = "HALF WRITTEN".to_owned();
+
+    // Without a device there is nowhere to send it, and the draft is still
+    // not touched.
+    app.apply_macro(0, 0);
+    assert_eq!(app.transmit.draft, "HALF WRITTEN");
+    assert_eq!(app.transmit.queued().len(), 0);
+    assert!(app.notice.is_some());
+}
+
+/// An expanded macro arrives through the same filter a paste does, so what it
+/// writes is upper case and its line endings are the field's own.
+#[test]
+fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
+    let mut app = App::headless();
+    app.station.callsign = "jl1his".to_owned();
+    app.macros = vec![crate::app::macros::Macro {
+        label: "CQ".to_owned(),
+        text: "cq de ${station.callsign}
+"
+        .to_owned(),
+        send: false,
+    }];
+
+    assert_eq!(
+        app.expand_macro(0).as_deref(),
+        Some(
+            "CQ DE JL1HIS
+"
+        )
+    );
+}
+
+#[test]
+fn a_macro_that_is_not_there_does_nothing() {
+    let mut app = App::headless();
+    assert_eq!(app.expand_macro(99), None);
+    assert_eq!(app.apply_macro(99, 0), None);
+}
+
+/// The callsign taken from a received line is upper cased the way a typed one
+/// is, so the two reach the macros identically.
+#[test]
+fn a_callsign_taken_from_the_received_text_is_brought_into_shape() {
+    let mut app = App::headless();
+    app.set_contact_callsign("ja1zzz/1");
+    assert_eq!(app.contact.callsign, "JA1ZZZ/1");
+}
+
+#[test]
+fn the_station_details_are_stored_and_read_back() {
+    let mut app = App::headless();
+    app.station.callsign = "JL1HIS".to_owned();
+    app.station.qth = "TOKYO".to_owned();
+
+    let settings = app.settings();
+
+    assert_eq!(settings.station.callsign, "JL1HIS");
+    assert_eq!(settings.station.qth, "TOKYO");
+}

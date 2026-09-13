@@ -68,3 +68,19 @@ hint-unsendable = { $character } has no Baudot code. Remove it before sending.
 
 error-no-output = No output device is selected
 error-underrun = The sound card ran out of audio; the message that went out has a gap in it
+
+section-station = My Station
+section-contact = Contact
+
+label-my-call = My call
+label-my-name = My name
+label-my-qth = My QTH
+label-his-call = His call
+label-his-name = His name
+label-his-qth = His QTH
+label-rst-sent = RST sent
+label-rst-received = RST rcvd
+
+action-clear-contact = Clear Contact
+
+hint-clear-contact = Empty the contact fields, ready for the next station

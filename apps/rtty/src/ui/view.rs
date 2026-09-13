@@ -65,7 +65,13 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
         .default_size(transmit::DEFAULT_HEIGHT)
         .min_size(transmit::MINIMUM_HEIGHT)
         .show(ui, |ui| transmit_panel(ui, app));
-    egui::CentralPanel::default().show(ui, |ui| columns(ui, app));
+    let picked = egui::CentralPanel::default().show(ui, |ui| columns(ui, app)).inner;
+    // A callsign is read off the line that printed it and worked from the
+    // field beside it, so the way across is the one gesture that means "this
+    // word": there is nothing else in a received line to double-click for.
+    if let Some(callsign) = picked {
+        app.set_contact_callsign(&callsign);
+    }
     activated
 }
 
@@ -74,24 +80,26 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
 /// One path for now, and the layout is the mechanism for the rest: every
 /// column is fed the same audio, so what they print can be read against each
 /// other the moment there is a second demodulator to run.
-fn columns(ui: &mut Ui, app: &App) {
+fn columns(ui: &mut Ui, app: &App) -> Option<String> {
     let hint = app.i18n.text("hint-listening");
     let count = app.columns.len();
     let gaps = ui.spacing().item_spacing.x * count.saturating_sub(1) as f32;
     let width = ((ui.available_width() - gaps) / count.max(1) as f32).max(0.0);
     let height = ui.available_height();
 
+    let mut picked = None;
     ui.horizontal_top(|ui| {
         for (index, scrollback) in app.columns.iter().enumerate() {
             ui.allocate_ui(egui::vec2(width, height), |ui| {
                 ui.vertical(|ui| {
                     column_header(ui, app, index);
                     ui.separator();
-                    scrollback::pane(ui, scrollback, &hint);
+                    picked = scrollback::pane(ui, scrollback, &hint).or(picked.take());
                 });
             });
         }
     });
+    picked
 }
 
 /// What one decode path is hearing, over the text it printed from it.

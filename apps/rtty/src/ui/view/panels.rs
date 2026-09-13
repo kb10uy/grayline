@@ -12,11 +12,17 @@ pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
     // a large font scale; scroll rather than silently clipping the bottom.
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add_space(4.0);
+        let station_title = app.i18n.text("section-station");
+        section(ui, &station_title, |ui| station_panel(ui, app));
+        ui.add_space(12.0);
         let tuning_title = app.i18n.text("section-tuning");
         section(ui, &tuning_title, |ui| tuning_panel(ui, app));
         ui.add_space(12.0);
         let squelch_title = app.i18n.text("section-squelch");
         section(ui, &squelch_title, |ui| squelch_panel(ui, app));
+        ui.add_space(12.0);
+        let contact_title = app.i18n.text("section-contact");
+        section(ui, &contact_title, |ui| contact_panel(ui, app));
         ui.add_space(12.0);
         actions(ui, app);
     });
@@ -140,6 +146,94 @@ fn squelch_panel(ui: &mut Ui, app: &mut App) {
 
     if changed {
         app.push_settings();
+    }
+}
+
+/// Who this station is, which every macro signs with.
+///
+/// On the panel rather than on a menu, because a menu cannot hold a field and
+/// because a callsign is the one setting a station cannot transmit without:
+/// leaving it where it is read makes an empty one visible.
+fn station_panel(ui: &mut Ui, app: &mut App) {
+    let gap = ui.spacing().item_spacing.x;
+    let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
+    for (index, (key, salt)) in [
+        ("label-my-call", "my-call"),
+        ("label-my-name", "my-name"),
+        ("label-my-qth", "my-qth"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let label = app.i18n.text(key);
+        ui.horizontal(|ui| {
+            field_label(ui, &label);
+            let id = Id::new(salt);
+            crate::ui::input::sanitize(ui.ctx(), id);
+            let target = match index {
+                0 => &mut app.station.callsign,
+                1 => &mut app.station.name,
+                _ => &mut app.station.qth,
+            };
+            ui.add_sized(
+                [fields, ui.spacing().interact_size.y],
+                egui::TextEdit::singleline(target).id(id),
+            );
+        });
+    }
+}
+
+/// Who is being worked, which is what the macros are written from.
+///
+/// Beside the text rather than under it, because these are filled in from what
+/// the other station just sent: the callsign is read off the line above and
+/// the report is judged from the same signal the meter is reading.
+fn contact_panel(ui: &mut Ui, app: &mut App) {
+    let gap = ui.spacing().item_spacing.x;
+    let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
+    let labels = [
+        ("label-his-call", "his-call"),
+        ("label-his-name", "his-name"),
+        ("label-his-qth", "his-qth"),
+        ("label-rst-sent", "rst-sent"),
+        ("label-rst-received", "rst-received"),
+    ];
+    for (index, (key, salt)) in labels.into_iter().enumerate() {
+        let label = app.i18n.text(key);
+        ui.horizontal(|ui| {
+            field_label(ui, &label);
+            let id = Id::new(salt);
+            // The same filter the message field runs: what is typed here is
+            // typed to be sent, through whichever macro reads it.
+            crate::ui::input::sanitize(ui.ctx(), id);
+            let target = match index {
+                0 => &mut app.contact.callsign,
+                1 => &mut app.contact.name,
+                2 => &mut app.contact.qth,
+                3 => &mut app.contact.rst_sent,
+                _ => &mut app.contact.rst_received,
+            };
+            ui.add_sized(
+                [fields, ui.spacing().interact_size.y],
+                egui::TextEdit::singleline(target).id(id),
+            );
+        });
+    }
+
+    ui.add_space(4.0);
+    let clear = app.i18n.text("action-clear-contact");
+    let hint = app.i18n.text("hint-clear-contact");
+    let width = ui.available_width();
+    let height = ui.spacing().interact_size.y;
+    let pressed = ui
+        .add_enabled_ui(!app.contact.is_empty(), |ui| {
+            ui.add_sized([width, height], egui::Button::new(RichText::new(clear).size(SMALL)))
+        })
+        .inner
+        .on_hover_text(hint)
+        .clicked();
+    if pressed {
+        app.contact.clear();
     }
 }
 

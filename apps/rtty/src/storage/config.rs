@@ -1,7 +1,9 @@
 use std::{fs, io, path::PathBuf};
 
 use grayline_shell::log;
-use toml_edit::{DocumentMut, Item, value};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
+
+use crate::app::macros::{Macro, Station, default_macros};
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -59,6 +61,10 @@ pub struct Settings {
     pub tx_unshift_on_space: bool,
     /// Transmit level, as fader travel in `0..=1`.
     pub tx_level: f64,
+    /// Who this station is, for the macros that say so.
+    pub station: Station,
+    /// The buttons under the message field, in the order they are drawn.
+    pub macros: Vec<Macro>,
 }
 
 impl Default for Settings {
@@ -89,6 +95,8 @@ impl Default for Settings {
             // letters unless the transmission says otherwise.
             tx_unshift_on_space: true,
             tx_level: 0.95,
+            station: Station::default(),
+            macros: default_macros(),
         }
     }
 }
@@ -210,6 +218,31 @@ impl Config {
         table["tx_unshift_on_space"] = value(settings.tx_unshift_on_space);
         table["tx_level"] = value(settings.tx_level);
 
+        let station = table
+            .entry("station")
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut();
+        if let Some(station_table) = station {
+            station_table["callsign"] = value(settings.station.callsign.as_str());
+            station_table["name"] = value(settings.station.name.as_str());
+            station_table["qth"] = value(settings.station.qth.as_str());
+        }
+
+        // Written once and then left alone. There is no editor for them here,
+        // so the file is where they are changed, and rewriting the array on
+        // every save would reformat what the operator had written in it.
+        if !table.contains_key("macros") {
+            let mut macros = ArrayOfTables::new();
+            for shipped in &settings.macros {
+                let mut entry = Table::new();
+                entry["label"] = value(shipped.label.as_str());
+                entry["text"] = value(shipped.text.as_str());
+                entry["send"] = value(shipped.send);
+                macros.push(entry);
+            }
+            table["macros"] = Item::ArrayOfTables(macros);
+        }
+
         if let Err(error) = fs::write(&path, self.document.to_string()) {
             log::note(&format!("could not save {}: {error}", path.display()));
         }
@@ -260,7 +293,48 @@ fn read(document: &DocumentMut) -> Settings {
             *target = flag;
         }
     }
+    if let Some(station) = table.get("station").and_then(Item::as_table) {
+        let field = |key: &str| {
+            station
+                .get(key)
+                .and_then(Item::as_value)
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .to_owned()
+        };
+        settings.station = Station {
+            callsign: field("callsign"),
+            name: field("name"),
+            qth: field("qth"),
+        };
+    }
+    if let Some(macros) = table.get("macros").and_then(Item::as_array_of_tables) {
+        settings.macros = macros.iter().filter_map(read_macro).collect();
+    }
     settings.clamped()
+}
+
+/// Reads one macro, skipping an entry with nothing to press or to send.
+///
+/// A button with no text behind it would do nothing, and one with no label
+/// would be a button nobody could tell apart from the next; either is a
+/// half-written entry rather than a reason to start on no macros at all.
+fn read_macro(entry: &Table) -> Option<Macro> {
+    let field = |key: &str| entry.get(key).and_then(Item::as_value).and_then(|value| value.as_str());
+    let label = field("label")?;
+    let body = field("text")?;
+    if label.is_empty() || body.is_empty() {
+        return None;
+    }
+    Some(Macro {
+        label: label.to_owned(),
+        text: body.to_owned(),
+        send: entry
+            .get("send")
+            .and_then(Item::as_value)
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+    })
 }
 
 /// Reads a TOML number however it was written, ignoring one that is not
@@ -307,6 +381,12 @@ mod tests {
             atc: true,
             tx_unshift_on_space: false,
             tx_level: 0.5,
+            station: Station {
+                callsign: "JL1HIS".to_owned(),
+                name: "YU".to_owned(),
+                qth: "TOKYO".to_owned(),
+            },
+            macros: default_macros(),
         };
         Config::load(path.clone()).0.save(&wanted);
 

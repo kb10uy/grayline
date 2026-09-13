@@ -15,7 +15,10 @@ use grayline_shell::{
 };
 
 use crate::{
-    app::transmit::{Sending, Transmit},
+    app::{
+        macros::{Contact, Macro, Station, expand},
+        transmit::{Sending, Transmit},
+    },
     error::AppError,
     locales::CATALOG,
     storage::{
@@ -31,6 +34,7 @@ use crate::{
     },
 };
 
+pub mod macros;
 pub mod transmit;
 
 /// How far one point of drag moves the mark tone, in hertz.
@@ -73,6 +77,12 @@ pub struct App {
 
     /// The draft, the queue behind it, and the message on the air.
     pub transmit: Transmit,
+    /// Who this station is, for the macros that say so.
+    pub station: Station,
+    /// The station being worked, as entered beside the received text.
+    pub contact: Contact,
+    /// The buttons under the message field.
+    pub macros: Vec<Macro>,
 
     /// The last thing worth telling the operator, shown on the status bar.
     pub notice: Option<String>,
@@ -153,6 +163,9 @@ impl App {
             tx_unshift_on_space: settings.tx_unshift_on_space,
             tx_level: settings.tx_level,
             transmit: Transmit::default(),
+            station: settings.station.clone(),
+            contact: Contact::default(),
+            macros: settings.macros.clone(),
             notice: None,
             session,
             paths,
@@ -303,6 +316,8 @@ impl App {
             atc: self.atc,
             tx_unshift_on_space: self.tx_unshift_on_space,
             tx_level: self.tx_level,
+            station: self.station.clone(),
+            macros: self.macros.clone(),
         }
         .clamped()
     }
@@ -406,6 +421,56 @@ impl App {
     /// button until the operator has dealt with it.
     pub fn unsendable_character(&self) -> Option<char> {
         crate::ui::input::first_unsendable(&self.transmit.draft)
+    }
+
+    /// Writes a macro out with this station's and the contact's details in it.
+    ///
+    /// Filled in when the button is pressed rather than when the message is
+    /// keyed, so the time it names is the time the operator wrote it and so
+    /// what is about to go out can still be read and edited.
+    pub fn expand_macro(&self, index: usize) -> Option<String> {
+        let template = self.macros.get(index)?;
+        Some(crate::ui::input::normalize(&expand(
+            &template.text,
+            &self.station,
+            &self.contact,
+            &jiff::Zoned::now(),
+        )))
+    }
+
+    /// Presses a macro button.
+    ///
+    /// One that sends goes out as its own message rather than joining the
+    /// draft, so a call that is pressed while a reply is half written does not
+    /// take the reply with it. Everything else is written into the draft at
+    /// `insert_at`, which is where the caret was.
+    ///
+    /// Returns where the caret should end up, for a macro that was written
+    /// into the draft rather than sent.
+    pub fn apply_macro(&mut self, index: usize, insert_at: usize) -> Option<usize> {
+        let text = self.expand_macro(index)?;
+        if self.macros.get(index).is_some_and(|template| template.send) {
+            if self.audio.output_device.is_none() {
+                self.notice = Some(self.i18n.text("error-no-output"));
+                return None;
+            }
+            self.transmit.queue(text.trim_end_matches(['\r', '\n']).to_owned());
+            return None;
+        }
+        let at = insert_at.min(self.transmit.draft.chars().count());
+        let byte = self
+            .transmit
+            .draft
+            .char_indices()
+            .nth(at)
+            .map_or(self.transmit.draft.len(), |(index, _)| index);
+        self.transmit.draft.insert_str(byte, &text);
+        Some(at + text.chars().count())
+    }
+
+    /// Takes the callsign of the station being worked from the received text.
+    pub fn set_contact_callsign(&mut self, callsign: &str) {
+        self.contact.callsign = crate::ui::input::normalize(callsign);
     }
 
     /// Whether there is a message to send and a way to send it.

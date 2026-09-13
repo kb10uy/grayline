@@ -167,11 +167,30 @@ pub fn sent_color(visuals: &Visuals) -> Color32 {
     }
 }
 
+/// The word at `index`, taken as a callsign is: a run with no spaces in it.
+///
+/// Punctuation is kept rather than trimmed, because a callsign carries a
+/// stroke in it — `JA1ZZZ/1` is one word and cutting it at the stroke would
+/// answer the wrong station.
+fn word_at(text: &str, index: usize) -> Option<&str> {
+    if index > text.len() {
+        return None;
+    }
+    let boundary = |character: char| character.is_whitespace();
+    let start = text[..index].rfind(boundary).map_or(0, |at| at + 1);
+    let end = text[index..].find(boundary).map_or(text.len(), |at| index + at);
+    let word = text[start..end].trim();
+    (!word.is_empty()).then_some(word)
+}
+
 /// Draws one decode path's text, following the newest line.
 ///
 /// Monospaced, because RTTY is a teleprinter: RYRY tuning patterns and the
 /// callsign columns of a contest exchange are read as columns.
-pub fn pane(ui: &mut Ui, scrollback: &Scrollback, hint: &str) {
+///
+/// Returns the word the operator double-clicked, which is how a callsign gets
+/// from the line that printed it into the field the macros read it from.
+pub fn pane(ui: &mut Ui, scrollback: &Scrollback, hint: &str) -> Option<String> {
     let size = ui.text_style_height(&TextStyle::Body);
     ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -181,7 +200,7 @@ pub fn pane(ui: &mut Ui, scrollback: &Scrollback, hint: &str) {
                 if scrollback.is_empty() {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new(hint).weak());
-                    return;
+                    return None;
                 }
                 // Selectable, because the whole point of a received callsign
                 // is that it gets copied somewhere else.
@@ -204,13 +223,31 @@ pub fn pane(ui: &mut Ui, scrollback: &Scrollback, hint: &str) {
                     );
                 }
                 job.wrap.max_width = ui.available_width();
-                ui.add(egui::Label::new(job).wrap());
-            });
-        });
+                // Laid out here rather than by the label, because the galley
+                // is what turns a pointer position back into a place in the
+                // text.
+                let galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
+                let response = ui.add(egui::Label::new(galley.clone()).wrap());
+                if !response.double_clicked() {
+                    return None;
+                }
+                let pointer = response.interact_pointer_pos()?;
+                let cursor = galley.cursor_from_pos(pointer - response.rect.min);
+                let index = galley.text()[..]
+                    .char_indices()
+                    .nth(usize::from(cursor.index))
+                    .map_or(galley.text().len(), |(index, _)| index);
+                word_at(galley.text(), index).map(str::to_owned)
+            })
+            .inner
+        })
+        .inner
 }
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     #[test]
@@ -337,6 +374,49 @@ R R"
             .map(|(_, run)| *run)
             .collect();
         assert_eq!(marked, printed);
+    }
+
+    /// A callsign is one word of a received line, and the stroke a portable
+    /// station signs with is part of it rather than a break in it.
+    #[rstest]
+    #[case(0, Some("CQ"))]
+    #[case(1, Some("CQ"))]
+    #[case(2, Some("CQ"))]
+    #[case(3, Some("DE"))]
+    #[case(6, Some("JA1ZZZ/1"))]
+    #[case(10, Some("JA1ZZZ/1"))]
+    #[case(15, Some("K"))]
+    fn a_word_is_picked_out_of_the_line_that_printed_it(#[case] index: usize, #[case] expected: Option<&str>) {
+        assert_eq!(word_at("CQ DE JA1ZZZ/1 K", index), expected);
+    }
+
+    #[test]
+    fn a_position_in_empty_space_picks_no_word() {
+        assert_eq!(word_at("CQ  DE", 3), None);
+        assert_eq!(word_at("", 0), None);
+        assert_eq!(word_at("CQ", 99), None);
+    }
+
+    /// A line break ends a word: the callsign at the end of one line and the
+    /// word at the start of the next are two words.
+    #[test]
+    fn a_line_break_ends_a_word() {
+        assert_eq!(
+            word_at(
+                "JA1ZZZ
+DE",
+                0
+            ),
+            Some("JA1ZZZ")
+        );
+        assert_eq!(
+            word_at(
+                "JA1ZZZ
+DE",
+                7
+            ),
+            Some("DE")
+        );
     }
 
     #[test]

@@ -2070,6 +2070,7 @@ dependencies = [
  "grayline-shell",
  "hound",
  "image",
+ "jiff",
  "muda",
  "raw-window-handle",
  "rstest",

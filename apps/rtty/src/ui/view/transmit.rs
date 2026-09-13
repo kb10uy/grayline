@@ -30,14 +30,101 @@ pub fn draft_id() -> Id {
     Id::new("transmit-draft")
 }
 
+/// The function keys the macro buttons answer to, in order.
+const FUNCTION_KEYS: [egui::Key; 12] = [
+    egui::Key::F1,
+    egui::Key::F2,
+    egui::Key::F3,
+    egui::Key::F4,
+    egui::Key::F5,
+    egui::Key::F6,
+    egui::Key::F7,
+    egui::Key::F8,
+    egui::Key::F9,
+    egui::Key::F10,
+    egui::Key::F11,
+    egui::Key::F12,
+];
+
 /// Draws the whole transmit area.
 pub(super) fn transmit_panel(ui: &mut Ui, app: &mut App) {
     ui.add_space(2.0);
     on_air(ui, app);
     queued(ui, app);
     draft(ui, app);
+    macro_buttons(ui, app);
     ui.add_space(2.0);
     controls(ui, app);
+}
+
+/// The macro buttons, and the function keys that press them.
+///
+/// A press writes the message into the field at the caret rather than sending
+/// it, so what is about to go out can be read and edited first; a macro marked
+/// to send in the configuration is the exception, and goes out as a message of
+/// its own rather than joining whatever is half written.
+fn macro_buttons(ui: &mut Ui, app: &mut App) {
+    if app.macros.is_empty() {
+        return;
+    }
+    let mut pressed = None;
+    for (index, key) in FUNCTION_KEYS.iter().enumerate().take(app.macros.len()) {
+        if ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, *key)) {
+            pressed = Some(index);
+        }
+    }
+
+    ui.add_space(2.0);
+    let height = ui.spacing().interact_size.y;
+    let labels: Vec<(String, String)> = app
+        .macros
+        .iter()
+        .enumerate()
+        .map(|(index, template)| {
+            let shortcut = FUNCTION_KEYS
+                .get(index)
+                .map_or_else(String::new, |key| key.name().to_owned());
+            (template.label.clone(), shortcut)
+        })
+        .collect();
+    ui.horizontal_wrapped(|ui| {
+        for (index, (label, shortcut)) in labels.iter().enumerate() {
+            let button = egui::Button::new(RichText::new(label).size(SMALL));
+            let mut response = ui.add_sized([64.0, height], button);
+            if !shortcut.is_empty() {
+                response = response.on_hover_text(shortcut.trim());
+            }
+            if response.clicked() {
+                pressed = Some(index);
+            }
+        }
+    });
+
+    if let Some(index) = pressed {
+        press_macro(ui, app, index);
+    }
+}
+
+/// Writes a macro into the field at the caret, and leaves the caret after it.
+fn press_macro(ui: &Ui, app: &mut App, index: usize) {
+    let id = draft_id();
+    let mut state = egui::TextEdit::load_state(ui.ctx(), id);
+    let caret = state.as_ref().and_then(|state| state.cursor.char_range()).map_or_else(
+        || app.transmit.draft.chars().count(),
+        |range| range.primary.index.max(range.secondary.index).into(),
+    );
+    let Some(after) = app.apply_macro(index, caret) else {
+        return;
+    };
+    // The caret lands after what was written, so a macro pressed mid-message
+    // leaves the operator where they would have typed next.
+    if let Some(state) = state.as_mut() {
+        state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(after))));
+        state.clone().store(ui.ctx(), id);
+    }
+    ui.ctx().memory_mut(|memory| memory.request_focus(id));
 }
 
 /// The message being keyed, with what has left underlined.
