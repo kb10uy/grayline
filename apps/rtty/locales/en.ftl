@@ -17,7 +17,6 @@ input-device = Input device
 output-device = Output device
 
 section-tuning = Tuning
-section-squelch = Squelch
 section-transmit = Transmit
 
 label-mark = Mark
@@ -64,7 +63,7 @@ action-stop = Stop
 
 status-remaining = { $seconds } s left
 
-hint-draft = Write a message here. Enter starts a new line; Ctrl+Enter sends.
+hint-squelch = Nothing prints until the signal reads above this. Zero turns it off.
 hint-stop = Stop sending and put whatever did not go out back in the message
 hint-drop-queued = Drop this message from the queue
 hint-templates = Write one of the messages kept in templates.toml into the field. Ctrl+F1 to Ctrl+F9 pick the first nine.

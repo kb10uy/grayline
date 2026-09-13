@@ -73,7 +73,8 @@ pub struct App {
     pub baud: f64,
     pub reverse: bool,
     pub afc: bool,
-    pub squelch: bool,
+    /// The reading a signal has to beat to be printed; zero prints
+    /// everything, which is the squelch being off.
     pub squelch_threshold: f64,
     pub unshift_on_space: bool,
     pub atc: bool,
@@ -186,7 +187,6 @@ impl App {
             baud: settings.baud,
             reverse: settings.reverse,
             afc: settings.afc,
-            squelch: settings.squelch,
             squelch_threshold: settings.squelch_threshold,
             unshift_on_space: settings.unshift_on_space,
             atc: settings.atc,
@@ -348,7 +348,6 @@ impl App {
             baud: self.baud,
             reverse: self.reverse,
             afc: self.afc,
-            squelch: self.squelch,
             squelch_threshold: self.squelch_threshold,
             unshift_on_space: self.unshift_on_space,
             atc: self.atc,
@@ -835,7 +834,10 @@ fn worker_settings(settings: &Settings) -> WorkerSettings {
         baud: settings.baud,
         reverse: settings.reverse,
         afc: settings.afc,
-        squelch: settings.squelch.then_some(settings.squelch_threshold),
+        // Zero is the squelch being off: nothing is quieter than a signal
+        // that reads nothing, and the core takes the absence of a threshold as
+        // the squelch being clamped open.
+        squelch: (settings.squelch_threshold > 0.0).then_some(settings.squelch_threshold),
         unshift_on_space: settings.unshift_on_space,
         atc: settings.atc,
     }

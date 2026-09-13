@@ -13,6 +13,11 @@ use crate::{
     ui::scrollback::sent_color,
 };
 
+/// What a slider's own reading is written in, and the least a slider is drawn
+/// at when the panel is squeezed, in points.
+const SLIDER_VALUE_WIDTH: f32 = 52.0;
+const MINIMUM_SLIDER_WIDTH: f32 = 32.0;
+
 pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
     // The sections below can outgrow the panel's height on a small window or
     // a large font scale; scroll rather than silently clipping the bottom.
@@ -20,9 +25,6 @@ pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
         ui.add_space(4.0);
         let tuning_title = app.i18n.text("section-tuning");
         section(ui, &tuning_title, |ui| tuning_panel(ui, app));
-        ui.add_space(12.0);
-        let squelch_title = app.i18n.text("section-squelch");
-        section(ui, &squelch_title, |ui| squelch_panel(ui, app));
         ui.add_space(12.0);
         let transmit_title = app.i18n.text("section-transmit");
         section(ui, &transmit_title, |ui| transmit_controls(ui, app));
@@ -42,10 +44,16 @@ fn section(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui)) {
     });
 }
 
-/// The pair, the speed, and what the receiver is allowed to do about them.
+/// The pair, the speed, what the receiver is allowed to do about them, and
+/// the threshold under which it prints nothing.
 ///
 /// The mark tone is a figure rather than a list: a station is met wherever the
 /// operator's receiver puts it, and the shift beside it is what is standard.
+///
+/// The squelch is here rather than in a section of its own because it is read
+/// against the same signal: the meter under it is what the threshold is set
+/// by, and the frequency control above it is what put the receiver on the
+/// signal being measured.
 fn tuning_panel(ui: &mut Ui, app: &mut App) {
     let gap = ui.spacing().item_spacing.x;
     let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
@@ -117,6 +125,9 @@ fn tuning_panel(ui: &mut Ui, app: &mut App) {
         .inner
         .clicked();
 
+    ui.add_space(4.0);
+    squelch_row(ui, app, &mut changed);
+
     if changed {
         app.push_settings();
     }
@@ -125,34 +136,38 @@ fn tuning_panel(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// Rounded to the hundredth, because 45.45 baud is named by those digits.
-fn baud_text(baud: f64) -> String {
-    let text = format!("{baud:.2}");
-    let trimmed = text.trim_end_matches('0').trim_end_matches('.');
-    format!("{trimmed} baud")
-}
-
 /// The threshold, and what the signal it is being set against reads.
 ///
 /// The meter is under the slider rather than in the header alone because this
 /// is where the threshold is chosen: a setting made against a number that is
 /// somewhere else is made blind.
-fn squelch_panel(ui: &mut Ui, app: &mut App) {
+///
+/// There is no switch beside it. Zero is the whole of one — nothing is quieter
+/// than a signal that reads nothing — and a switch that only stood for the
+/// left end of the slider would be a second place to look for the same state.
+fn squelch_row(ui: &mut Ui, app: &mut App, changed: &mut bool) {
     let label = app.i18n.text("action-squelch");
-    let mut changed = ui
-        .checkbox(&mut app.squelch, RichText::new(label).size(SMALL))
-        .changed();
-    let slider = egui::Slider::new(&mut app.squelch_threshold, MINIMUM_SQUELCH..=MAXIMUM_SQUELCH)
-        .fixed_decimals(2)
-        .show_value(true);
-    changed |= ui.add_enabled_ui(app.squelch, |ui| ui.add(slider)).inner.changed();
+    let hint = app.i18n.text("hint-squelch");
+    ui.horizontal(|ui| {
+        field_label(ui, &label);
+        // The slider takes the rest of the row less the box its own reading is
+        // written in, so it ends where the fields above it end.
+        ui.spacing_mut().slider_width = (ui.available_width() - SLIDER_VALUE_WIDTH).max(MINIMUM_SLIDER_WIDTH);
+        let slider = egui::Slider::new(&mut app.squelch_threshold, MINIMUM_SQUELCH..=MAXIMUM_SQUELCH)
+            .fixed_decimals(2)
+            .show_value(true);
+        *changed |= ui.add(slider).on_hover_text(hint).changed();
+    });
 
     let strength = app.column(0).map_or(0.0, |column| column.signal_strength);
     ui.add(egui::ProgressBar::new(strength.clamp(0.0, 1.0)).desired_width(ui.available_width()));
+}
 
-    if changed {
-        app.push_settings();
-    }
+/// Rounded to the hundredth, because 45.45 baud is named by those digits.
+fn baud_text(baud: f64) -> String {
+    let text = format!("{baud:.2}");
+    let trimmed = text.trim_end_matches('0').trim_end_matches('.');
+    format!("{trimmed} baud")
 }
 
 /// Putting the message on the air, stopping it, and how hard it is driven.

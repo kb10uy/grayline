@@ -401,7 +401,6 @@ fn draft(ui: &mut Ui, app: &mut App) {
         .frame(egui::Frame::NONE)
         .desired_rows(DRAFT_ROWS)
         .desired_width(f32::INFINITY)
-        .hint_text(app.i18n.text("hint-draft"))
         .layouter(&mut layouter);
     // Held to its rows rather than growing with what is written: the field
     // scrolls, and everything under it stays where the operator left it.

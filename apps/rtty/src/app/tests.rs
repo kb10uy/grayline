@@ -102,16 +102,16 @@ fn the_tuning_settings_reach_the_worker() {
     assert!(settings.afc);
 }
 
-/// The threshold is only a threshold while the squelch is on; the core takes
-/// its absence as the squelch being off.
+/// A threshold of zero is the squelch being off, which is what the panel
+/// offers instead of a switch: the core takes the absence of a threshold as
+/// the squelch being clamped open.
 #[test]
-fn switching_the_squelch_off_takes_the_threshold_with_it() {
+fn a_threshold_of_nothing_is_no_squelch_at_all() {
     let mut app = App::headless();
-    app.squelch = false;
+    app.squelch_threshold = 0.0;
     app.push_settings();
     assert_eq!(app.audio.settings().squelch, None);
 
-    app.squelch = true;
     app.squelch_threshold = 0.4;
     app.push_settings();
     assert_eq!(app.audio.settings().squelch, Some(0.4));

@@ -53,7 +53,7 @@ pub struct Settings {
     /// Swaps the tones, for a signal received on the other sideband.
     pub reverse: bool,
     pub afc: bool,
-    pub squelch: bool,
+    /// The reading a signal has to beat to be printed; zero is no squelch.
     pub squelch_threshold: f64,
     pub unshift_on_space: bool,
     pub atc: bool,
@@ -85,7 +85,6 @@ impl Default for Settings {
             // pair it was put on. Switched on for a signal, it does what it
             // is for.
             afc: false,
-            squelch: true,
             squelch_threshold: 0.25,
             unshift_on_space: true,
             atc: false,
@@ -210,7 +209,6 @@ impl Config {
         table["baud"] = value(settings.baud);
         table["reverse"] = value(settings.reverse);
         table["afc"] = value(settings.afc);
-        table["squelch"] = value(settings.squelch);
         table["squelch_threshold"] = value(settings.squelch_threshold);
         table["unshift_on_space"] = value(settings.unshift_on_space);
         table["atc"] = value(settings.atc);
@@ -282,7 +280,6 @@ fn read(document: &DocumentMut) -> Settings {
     for (key, target) in [
         ("reverse", &mut settings.reverse),
         ("afc", &mut settings.afc),
-        ("squelch", &mut settings.squelch),
         ("unshift_on_space", &mut settings.unshift_on_space),
         ("atc", &mut settings.atc),
         ("tx_unshift_on_space", &mut settings.tx_unshift_on_space),
@@ -387,7 +384,6 @@ mod tests {
             baud: 75.0,
             reverse: true,
             afc: false,
-            squelch: false,
             squelch_threshold: 0.4,
             unshift_on_space: false,
             atc: true,
