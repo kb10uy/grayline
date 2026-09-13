@@ -252,23 +252,34 @@ time-of-day greeting.
 Grayline adopts the semantics but not the syntax: readable placeholders
 instead of percent letters.
 
-**As built, the placeholders are the `${...}` form** `apps/sstv` already
-interpolates its templates with ([template-design.md](template-design.md)),
-carrying the same names — `station.callsign`, `contact.callsign`,
-`contact.name`, `contact.qth` — with `contact.rst.sent`,
-`contact.rst.received`, `date.utc`, `time.utc`, and `greeting` added for RTTY.
-One convention across the family beats a second one invented here, and an
-operator who has written a template has written a macro. The plan's claim that
-the braces and the percent sign are all outside ITA2 holds, but the dollar sign
-is not — it is FIGS-D in the Bell table. That costs nothing, because a name is
-never written without its braces.
+**As built, the interpolation is the family's rather than this
+application's.** `crates/variables` holds the expression syntax, the rule for
+what may be named, and the values a name can stand for; it was lifted out of
+`grayline-sstv-template`, which had it first and now re-exports it. RTTY holds
+only the half that is its own: which names exist and what each stands for. Two
+readers of one syntax drift, and an operator who has written a template should
+have written a macro.
 
-A name that is not one of these is **left exactly as it was written**. The
-expansion lands in a field that refuses the braces, so a misspelled name
-arrives in red with the send button held: a mistake in a macro stops where the
-operator can see it, without a validator having to be written for it. For the
-same reason there is no escape for a literal opening brace pair, which could
-not have been sent either way.
+So a macro reads exactly as a template does: `$$` is one dollar sign, a dollar
+that opens nothing is one too, `${name:format}` writes a timestamp however the
+macro asks, and a name nothing was provided for is a refusal rather than a gap.
+The refusal is reported on the status bar naming the name; the message is not
+written into the field at all, because what it would put there is text with a
+hole where a callsign belongs. The braces cost nothing on the air, being
+outside ITA2; the dollar sign is FIGS-D in the Bell table and so sendable, but
+a name is never written without its braces.
+
+The names are the SSTV templates' too — `station.callsign`, `station.qth`,
+`station.grid`, `contact.callsign`, `contact.name`, `contact.qth`,
+`report.sent`, `report.received`, `application.version`, and
+`tx.timestamp.{utc,local}`. Three of SSTV's are missing because this
+application has nothing to answer with: `radio.*` wants the rig control that is
+not written, `rx.timestamp.*` wants a reception with a beginning and an end,
+and `report.number` wants the contest serial the plan deferred. One is added,
+`greeting`, which is MMTTY's `%g` and which no template ever wanted.
+`contact.name` keeps MMTTY's `OM` fallback, which is not the kind of
+placeholder the SSTV templates refuse: `OM` is what an operator actually says
+to a station whose name they have not been told.
 
 Macro buttons answer to F1 through F12. A press expands at that moment and
 writes the result into the field at the caret, so the time a message names is

@@ -2068,6 +2068,7 @@ dependencies = [
  "grayline-audio",
  "grayline-rtty",
  "grayline-shell",
+ "grayline-variables",
  "hound",
  "image",
  "jiff",

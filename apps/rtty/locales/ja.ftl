@@ -75,6 +75,7 @@ section-contact = 交信相手
 label-my-call = 自局コール
 label-my-name = 自局名
 label-my-qth = 自局 QTH
+label-my-grid = 自局グリッド
 label-his-call = 相手コール
 label-his-name = 相手名
 label-his-qth = 相手 QTH

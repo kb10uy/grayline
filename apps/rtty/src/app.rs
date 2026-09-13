@@ -472,10 +472,10 @@ impl App {
     /// Filled in when the button is pressed rather than when the message is
     /// keyed, so the time it names is the time the operator wrote it and so
     /// what is about to go out can still be read and edited.
-    pub fn expand_macro(&self, index: usize) -> Option<String> {
+    pub fn expand_macro(&self, index: usize) -> Option<Result<String, AppError>> {
         let template = self.macros.get(index)?;
         let now = jiff::Zoned::now();
-        Some(crate::ui::input::normalize(&expand(
+        let written = expand(
             &template.text,
             &MacroContext {
                 station: &self.station,
@@ -483,7 +483,12 @@ impl App {
                 custom: &self.custom_variables,
                 now: &now,
             },
-        )))
+        );
+        Some(
+            written
+                .map(|text| crate::ui::input::normalize(&text))
+                .map_err(AppError::from),
+        )
     }
 
     /// Presses a macro button.
@@ -496,7 +501,16 @@ impl App {
     /// Returns where the caret should end up, for a macro that was written
     /// into the draft rather than sent.
     pub fn apply_macro(&mut self, index: usize, insert_at: usize) -> Option<usize> {
-        let text = self.expand_macro(index)?;
+        let text = match self.expand_macro(index)? {
+            Ok(text) => text,
+            // A macro that names something this application cannot fill in is
+            // reported rather than written half finished: what it would put in
+            // the field is a message with a gap where a callsign belongs.
+            Err(error) => {
+                self.report(&error);
+                return None;
+            }
+        };
         if self.macros.get(index).is_some_and(|template| template.send) {
             if self.audio.output_device.is_none() {
                 self.notice = Some(self.i18n.text("error-no-output"));

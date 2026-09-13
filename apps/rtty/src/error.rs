@@ -5,6 +5,7 @@
 
 use grayline_audio::AudioError;
 use grayline_rtty::RttyError;
+use grayline_variables::VariableError;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
@@ -23,6 +24,9 @@ pub enum AppError {
     },
     #[error("reception could not be restarted after a capture overrun")]
     CaptureRestartFailed,
+    /// A macro names something the application cannot fill in.
+    #[error("this macro cannot be written: {0}")]
+    Macro(#[from] VariableError),
     /// There is nothing to play a transmission out of.
     #[error("no output device is available")]
     NoOutputDevice,

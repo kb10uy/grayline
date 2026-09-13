@@ -372,6 +372,7 @@ The workspace currently contains seventeen packages:
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
+| `grayline-variables` | `${name}` interpolation shared by the SSTV templates and the RTTY macros | Implemented |
 | `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
 | `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
 | `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit |

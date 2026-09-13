@@ -229,6 +229,7 @@ impl Config {
             station_table["callsign"] = value(settings.station.callsign.as_str());
             station_table["name"] = value(settings.station.name.as_str());
             station_table["qth"] = value(settings.station.qth.as_str());
+            station_table["grid"] = value(settings.station.grid.as_str());
         }
 
         // Written once and then left alone. There is no editor for them here,
@@ -311,6 +312,7 @@ fn read(document: &DocumentMut) -> Settings {
             callsign: field("callsign"),
             name: field("name"),
             qth: field("qth"),
+            grid: field("grid"),
         };
     }
     if let Some(macros) = table.get("macros").and_then(Item::as_array_of_tables) {
@@ -429,6 +431,7 @@ mod tests {
                 callsign: "JL1HIS".to_owned(),
                 name: "YU".to_owned(),
                 qth: "TOKYO".to_owned(),
+                grid: "PM95UQ".to_owned(),
             },
             macros: default_macros(),
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95".to_owned())]),

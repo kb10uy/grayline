@@ -27,6 +27,7 @@ jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
 grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
 grayline-shell = { path = "../../crates/shell" }
+grayline-variables = { path = "../../crates/variables" }
 thiserror.workspace = true
 toml_edit.workspace = true
 unic-langid.workspace = true

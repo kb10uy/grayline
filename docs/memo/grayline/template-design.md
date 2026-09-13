@@ -327,7 +327,9 @@ failing to render.
 
 ## Variables
 
-Interpolation uses explicit names enclosed in `${...}`:
+Interpolation uses explicit names enclosed in `${...}`. The reader is
+`grayline-variables`, shared with the RTTY macros so that one syntax is read
+one way; the names below are what the SSTV composer offers it.
 
 ```kdl
 text "To ${contact.callsign} from ${station.callsign}"

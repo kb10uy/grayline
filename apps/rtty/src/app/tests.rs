@@ -427,13 +427,13 @@ fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
         send: false,
     }];
 
-    assert_eq!(app.expand_macro(0).as_deref(), Some("CQ DE JL1HIS\n"));
+    assert_eq!(app.expand_macro(0).unwrap().unwrap(), "CQ DE JL1HIS\n");
 }
 
 #[test]
 fn a_macro_that_is_not_there_does_nothing() {
     let mut app = App::headless();
-    assert_eq!(app.expand_macro(99), None);
+    assert!(app.expand_macro(99).is_none());
     assert_eq!(app.apply_macro(99, 0), None);
 }
 
@@ -517,7 +517,7 @@ fn a_macro_reads_the_fields_the_operator_added() {
         send: false,
     }];
 
-    assert_eq!(app.expand_macro(0).as_deref(), Some("MY GRID IS PM95UQ"));
+    assert_eq!(app.expand_macro(0).unwrap().unwrap(), "MY GRID IS PM95UQ");
 }
 
 #[test]
@@ -528,4 +528,42 @@ fn the_operator_fields_are_stored_and_read_back() {
     let settings = app.settings();
 
     assert_eq!(settings.custom_variables["grid"], "PM95UQ");
+}
+
+/// A macro naming something the application cannot fill in is reported rather
+/// than written half finished: what it would put in the field is a message
+/// with a gap where a callsign belongs.
+#[test]
+fn a_macro_naming_nothing_is_reported_rather_than_written() {
+    let mut app = App::headless();
+    app.macros = vec![crate::app::macros::Macro {
+        label: "BAD".to_owned(),
+        text: "DE ${station.kallsign}".to_owned(),
+        send: false,
+    }];
+    app.transmit.draft = "TYPING".to_owned();
+
+    let caret = app.apply_macro(0, 0);
+
+    assert_eq!(caret, None);
+    assert_eq!(app.transmit.draft, "TYPING");
+    let notice = app.notice.as_deref().expect("the operator is told");
+    assert!(notice.contains("station.kallsign"), "{notice}");
+}
+
+/// The clock is one name a macro formats however it wants, the way a template
+/// formats one.
+#[test]
+fn a_macro_writes_the_clock_in_the_format_it_asks_for() {
+    let mut app = App::headless();
+    app.macros = vec![crate::app::macros::Macro {
+        label: "TIME".to_owned(),
+        text: "AT ${tx.timestamp.utc:%Y}".to_owned(),
+        send: false,
+    }];
+
+    let written = app.expand_macro(0).unwrap().unwrap();
+
+    assert!(written.starts_with("AT 2"), "{written}");
+    assert_eq!(written.len(), "AT 2026".len());
 }

@@ -19,7 +19,7 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
     let title = app.i18n.text("station-title");
     let note = app.i18n.text("station-callsign-required");
     let close = app.i18n.text("station-close");
-    let labels = ["label-my-call", "label-my-name", "label-my-qth"].map(|key| app.i18n.text(key));
+    let labels = ["label-my-call", "label-my-name", "label-my-qth", "label-my-grid"].map(|key| app.i18n.text(key));
 
     let mut done = false;
     let mut changed = false;
@@ -30,7 +30,7 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
         ui.add_space(8.0);
         let width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
         for (index, label) in labels.iter().enumerate() {
-            let id = Id::new(["station-callsign", "station-name", "station-qth"][index]);
+            let id = Id::new(["station-callsign", "station-name", "station-qth", "station-grid"][index]);
             // The same filter every field whose contents reach the air runs:
             // what is typed here is typed to be sent, through the macros that
             // read it.
@@ -38,7 +38,8 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
             let target = match index {
                 0 => &mut app.station.callsign,
                 1 => &mut app.station.name,
-                _ => &mut app.station.qth,
+                2 => &mut app.station.qth,
+                _ => &mut app.station.grid,
             };
             ui.horizontal(|ui| {
                 field_label(ui, label);

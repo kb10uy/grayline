@@ -75,6 +75,7 @@ section-contact = Contact
 label-my-call = My call
 label-my-name = My name
 label-my-qth = My QTH
+label-my-grid = My grid
 label-his-call = His call
 label-his-name = His name
 label-his-qth = His QTH
