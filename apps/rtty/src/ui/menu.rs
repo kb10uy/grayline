@@ -31,6 +31,8 @@ pub use in_window::MenuHost;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
     ShowStation,
+    ToggleContactLookup,
+    WriteContactCredentials,
     SelectDevice(String),
     SelectOutputDevice(String),
     SelectLocale(Locale),
@@ -107,6 +109,20 @@ pub fn model(app: &App) -> Vec<Menu> {
                 Item::Command {
                     label: text("menu-station"),
                     action: Action::ShowStation,
+                },
+                Item::Submenu {
+                    label: text("menu-contact"),
+                    items: vec![
+                        Item::Check {
+                            label: text("action-contact-lookup"),
+                            checked: app.contact_settings.lookup,
+                            action: Action::ToggleContactLookup,
+                        },
+                        Item::Command {
+                            label: text("action-contact-write-credentials"),
+                            action: Action::WriteContactCredentials,
+                        },
+                    ],
                 },
                 Item::Separator,
                 Item::Submenu {
@@ -221,6 +237,8 @@ fn locale_items(app: &App) -> Vec<Item> {
 pub fn apply(app: &mut App, action: Action) -> bool {
     match action {
         Action::ShowStation => app.open_station(),
+        Action::ToggleContactLookup => app.set_contact_lookup(!app.contact_settings.lookup),
+        Action::WriteContactCredentials => app.write_contact_credentials(),
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),

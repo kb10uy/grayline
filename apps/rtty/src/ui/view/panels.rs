@@ -240,6 +240,7 @@ fn transmit_controls(ui: &mut Ui, app: &mut App) {
 fn contact_panel(ui: &mut Ui, app: &mut App) {
     let gap = ui.spacing().item_spacing.x;
     let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
+    let details_hint = app.i18n.text("contact-open");
     let labels = [
         ("label-his-call", "his-call"),
         ("label-his-name", "his-name"),
@@ -247,6 +248,8 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
         ("label-rst-sent", "rst-sent"),
         ("label-rst-received", "rst-received"),
     ];
+    let mut finished = false;
+    let mut opening = false;
     for (index, (key, salt)) in labels.into_iter().enumerate() {
         let label = app.i18n.text(key);
         ui.horizontal(|ui| {
@@ -255,6 +258,12 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
             // The same filter the message field runs: what is typed here is
             // typed to be sent, through whichever macro reads it.
             crate::ui::input::sanitize(ui.ctx(), id);
+            let height = ui.spacing().interact_size.y;
+            // The callsign row gives up the width of the button beside it,
+            // which sits there rather than in a menu: what the directory holds
+            // is about the station on the air right now, and this is where
+            // that station is named.
+            let width = if index == 0 { fields - height - gap } else { fields };
             let target = match index {
                 0 => &mut app.contact.callsign,
                 1 => &mut app.contact.name,
@@ -262,10 +271,17 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
                 3 => &mut app.contact.rst_sent,
                 _ => &mut app.contact.rst_received,
             };
-            ui.add_sized(
-                [fields, ui.spacing().interact_size.y],
-                egui::TextEdit::singleline(target).id(id),
-            );
+            let response = ui.add_sized([width, height], egui::TextEdit::singleline(target).id(id));
+            finished |= response.lost_focus();
+            if index == 0 {
+                // Offered only for text that is a callsign: there is nothing
+                // to look up under half of one.
+                let known = grayline_qso::normalize_callsign(&app.contact.callsign).is_some();
+                opening = ui
+                    .add_enabled(known, egui::Button::new("\u{2026}"))
+                    .on_hover_text(&details_hint)
+                    .clicked();
+            }
         });
     }
 
@@ -282,7 +298,15 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
         .on_hover_text(hint)
         .clicked();
     if pressed {
-        app.contact.clear();
+        app.clear_contact();
+    }
+    // Leaving the callsign field is what commits it, which is what asks the
+    // directory about the station.
+    if finished {
+        app.finish_contact_edit();
+    }
+    if opening {
+        app.open_contact();
     }
 }
 

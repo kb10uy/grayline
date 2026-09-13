@@ -98,3 +98,37 @@ custom-value = 値
 custom-add = フィールドを追加
 custom-invalid = 名前には英数字とアンダースコアが使えます。各区切りは英字で始めてください。
 custom-note = ここで付けた名前は、マクロ中で ${ "{" }custom.名前{ "}" } と書きます。値は電波に乗るため、送信できる文字である必要があります。
+
+menu-contact = 相手局ディレクトリ
+action-contact-lookup = 相手局を照会する
+action-contact-write-credentials = credentials.toml を書き出す
+
+contact-title = 相手局
+contact-open = この局についてディレクトリが持っている情報
+contact-note-keys = マクロからは ${ "{" }contact.name{ "}" } で参照します。ここで入力した値は照会で上書きされません。
+contact-other = その他の項目
+contact-add = 追加
+contact-refresh = 再照会
+contact-state-looking = 照会中…
+contact-state-unknown = { $callsign } の情報はありません。
+contact-state-failed = 照会に失敗しました: { $detail }
+contact-credentials-written = { $path } を書き出しました
+contact-name = 名前
+contact-name-latin = 名前 (ローマ字)
+contact-qth = QTH
+contact-qth-latin = QTH (ローマ字)
+contact-grid = Grid
+contact-jcc = JCC/JCG
+contact-dxcc = DXCC
+contact-dxcc-id = DXCC No.
+contact-cq-zone = CQ ゾーン
+contact-itu-zone = ITU ゾーン
+contact-continent = 大陸
+contact-state = State
+contact-county = County
+contact-iota = IOTA
+contact-qsl-manager = QSL Via
+contact-email = メール
+contact-note = メモ
+
+error-credentials = 認証情報ファイルを書き出せませんでした

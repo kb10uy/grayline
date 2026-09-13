@@ -478,3 +478,75 @@ fn the_extra_fields_are_edited_in_the_station_window(#[case] locale: Locale) {
         );
     }
 }
+
+/// The window on what is filed opens from the panel rather than from a menu,
+/// because it is about the station on the air right now.
+#[rstest]
+#[case(Locale::En)]
+#[case(Locale::Ja)]
+fn the_contact_window_shows_the_fields_the_settings_ask_for(#[case] locale: Locale) {
+    let mut app = App::headless();
+    app.select_locale(locale);
+    let i18n = I18n::new(locale, &crate::locales::CATALOG);
+
+    // Closed, none of it is in the window. Probed by the note rather than by
+    // the title, which is the word the panel's own section heading uses.
+    {
+        let harness = render(&mut app);
+        assert!(harness.query_by_label(&i18n.text("contact-note-keys")).is_none());
+    }
+
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.open_contact();
+    let harness = render(&mut app);
+
+    harness.get_by_label(&i18n.text("contact-name"));
+    harness.get_by_label(&i18n.text("contact-name-latin"));
+    harness.get_by_label(&i18n.text("contact-qth"));
+    harness.get_by_label(&i18n.text("contact-add"));
+    harness.get_by_label(&i18n.text("station-close"));
+}
+
+/// A key the settings named that this build has no label for stands under its
+/// own name: the field list is the operator's to write, and a key they
+/// invented is one no catalogue was ever going to know.
+#[test]
+fn a_field_no_catalogue_knows_stands_under_its_own_name() {
+    let mut app = App::headless();
+    app.contact_settings.fields = vec!["club".to_owned()];
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.open_contact();
+
+    let harness = render(&mut app);
+
+    harness.get_by_label("club");
+}
+
+/// The Settings menu carries the directory's own two settings, or an operator
+/// has no way to turn the lookup off or to learn that the key file exists.
+#[test]
+fn the_settings_menu_carries_the_directory() {
+    let app = App::headless();
+    let model = menu::model(&app);
+    let items = menu::flatten(&model);
+    assert!(
+        items.iter().any(|item| matches!(
+            item,
+            menu::Item::Check {
+                action: menu::Action::ToggleContactLookup,
+                ..
+            }
+        )),
+        "the lookup switch is not on the menu"
+    );
+    assert!(
+        items.iter().any(|item| matches!(
+            item,
+            menu::Item::Command {
+                action: menu::Action::WriteContactCredentials,
+                ..
+            }
+        )),
+        "writing the credentials file is not on the menu"
+    );
+}

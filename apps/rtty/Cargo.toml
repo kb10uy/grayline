@@ -25,6 +25,7 @@ fontdb.workspace = true
 hound.workspace = true
 jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
+grayline-qso = { path = "../../crates/qso" }
 grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
 grayline-shell = { path = "../../crates/shell" }
 grayline-variables = { path = "../../crates/variables" }

@@ -2,6 +2,7 @@ use std::{
     fs, io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use grayline_rtty::ToneSet;
@@ -12,6 +13,7 @@ use grayline_shell::{
 use rstest::rstest;
 
 use super::*;
+use crate::worker::contact::ContactState;
 
 /// A platform that records what the interface asked it for.
 #[derive(Default)]
@@ -225,10 +227,14 @@ fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
     let mut app = App::from_parts(
         AudioState::disconnected(worker_settings(&settings)),
         AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
-        Config::detached(),
+        Stored {
+            config: Config::detached(),
+            common: CommonConfig::load(shared.clone()),
+            library: Library::default(),
+        },
         &settings,
-        Library::default(),
-        CommonConfig::load(shared.clone()),
+        ContactPaths::default(),
+        Waker::default(),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
     assert_eq!(app.i18n.locale(), Locale::Ja);
@@ -623,4 +629,247 @@ fn a_macro_writes_the_clock_in_the_format_it_asks_for() {
 
     assert!(written.starts_with("AT 2"), "{written}");
     assert_eq!(written.len(), "AT 2026".len());
+}
+
+/// Waits for the contact worker to answer whatever it was last asked.
+///
+/// The worker runs on its own thread, so a test that looked a station up has
+/// to let it get there before reading what it found.
+fn settled(app: &App) -> ContactSnapshot {
+    waited(app, |snapshot| snapshot.state != ContactState::Looking)
+}
+
+/// Waits for the worker to have written what it was handed.
+fn filed(app: &App) -> ContactSnapshot {
+    waited(app, |snapshot| !snapshot.fields.is_empty())
+}
+
+fn waited(app: &App, done: impl Fn(&ContactSnapshot) -> bool) -> ContactSnapshot {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let snapshot = app.contact_directory.latest();
+        if done(&snapshot) || Instant::now() > deadline {
+            return snapshot;
+        }
+        std::thread::yield_now();
+    }
+}
+
+/// Files `fields` under the callsign in the panel, the way the window does.
+fn file(app: &mut App, fields: &[(&str, &str)]) {
+    app.open_contact();
+    for (key, value) in fields {
+        if let Some(row) = app.contact_draft.iter_mut().find(|row| row.key == *key) {
+            row.value = (*value).to_owned();
+            continue;
+        }
+        app.contact_draft.push(ContactRow {
+            key: (*key).to_owned(),
+            value: (*value).to_owned(),
+            offered: false,
+        });
+    }
+    app.commit_contact();
+    filed(app);
+    app.poll_contact();
+}
+
+/// Leaving the field is what commits a callsign, and the operator leaves it
+/// whether or not they changed anything. Asking again for the station already
+/// showing would put a second question to somebody's logger for nothing.
+#[test]
+fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
+    let mut app = App::headless();
+
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    app.finish_contact_edit();
+
+    assert_eq!(
+        app.contact_directory.latest().state,
+        ContactState::Unknown,
+        "a second request would have put the worker back to looking"
+    );
+}
+
+#[test]
+fn a_changed_callsign_is_asked_about() {
+    let mut app = App::headless();
+
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).callsign, "JA1ABC");
+
+    app.contact.callsign = "JH1XYZ".to_owned();
+    app.finish_contact_edit();
+
+    assert_eq!(settled(&app).callsign, "JH1XYZ");
+}
+
+/// A callsign double-clicked out of the received text never passes through the
+/// field, so it has to ask for itself.
+#[test]
+fn a_callsign_taken_from_the_text_is_asked_about_like_a_typed_one() {
+    let mut app = App::headless();
+
+    app.set_contact_callsign("ja1abc");
+
+    assert_eq!(settled(&app).callsign, "JA1ABC");
+}
+
+/// Half a callsign is not one, and neither is a word out of a garbled line.
+#[rstest]
+#[case("JA")]
+#[case("")]
+#[case("????")]
+fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
+    let mut app = App::headless();
+
+    app.contact.callsign = typed.to_owned();
+    app.finish_contact_edit();
+
+    assert_eq!(app.contact_directory.latest().state, ContactState::Idle);
+}
+
+/// A headless interface must reach neither the operator's own store nor the
+/// key sitting beside it: a test that discovered them would write into their
+/// configuration directory and put questions to whatever logger the key names.
+#[test]
+fn a_headless_interface_names_none_of_the_operators_own_files() {
+    let app = App::headless();
+
+    assert_eq!(app.contact_paths.store, None);
+    assert_eq!(app.contact_paths.credentials, None);
+}
+
+/// The menu offers to write a credentials file, and a test that applies every
+/// action must not thereby write one.
+#[test]
+fn writing_the_credentials_file_does_nothing_without_one_to_write() {
+    let mut app = App::headless();
+
+    app.write_contact_credentials();
+
+    assert!(app.notice.is_none());
+}
+
+/// And when there is one to write, it goes where the paths name rather than
+/// wherever the crate would have discovered.
+#[test]
+fn the_credentials_file_is_written_where_the_paths_name_it() {
+    let root = crate::test_util::TempDir::new();
+    let credentials = root.path().join("credentials.toml");
+    let settings = Settings::default();
+    let mut app = App::from_parts(
+        AudioState::disconnected(worker_settings(&settings)),
+        AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
+        Stored {
+            config: Config::detached(),
+            common: CommonConfig::detached(),
+            library: Library::default(),
+        },
+        &settings,
+        ContactPaths {
+            store: None,
+            credentials: Some(credentials.clone()),
+        },
+        Waker::default(),
+        Box::new(grayline_shell::platform::QuietPlatform),
+    );
+
+    app.write_contact_credentials();
+
+    assert!(credentials.is_file(), "{}", credentials.display());
+    assert!(app.notice.is_some());
+}
+
+/// What the directory holds is what the operator would otherwise type again
+/// at every exchange, so it lands in the fields they left empty.
+#[test]
+fn what_the_directory_filed_fills_the_fields_left_empty() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    file(&mut app, &[("name_latin", "TARO"), ("qth", "TOKYO")]);
+
+    assert_eq!(app.contact.name, "TARO");
+    assert_eq!(app.contact.qth, "TOKYO");
+}
+
+/// The panel is what the operator heard on the air, and an answer out of a
+/// store is not a reason to argue with it.
+#[test]
+fn a_field_the_operator_filled_in_is_left_alone() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.name = "TAR".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    file(&mut app, &[("name_latin", "TARO")]);
+
+    assert_eq!(app.contact.name, "TAR");
+}
+
+/// ITA2 has no kanji: a name filed in one is a good entry that this mode
+/// cannot send, and writing it into the field would hold the send button down
+/// over a value the operator never typed.
+#[test]
+fn a_name_this_mode_could_not_send_is_left_where_it_was_filed() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    file(&mut app, &[("name", "太郎")]);
+
+    assert!(app.contact.name.is_empty(), "{}", app.contact.name);
+    assert_eq!(
+        app.contact_snapshot.fields.get("name").map(String::as_str),
+        Some("太郎")
+    );
+}
+
+/// A macro reads whatever the directory holds, including the fields the panel
+/// has nowhere to put.
+#[test]
+fn a_macro_reads_what_the_directory_filed() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+
+    file(&mut app, &[("grid", "PM95UQ")]);
+
+    let expanded = app
+        .written("UR GRID ${contact.grid}")
+        .expect("the directory answered the name");
+    assert_eq!(expanded, "UR GRID PM95UQ");
+}
+
+/// Emptying a field is how a wrong value is taken back, so it has to leave the
+/// store rather than be handed back on the next lookup.
+#[test]
+fn a_field_the_operator_emptied_is_dropped() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(settled(&app).state, ContactState::Unknown);
+    file(&mut app, &[("grid", "PM95UQ")]);
+
+    app.open_contact();
+    for row in &mut app.contact_draft {
+        if row.key == "grid" {
+            row.value.clear();
+        }
+    }
+    app.commit_contact();
+    waited(&app, |snapshot| !snapshot.fields.contains_key("grid"));
+    app.poll_contact();
+
+    assert_eq!(app.contact_snapshot.fields.get("grid"), None);
 }

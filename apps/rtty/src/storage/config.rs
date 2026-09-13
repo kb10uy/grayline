@@ -1,7 +1,8 @@
 use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
+use grayline_qso::DEFAULT_FIELDS;
 use grayline_shell::log;
-use toml_edit::{DocumentMut, Item, Table, value};
+use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::app::macros::{Station, valid_variable_name};
 
@@ -65,6 +66,59 @@ pub struct Settings {
     pub station: Station,
     /// The operator's own fields, read from a macro as `${custom.<name>}`.
     pub custom_variables: BTreeMap<String, String>,
+    /// Where the contact directory looks a callsign up.
+    pub contact: ContactSettings,
+}
+
+/// Where the contact directory looks a callsign up.
+///
+/// Written under `[qso]`, the section name the SSTV application already uses
+/// for the same three settings: one operator's two applications ask the same
+/// logger about the same stations, and a station set up once should not have
+/// to be set up twice.
+///
+/// The API key is deliberately absent, and is read from the family's own
+/// credentials file instead. This file is the one the operator is invited to
+/// open from the menu and the one the application rewrites at the end of any
+/// frame that changed a setting; a credential belongs in neither.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactSettings {
+    /// Whether the operator's own logger is asked about a callsign the store
+    /// has nothing recent to say about.
+    pub lookup: bool,
+    /// The base URL of that logger.
+    pub wavelog_url: String,
+    /// Which fields the contact dialog offers, as written: keys, and groups
+    /// spelled `!name`.
+    ///
+    /// Kept as written rather than expanded, so the file the operator reads
+    /// back says `!ja` where they wrote `!ja`. What the dialog lays out is
+    /// `grayline_qso::expand_fields` of this.
+    pub fields: Vec<String>,
+}
+
+impl Default for ContactSettings {
+    fn default() -> Self {
+        Self {
+            // On, for the reason recorded beside the SSTV application's own
+            // copy: with no instance and no key there is nobody to ask and the
+            // store answers alone, so a switch that started off would only
+            // leave an operator who wrote a credentials file wondering why
+            // nothing happened.
+            lookup: true,
+            wavelog_url: String::new(),
+            // The Latin spellings as well as the core three, which is where
+            // this parts from SSTV. ITA2 carries no kanji, so the name this
+            // mode can actually send is the one `!latin` keeps; a station that
+            // files only a kanji name has nothing a macro could put on the air.
+            fields: DEFAULT_FIELDS
+                .iter()
+                .copied()
+                .chain(["!latin"])
+                .map(str::to_owned)
+                .collect(),
+        }
+    }
 }
 
 impl Default for Settings {
@@ -96,6 +150,7 @@ impl Default for Settings {
             tx_level: 0.95,
             station: Station::default(),
             custom_variables: BTreeMap::new(),
+            contact: ContactSettings::default(),
         }
     }
 }
@@ -230,6 +285,7 @@ impl Config {
         // so the file is where they are changed, and rewriting the array on
         // every save would reformat what the operator had written in it.
         store_custom_variables(table, &settings.custom_variables);
+        store_contact(table, &settings.contact);
 
         self.write();
     }
@@ -305,7 +361,78 @@ fn read(document: &DocumentMut) -> Settings {
         };
     }
     settings.custom_variables = read_custom_variables(table);
+    settings.contact = read_contact(table);
     settings.clamped()
+}
+
+/// Reads where a callsign is looked up, or the defaults when the file says
+/// nothing about it.
+fn read_contact(table: &Table) -> ContactSettings {
+    let defaults = ContactSettings::default();
+    let Some(qso) = table.get("qso").and_then(Item::as_table) else {
+        return defaults;
+    };
+    ContactSettings {
+        lookup: qso
+            .get("lookup")
+            .and_then(Item::as_value)
+            .and_then(|flag| flag.as_bool())
+            .unwrap_or(defaults.lookup),
+        wavelog_url: qso
+            .get("wavelog")
+            .and_then(Item::as_table)
+            .and_then(|wavelog| wavelog.get("url"))
+            .and_then(Item::as_value)
+            .and_then(|url| url.as_str())
+            .map(str::trim)
+            .map(str::to_owned)
+            .unwrap_or(defaults.wavelog_url),
+        fields: contact_fields(qso).unwrap_or(defaults.fields),
+    }
+}
+
+/// Reads the field list, or nothing when the file names none.
+///
+/// A list that is present is taken as written, an empty one included: an
+/// operator who wrote `fields = []` asked for a dialog holding only what the
+/// station already has, and handing the default back would be arguing with
+/// them. Entries that are not strings are dropped; what the remaining ones
+/// mean is `expand_fields`'s business.
+fn contact_fields(qso: &Table) -> Option<Vec<String>> {
+    let array = qso.get("fields")?.as_array()?;
+    Some(
+        array
+            .iter()
+            .filter_map(|entry| entry.as_str().map(str::trim).map(str::to_owned))
+            .collect(),
+    )
+}
+
+/// Writes the directory's settings back, the instance's address included.
+///
+/// The address is written even while it is empty: this file is where it is
+/// edited, and an operator who has to invent the key before they can change it
+/// has no way to learn it exists.
+fn store_contact(table: &mut Table, contact: &ContactSettings) {
+    let Some(qso) = table
+        .entry("qso")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+    else {
+        return;
+    };
+    qso["lookup"] = value(contact.lookup);
+    let mut fields = Array::new();
+    fields.extend(contact.fields.iter().map(String::as_str));
+    qso["fields"] = Item::Value(fields.into());
+    let Some(wavelog) = qso
+        .entry("wavelog")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+    else {
+        return;
+    };
+    wavelog["url"] = value(contact.wavelog_url.as_str());
 }
 
 /// Reads the operator's own fields.
@@ -396,6 +523,11 @@ mod tests {
                 grid: "PM95UQ".to_owned(),
             },
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95".to_owned())]),
+            contact: ContactSettings {
+                lookup: false,
+                wavelog_url: "https://log.example/".to_owned(),
+                fields: vec!["!ja".to_owned(), "note".to_owned()],
+            },
         };
         Config::load(path.clone()).0.save(&wanted);
 
@@ -558,5 +690,66 @@ grid = \"PM95UQ\"
         config.save(&settings);
 
         assert!(!fs::read_to_string(&path).unwrap().contains("variables"));
+    }
+    /// A station that has set neither up still gets the directory its macros can
+    /// read, which is the store answering on its own.
+    #[test]
+    fn a_file_that_says_nothing_about_the_directory_gets_the_defaults() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        fs::write(&path, "baud = 75.0\n").unwrap();
+
+        let (_, settings) = Config::load(path);
+
+        assert_eq!(settings.contact, ContactSettings::default());
+    }
+
+    /// ITA2 has no kanji, so the spelling this mode can send is one the dialog has
+    /// to offer somewhere to put.
+    #[test]
+    fn the_latin_spellings_are_offered_by_default() {
+        let offered = grayline_qso::expand_fields(ContactSettings::default().fields.iter().map(String::as_str));
+
+        for key in ["name", "name_latin", "qth", "qth_latin"] {
+            assert!(offered.iter().any(|field| field == key), "{key} is not offered");
+        }
+    }
+
+    /// An operator who wrote `fields = []` asked for a dialog holding only what
+    /// the station already has, and handing the default back would argue with them.
+    #[test]
+    fn an_empty_field_list_is_taken_as_written() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        fs::write(&path, "[qso]\nfields = []\n").unwrap();
+
+        let (_, settings) = Config::load(path);
+
+        assert!(settings.contact.fields.is_empty());
+    }
+
+    /// The address is written even while it is empty: this file is where it is
+    /// edited, and an operator who has to invent the key before they can change it
+    /// has no way to learn it exists.
+    #[test]
+    fn the_logger_address_is_written_out_even_while_it_is_empty() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        let (mut config, settings) = Config::load(path.clone());
+
+        config.save(&settings);
+
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.contains("[qso.wavelog]"), "{written}");
+        assert!(written.contains("url = \"\""), "{written}");
+    }
+
+    /// A store key is read as `${contact.<key>}`, so a key holding anything a
+    /// name cannot hold would be filed and then be unreachable from a macro.
+    #[test]
+    fn every_well_known_contact_key_is_a_name_a_macro_can_read() {
+        for key in grayline_qso::WELL_KNOWN_KEYS {
+            assert!(valid_variable_name(&format!("contact.{key}")), "{key}");
+        }
     }
 }

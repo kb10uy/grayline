@@ -13,10 +13,13 @@
 
 use std::collections::BTreeMap;
 
-use grayline_variables::{VariableError, VariableValue, Variables, interpolate};
+use grayline_variables::{VariableError, VariableValue, Variables, interpolate, references};
 use jiff::{Zoned, tz::TimeZone};
 
 pub use grayline_variables::valid_variable_name;
+
+/// The prefix the contact directory's own fields are reached through.
+pub const CONTACT_PREFIX: &str = "contact.";
 
 /// The prefix the operator's own names are reached through.
 ///
@@ -88,6 +91,13 @@ impl Contact {
 pub struct MacroContext<'a> {
     pub station: &'a Station,
     pub contact: &'a Contact,
+    /// What the contact directory has filed under the callsign being worked,
+    /// reached as `${contact.<key>}`.
+    ///
+    /// The panel wins over it wherever the two name the same thing: what is
+    /// typed there is what the operator heard on the air, and what is filed is
+    /// what somebody wrote down once.
+    pub directory: &'a BTreeMap<String, String>,
     /// The operator's own fields, reached as `${custom.<name>}`.
     pub custom: &'a BTreeMap<String, String>,
     pub now: &'a Zoned,
@@ -184,15 +194,41 @@ pub fn default_templates() -> Vec<Template> {
 /// A name nothing was provided for is a failure rather than a gap, which is
 /// what the SSTV templates do with one and for the same reason: a message that
 /// silently lost the callsign it was addressed to is worse than one that never
-/// got written.
+/// got written. The one exception is the contact directory's own names, for
+/// the reason recorded beside [`fill_contact_gaps`].
 pub fn expand(template: &str, context: &MacroContext<'_>) -> Result<String, VariableError> {
-    interpolate(template, &values(context))
+    let mut values = values(context);
+    fill_contact_gaps(template, &mut values);
+    interpolate(template, &values)
+}
+
+/// Answers every `contact.*` name the macro reads that nothing filled in, with
+/// nothing.
+///
+/// Which fields a station has is a property of that station rather than
+/// something the operator writing the macro can know, so a macro that prints a
+/// grid square would otherwise refuse to be written for every contact whose
+/// entry has no grid in it. Scoped to `contact.` on purpose: the operator
+/// invents their own `custom.` names in a window that already refuses unusable
+/// ones, so a typo there is still worth reporting.
+fn fill_contact_gaps(template: &str, values: &mut Variables) {
+    let gaps: Vec<&str> = references(template)
+        .filter(|name| name.starts_with(CONTACT_PREFIX) && values.get(name).is_none())
+        .collect();
+    for name in gaps {
+        values.insert(name, VariableValue::Text(String::new()));
+    }
 }
 
 /// Every name a macro may use, and what it stands for right now.
 ///
-/// The names are the SSTV templates', so a macro and a template say the same
-/// thing the same way. Missing from them are the ones this application has
+/// Whatever the contact directory has filed under the station being worked is
+/// folded in under `contact.`, so a macro reaches a grid square or a JCC code
+/// the panel has no field for. The panel's own fields are written over the top
+/// of it, because they are what the operator heard on the air.
+///
+/// The rest of the names are the SSTV templates', so a macro and a template say
+/// the same thing the same way. Missing from them are the ones this application has
 /// nothing to answer with: `radio.*` wants the rig control that is not written
 /// yet, `rx.timestamp.*` wants a reception with a beginning and an end, and
 /// `report.number` wants the contest serial the plan deferred. Added to them
@@ -204,10 +240,16 @@ pub fn values(context: &MacroContext<'_>) -> Variables {
     let MacroContext {
         station,
         contact,
+        directory,
         custom,
         now,
     } = context;
     let mut values = Variables::new();
+    // First, so that the panel's own fields below overwrite whatever the
+    // directory answered with under the same name.
+    for (key, value) in directory.iter() {
+        values.insert(format!("{CONTACT_PREFIX}{key}"), VariableValue::Text(value.clone()));
+    }
     for (name, value) in [
         ("station.callsign", &station.callsign),
         ("station.name", &station.name),
@@ -270,6 +312,8 @@ fn greeting(now: &Zoned) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::OnceLock;
+
     use jiff::civil::date;
     use rstest::rstest;
 
@@ -314,9 +358,17 @@ mod tests {
         MacroContext {
             station,
             contact,
+            directory: no_directory(),
             custom,
             now,
         }
+    }
+
+    /// A directory that answered nothing, which is what a station nobody has
+    /// looked up yet has.
+    fn no_directory() -> &'static BTreeMap<String, String> {
+        static EMPTY: OnceLock<BTreeMap<String, String>> = OnceLock::new();
+        EMPTY.get_or_init(BTreeMap::new)
     }
 
     /// Writes `template` against the usual station and contact.
@@ -611,6 +663,57 @@ mod tests {
     #[case("グリッド", false)]
     fn a_field_name_is_one_an_expression_could_hold(#[case] name: &str, #[case] expected: bool) {
         assert_eq!(valid_variable_name(name), expected);
+    }
+
+    /// What the directory filed is reached under the same prefix the panel's
+    /// own fields are, so a macro naming a grid square does not care which of
+    /// the two answered.
+    #[test]
+    fn a_filed_field_is_reached_under_the_contact_prefix() {
+        let directory = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+        let expanded = expand(
+            "GRID ${contact.grid}",
+            &MacroContext {
+                station: &station(),
+                contact: &contact(),
+                directory: &directory,
+                custom: &no_custom(),
+                now: &at(9),
+            },
+        )
+        .unwrap();
+        assert_eq!(expanded, "GRID PM95UQ");
+    }
+
+    /// The panel is what the operator heard on the air, so it wins over what
+    /// somebody wrote down once.
+    #[test]
+    fn the_panel_wins_over_what_the_directory_filed() {
+        let directory = BTreeMap::from([("name".to_owned(), "FILED".to_owned())]);
+        let expanded = expand(
+            "${contact.name}",
+            &MacroContext {
+                station: &station(),
+                contact: &contact(),
+                directory: &directory,
+                custom: &no_custom(),
+                now: &at(9),
+            },
+        )
+        .unwrap();
+        assert_eq!(expanded, "TARO");
+    }
+
+    /// Which fields a station has is that station's business, so a macro that
+    /// prints one is written whether or not this contact has it.
+    #[test]
+    fn a_field_nothing_filed_expands_to_nothing() {
+        let expanded = expand(
+            "[${contact.jcc}]",
+            &context(&station(), &contact(), &no_custom(), &at(9)),
+        )
+        .unwrap();
+        assert_eq!(expanded, "[]");
     }
 
     #[test]

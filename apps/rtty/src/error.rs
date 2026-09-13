@@ -3,7 +3,10 @@
 //! The receive worker runs on its own thread and publishes what went wrong in
 //! a snapshot, so an error has to survive being cloned out of a mutex.
 
+use std::sync::Arc;
+
 use grayline_audio::AudioError;
+use grayline_qso::QsoError;
 use grayline_rtty::RttyError;
 use grayline_variables::VariableError;
 use thiserror::Error;
@@ -24,6 +27,12 @@ pub enum AppError {
     },
     #[error("reception could not be restarted after a capture overrun")]
     CaptureRestartFailed,
+    /// A contact lookup failed.
+    ///
+    /// Behind an [`Arc`] because it carries a store failure that is not
+    /// cloneable, and the snapshot holding it is cloned every frame.
+    #[error("{0}")]
+    Qso(Arc<QsoError>),
     /// A macro names something the application cannot fill in.
     #[error("this macro cannot be written: {0}")]
     Macro(#[from] VariableError),
@@ -39,4 +48,10 @@ pub enum AppError {
     /// A worker panicked while holding its snapshot, so its state is unknown.
     #[error("{0} state is unavailable")]
     WorkerUnavailable(&'static str),
+}
+
+impl From<QsoError> for AppError {
+    fn from(error: QsoError) -> Self {
+        Self::Qso(Arc::new(error))
+    }
 }

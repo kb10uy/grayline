@@ -154,6 +154,20 @@ mod tests {
         }
     }
 
+    /// Every well-known contact key has to have a label to be shown under.
+    ///
+    /// The key list belongs to the directory crate rather than to this
+    /// application, so a key added there arrives here without anyone editing a
+    /// call site; this is what notices.
+    #[test]
+    fn every_well_known_contact_key_is_labelled() {
+        let defined = message_keys(Locale::default());
+        for key in grayline_qso::WELL_KNOWN_KEYS {
+            let label = crate::ui::view::contact_label_key(key);
+            assert!(defined.contains(&label), "`{label}` is not defined");
+        }
+    }
+
     #[test]
     fn the_carried_icon_decodes() {
         let icon = image::load_from_memory_with_format(crate::identity::IDENTITY.icon_png, image::ImageFormat::Png)

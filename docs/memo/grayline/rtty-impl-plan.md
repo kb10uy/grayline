@@ -12,11 +12,13 @@ RTTY items listed under Planned Gaps in
 `apps/rtty` both receives and transmits: the skeleton, the receive worker and
 its session, the scrollback pane, the tuning and squelch panel, the transmit
 panel with its queue and macros, and the station and contact fields, together
-with the repository work step 2 drags with it. The scope window is written on a
-branch of its own and not yet merged here. Aligned save, the received-text
-history log, the rig frequency readout, and the release workflow are not
-written. Where the implementation departs from what is described below, the
-departure is recorded in the section it belongs to.
+with the repository work step 2 drags with it. The contact directory is wired
+in as well, which the plan below never named; it is described under Macros and
+Templates and in [qso-directory.md](qso-directory.md). The scope window is
+written on a branch of its own and not yet merged here. Aligned save, the
+received-text history log, the rig frequency readout, and the release workflow
+are not written. Where the implementation departs from what is described
+below, the departure is recorded in the section it belongs to.
 
 Everything the core already offers is assumed rather than restated here:
 [grayline/rtty.md](../grayline/rtty.md) covers the crate and where it parts from
@@ -280,6 +282,19 @@ and `report.number` wants the contest serial the plan deferred. One is added,
 `contact.name` keeps MMTTY's `OM` fallback, which is not the kind of
 placeholder the SSTV templates refuse: `OM` is what an operator actually says
 to a station whose name they have not been told.
+
+**The contact directory adds the rest of the `contact.` names.** Whatever is
+filed under the callsign being worked is folded in under that prefix, so a
+macro reaches `${contact.grid}` or `${contact.jcc}` although the panel has no
+field for either. The panel is written over the top of it wherever the two name
+the same thing: what is typed beside the received text is what the operator
+heard on the air, and what is filed is what somebody wrote down once. A
+`contact.` name nothing answered expands to nothing rather than refusing, which
+is the one exception to the rule above and is the SSTV composer's rule for the
+same reason — which fields a station has is a property of that station rather
+than something the operator writing the macro could know. It stays scoped to
+`contact.`: a typo in a `custom.` name is still worth reporting, because those
+are invented in a window that already refuses unusable ones.
 
 Macro buttons answer to F1 through F12. A press expands at that moment and
 writes the result into the field at the caret, so the time a message names is

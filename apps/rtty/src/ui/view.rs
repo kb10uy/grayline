@@ -17,7 +17,10 @@ use crate::{
         menu::{self, Action, Menu},
         scrollback,
     },
-    worker::receive::{ColumnSnapshot, DecodePath},
+    worker::{
+        contact::ContactState,
+        receive::{ColumnSnapshot, DecodePath},
+    },
 };
 
 mod dialogs;
@@ -25,7 +28,7 @@ mod panels;
 mod status_bar;
 mod transmit;
 
-use dialogs::station_dialog;
+use dialogs::{contact_dialog, station_dialog};
 use panels::side_panel;
 use status_bar::status_bar;
 use transmit::{has_pending, pending_panel, transmit_panel};
@@ -42,6 +45,15 @@ const SMALL: f32 = 12.0;
 const LABEL: f32 = 11.0;
 
 const ERROR_COLOR: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
+
+/// The catalogue key labelling one well-known contact field.
+///
+/// A store key is spelled with underscores, because a macro reads it as
+/// `${contact.<key>}`, and a Fluent identifier is spelled with hyphens, so the
+/// two are not the same string and one is derived from the other.
+pub(crate) fn contact_label_key(key: &str) -> String {
+    format!("contact-{}", key.replace('_', "-"))
+}
 
 /// Draws the window and returns whatever the menu activated.
 pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) -> Option<Action> {
@@ -91,6 +103,7 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
         app.set_contact_callsign(&callsign);
     }
     station_dialog(ui, app);
+    contact_dialog(ui, app);
     activated
 }
 
