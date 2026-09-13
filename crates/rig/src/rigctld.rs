@@ -344,13 +344,9 @@ mod tests {
         let mut rig = Rigctld::connect(&fake.address, TEST_TIMEOUT).unwrap();
 
         assert_eq!(rig.run(written), Err(RigError::NotOneLine));
-        // Nothing reached the far end, so the stream is still in step.
         assert_eq!(fake.received(), ["+\\chk_vfo"]);
     }
 
-    /// A peer that streams bytes without ever framing a line has left the
-    /// protocol, and the answer is refused at a fixed size rather than being
-    /// buffered for as long as the peer keeps talking.
     #[test]
     fn an_unframed_answer_is_refused_at_a_fixed_size() {
         let unframed = "x".repeat(MAXIMUM_RESPONSE_LINE_BYTES as usize * 2);
@@ -365,8 +361,6 @@ mod tests {
         );
     }
 
-    /// Spacing a command out to read well in a script is not a reason to
-    /// refuse it, and the far end never sees the difference.
     #[test]
     fn surrounding_spacing_is_trimmed_rather_than_refused() {
         let fake = FakeRig::spawn(&["chk_vfo:\nChkVFO: 0\nRPRT 0\n", "RPRT 0\n"]);
@@ -390,7 +384,6 @@ mod tests {
                 code: -11,
             }
         );
-        // The command was refused, not the connection, so the next one may go.
         assert!(!refused.is_fatal());
     }
 

@@ -235,8 +235,6 @@ mod tests {
 
     use super::*;
 
-    /// A scratch directory that removes itself, so a test that writes a file
-    /// leaves nothing behind.
     struct TempDir(PathBuf);
 
     impl TempDir {
@@ -287,8 +285,6 @@ mod tests {
         assert_eq!(CommonConfig::load(root.file()).settings(), wanted);
     }
 
-    /// The file sits above every application's own directory, so the first
-    /// application to save is the one that has to create it.
     #[test]
     fn the_family_directory_is_made_on_the_way_out() {
         let root = TempDir::new("make-directory");
@@ -301,8 +297,6 @@ mod tests {
         assert!(path.is_file(), "{}", path.display());
     }
 
-    /// Another application in the family may have written keys this build has
-    /// never heard of, and a comment beside one is the operator's.
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
         let root = TempDir::new("comments");
@@ -324,9 +318,6 @@ mod tests {
         assert!(written.contains("unknown = 7"), "{written}");
     }
 
-    /// Every application saves at the end of every frame and they share this
-    /// file: one that rewrote it on a frame that changed nothing would be
-    /// writing over what another had just put there.
     #[test]
     fn a_save_that_changes_nothing_does_not_touch_the_file() {
         let root = TempDir::new("unchanged");
@@ -338,8 +329,6 @@ mod tests {
         assert_eq!(fs::read_to_string(root.file()).unwrap(), "language = \"ja\"\n");
     }
 
-    /// Overwriting a file that could not be parsed would throw away whatever
-    /// the operator had written in it.
     #[test]
     fn an_unparsable_file_is_never_written_over() {
         let root = TempDir::new("unparsable");
@@ -377,8 +366,6 @@ mod tests {
         assert_eq!(CommonConfig::load(root.file()).settings().ui_scale, DEFAULT_UI_SCALE);
     }
 
-    /// A configuration with nowhere to write still has to answer, because a
-    /// machine whose user directories cannot be found still runs.
     #[test]
     fn a_detached_configuration_writes_nothing() {
         let mut config = CommonConfig::detached();

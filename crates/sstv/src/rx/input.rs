@@ -293,8 +293,6 @@ mod tests {
         );
     }
 
-    /// Nothing a reception is decoded from reaches the ceiling, but a value
-    /// that does must not wrap around into the picture band.
     #[test]
     fn frequencies_above_the_ceiling_saturate() {
         let buffer = retained(&[f32::MAX, 8_000.0], &[0.0, 0.0]);
@@ -329,8 +327,6 @@ mod tests {
         assert!(buffer.sync_runs(64, 65).is_none());
     }
 
-    /// Bulk range reads have to agree with per-sample reads wherever the two
-    /// retained runs happen to sit in the ring, including across the seam.
     #[test]
     fn range_reads_match_per_sample_reads_across_the_ring_seam() {
         let mut buffer = SampleBuffer::with_capacity(0, 128);
@@ -371,7 +367,6 @@ mod tests {
         assert!(buffer.frequency_sum(150, 140).is_none());
     }
 
-    /// Copying a tail carries the retained values, not the ones they came from.
     #[test]
     fn a_tail_keeps_what_was_retained() {
         let buffer = retained(&[1_500.0, 1_900.0, 2_300.0], &[0.1, 0.6, 0.9]);

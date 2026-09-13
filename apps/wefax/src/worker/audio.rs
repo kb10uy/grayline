@@ -119,7 +119,6 @@ impl AudioState {
         Ok(())
     }
 
-    /// Stops the worker and lets go of whatever was feeding it.
     fn close(&mut self) {
         // The worker is stopped before its source is dropped, so a capture
         // queue never outlives its producer.
@@ -148,9 +147,6 @@ impl AudioState {
     /// Returns the columns that arrived with it, so the caller can upload them
     /// without cloning the picture on every poll.
     pub fn poll(&mut self) -> Option<StripUpdate> {
-        // A recording that has been read to its end closes out its reception,
-        // so a chart that ran to the end of the file is finished rather than
-        // left waiting for audio that will not arrive.
         if !self.file_finished && self.file.as_ref().is_some_and(WavSource::is_drained) {
             self.file_finished = true;
             self.stop_reception();

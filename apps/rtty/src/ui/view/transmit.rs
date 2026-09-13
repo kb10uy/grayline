@@ -68,7 +68,6 @@ pub fn draft_id() -> Id {
 /// the buttons every time one was added to the file.
 const TEMPLATE_LIST_WIDTH: f32 = 128.0;
 
-/// The function keys the macro buttons answer to, in order.
 const FUNCTION_KEYS: [egui::Key; 12] = [
     egui::Key::F1,
     egui::Key::F2,
@@ -209,8 +208,6 @@ fn macro_buttons(ui: &mut Ui, app: &mut App) {
         write_at_caret(ui, app, |app, caret| app.apply_macro(index, caret));
     }
     if let Some(index) = picked {
-        // The caret it was handed is ignored: a set message replaces the
-        // draft, and the caret lands at the end of what it wrote.
         write_at_caret(ui, app, |app, _| app.apply_template(index));
     }
 }
@@ -247,8 +244,6 @@ fn template_list(ui: &mut Ui, app: &App) -> Option<usize> {
         .show_ui(ui, |ui| {
             for (index, template) in app.templates.iter().enumerate() {
                 let row = ui.selectable_label(false, RichText::new(&template.name).size(SMALL));
-                // What it will write, because a name is what the operator
-                // gave it rather than what it says.
                 if row.on_hover_text(one_line(&template.text)).clicked() {
                     picked = Some(index);
                 }
@@ -274,8 +269,6 @@ fn write_at_caret(ui: &Ui, app: &mut App, apply: impl FnOnce(&mut App, usize) ->
     let Some(after) = apply(app, caret) else {
         return;
     };
-    // The caret lands after what was written, so a message put in mid-sentence
-    // leaves the operator where they would have typed next.
     if let Some(state) = state.as_mut() {
         state
             .cursor
@@ -312,7 +305,6 @@ fn on_air(ui: &mut Ui, app: &App) {
     });
 }
 
-/// The message laid out with its sent prefix underlined.
 fn sent_job(ui: &Ui, text: &str, progress: SentProgress) -> egui::text::LayoutJob {
     let size = ui.text_style_height(&TextStyle::Body);
     let font = egui::FontId::monospace(size);
@@ -338,7 +330,6 @@ fn sent_job(ui: &Ui, text: &str, progress: SentProgress) -> egui::text::LayoutJo
     job
 }
 
-/// What is waiting behind the message on the air.
 fn queued(ui: &mut Ui, app: &mut App) {
     if app.transmit.queued().len() == 0 {
         return;
@@ -347,8 +338,6 @@ fn queued(ui: &mut Ui, app: &mut App) {
     let drop_hint = app.i18n.text("hint-drop-queued");
     let mut dropping = None;
     let pending: Vec<String> = app.transmit.queued().map(str::to_owned).collect();
-    // The same family as the message on the air above it, because these are
-    // the same messages a moment earlier.
     let font = egui::FontId::monospace(ui.text_style_height(&TextStyle::Body));
     for (index, message) in pending.iter().enumerate() {
         ui.horizontal(|ui| {
@@ -364,8 +353,6 @@ fn queued(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// A message as one line, for a list that shows what is waiting rather than
-/// what it says.
 fn one_line(message: &str) -> String {
     let flattened = message.replace('\n', &format!(" {LINE_BREAK_MARK} "));
     let mut characters = flattened.chars();
@@ -384,8 +371,6 @@ fn one_line(message: &str) -> String {
 fn draft(ui: &mut Ui, app: &mut App) {
     let id = draft_id();
     input::sanitize(ui.ctx(), id);
-    // Monospaced, like the text the pane above prints: a message is written
-    // against what it answers, and RYRY and a contest exchange are columns.
     let font = egui::FontId::monospace(ui.text_style_height(&TextStyle::Body));
     let row = ui.fonts_mut(|fonts| fonts.row_height(&font));
     let mut layouter = {
@@ -445,9 +430,6 @@ fn draft(ui: &mut Ui, app: &mut App) {
     ui.painter()
         .rect_stroke(framed.response.rect, corner_radius, stroke, egui::StrokeKind::Inside);
 
-    // Enter writes a line, as it does on a teleprinter; the modifier sends.
-    // A field that sent on Enter would put half a message on the air every
-    // time the operator reached for a new line.
     let send = response.has_focus()
         && ui.input_mut(|input| {
             input.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)
@@ -455,14 +437,9 @@ fn draft(ui: &mut Ui, app: &mut App) {
         });
     if send {
         app.send_draft();
-        // The field keeps the keyboard, because the next message is written
-        // straight after the one just queued.
         ui.ctx().memory_mut(|memory| memory.request_focus(id));
     }
 
-    // Escape stops a transmission from wherever the operator is, rather than
-    // only from the button: it is the key reached for when something is going
-    // out that should not be.
     if app.transmit.is_busy() && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
         app.abort_transmission();
     }
@@ -472,8 +449,6 @@ fn draft(ui: &mut Ui, app: &mut App) {
 mod tests {
     use super::*;
 
-    /// A queued message is listed to say what is waiting rather than to be
-    /// read, so its line endings become a mark and its length is capped.
     #[test]
     fn a_listed_message_is_one_line() {
         assert_eq!(one_line("CQ CQ\nDE JL1HIS"), "CQ CQ ↵ DE JL1HIS");

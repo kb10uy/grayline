@@ -41,8 +41,6 @@ pub fn open(path: &Path, display_name: &str) -> io::Result<()> {
     }
 
     let file = OpenOptions::new().create(true).append(true).open(path)?;
-    // A second call would mean two sinks for one process; the first wins and
-    // the caller is told nothing changed, which is what it asked for anyway.
     let _ = SINK.set(Mutex::new(file));
     note(&format!(
         "{} {} starting on {}",
@@ -57,8 +55,6 @@ pub fn open(path: &Path, display_name: &str) -> io::Result<()> {
 pub fn note(message: &str) {
     let line = format!("{} {message}", timestamp());
 
-    // A console is worth writing to when there is one: a developer running the
-    // debug build should not have to open the file to see what happened.
     eprintln!("{line}");
 
     let Some(sink) = SINK.get() else {
@@ -93,8 +89,6 @@ mod tests {
         assert_eq!(stamp.as_bytes()[13], b':');
     }
 
-    /// Nothing may panic before the sink exists: the earliest reports arrive
-    /// while the application is still working out where to put the file.
     #[test]
     fn a_note_without_a_sink_is_discarded() {
         note("this should not panic");

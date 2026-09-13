@@ -108,8 +108,6 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: device_items(app),
                 },
                 Item::Separator,
-                // What is set once and left alone. Everything worked during a
-                // reception is on the control bar instead.
                 Item::Check {
                     label: text("action-infer-lpm"),
                     checked: app.infer_lines_per_minute,
@@ -142,7 +140,6 @@ pub fn model(app: &App) -> Vec<Menu> {
     ]
 }
 
-/// The File menu: saving a chart, the directories, and then Quit.
 fn file_items(app: &App) -> Vec<Item> {
     let mut items = vec![
         Item::Command {
@@ -316,9 +313,6 @@ mod tests {
             .sum()
     }
 
-    /// The platform renderer creates one entry per item and later matches them
-    /// by position, so a missed item shifts every later label onto the wrong
-    /// entry.
     #[test]
     fn flattening_counts_every_item_including_separators() {
         let model = model(&App::headless());
@@ -350,8 +344,6 @@ mod tests {
         assert!(matches!(flat[3], Item::Pending(label) if label == "after"));
     }
 
-    /// Every directory the application keeps is reachable from one menu, or a
-    /// folder the operator is expected to work in has no way in.
     #[test]
     fn the_file_menu_offers_every_folder() {
         let app = App::headless();
@@ -375,8 +367,6 @@ mod tests {
         }
     }
 
-    /// Every action the model offers has to be handled, or a menu entry does
-    /// nothing when clicked.
     #[test]
     fn every_action_in_the_model_is_applicable() {
         let mut app = App::headless();
@@ -390,9 +380,6 @@ mod tests {
         }
     }
 
-    /// The manual is a page on the web, so the entry has nothing to report
-    /// unless the browser could not be reached. What it opens is checked
-    /// where the application's own state is.
     #[test]
     fn opening_the_manual_reports_nothing() {
         let mut app = App::headless();

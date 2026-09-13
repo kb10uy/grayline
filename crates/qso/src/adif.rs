@@ -161,8 +161,6 @@ fn read_bytes(source: &[u8], encoding: &'static Encoding) -> Adif {
 
         let Some(length) = length else {
             match name.as_str() {
-                // Everything before the header's end describes the document
-                // rather than a contact, so whatever was collected is dropped.
                 "EOH" => fields.clear(),
                 "EOR" => take_record(&mut adif, &mut fields),
                 _ => {}
@@ -292,8 +290,6 @@ mod tests {
         assert_eq!(record.get("name"), Some("Taro"));
     }
 
-    /// A log written by a program that was still running has no final `<EOR>`,
-    /// and the QSO it was in the middle of is the most recent one there is.
     #[test]
     fn a_record_the_document_never_closed_is_still_read() {
         let record = only("<CALL:6>JA1ABC<NAME:4>Taro");
@@ -370,8 +366,6 @@ mod tests {
         assert_eq!(adif.records[0].worked_at, None);
     }
 
-    /// Each field comes from the newest QSO that carried one, so a later
-    /// contact that left the QTH blank does not erase what an earlier one said.
     #[test]
     fn a_field_is_taken_from_the_newest_qso_that_carried_it() {
         let mut store = Store::in_memory().expect("a store");
@@ -420,7 +414,6 @@ mod tests {
         assert_eq!(record.get("qth"), Some("Tokyo"));
     }
 
-    /// Nothing about the contact itself is filed, whatever the log carried.
     #[test]
     fn what_a_contact_was_is_read_past_rather_than_kept() {
         let record = only(concat!(

@@ -21,7 +21,6 @@ pub const CONFIG_FILE: &str = "config.toml";
 pub const MACRO_FILE: &str = "macros.toml";
 pub const TEMPLATE_FILE: &str = "templates.toml";
 
-/// The rolling log the application writes under its state directory.
 const LOG_FILE: &str = "grayline-rtty.log";
 
 const DEFAULT_CONFIG: &str = "";
@@ -157,8 +156,6 @@ mod tests {
         assert!(paths.log_file.parent().unwrap().is_dir());
     }
 
-    /// The log describes one machine's hardware, so it must not be written
-    /// where the account's roaming profile would synchronize it.
     #[test]
     fn the_log_is_kept_apart_from_the_roaming_data_directory() {
         let paths = AppPaths::from_roots(PathBuf::from("config"), PathBuf::from("state"));

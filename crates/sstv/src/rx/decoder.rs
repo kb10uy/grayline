@@ -31,16 +31,13 @@ const AUTO_STOP_WARMUP: usize = 8;
 /// for the window to fill.
 const LIVE_SLANT_SMOOTHING: usize = 16;
 
-/// Raster units decoded before live rate tracking begins.
 const LIVE_SLANT_MIN_UNITS: usize = 8;
 
-/// Raster units between applied live refits.
 const LIVE_SLANT_HOLDOFF_UNITS: usize = 8;
 
 /// Numerator of the shrinking acceptance threshold, in parts per million.
 const LIVE_SLANT_THRESHOLD_SCALE: f64 = 3_200.0;
 
-/// Smallest rate error a live refit acts on, in parts per million.
 const LIVE_SLANT_MIN_THRESHOLD_PPM: f64 = 8.0;
 
 const PHASE_AGREEMENT: usize = 3;

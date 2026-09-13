@@ -1,17 +1,12 @@
 [package]
 name = "grayline-wefax-app"
 description = "Weather fax reception for amateur radio"
-# Versioned on its own for the reason recorded beside the SSTV application's
-# own manifest. This one starts at 0.1.0 rather than inheriting the number
-# the SSTV application had reached before it existed.
 version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-# The package carries the `-app` suffix so it does not collide with the
-# `grayline-wefax` protocol library; the binary keeps the product's own name.
 [[bin]]
 name = "grayline-wefax"
 path = "src/main.rs"

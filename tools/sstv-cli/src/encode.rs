@@ -216,9 +216,6 @@ mod tests {
         assert!(result[(1, 0)][0] < 3);
     }
 
-    /// A legitimate file with an extreme aspect ratio asks for a resized
-    /// height beyond `u32`, which has to come back as an error rather than a
-    /// panic.
     #[test]
     fn an_extreme_aspect_ratio_is_refused() {
         let source = image::RgbImage::new(1, 14_000_000);

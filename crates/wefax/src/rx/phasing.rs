@@ -138,7 +138,6 @@ impl Candidate {
     }
 }
 
-/// A pulse located in a folded line.
 #[derive(Clone, Copy, Debug)]
 struct Located {
     start: usize,
@@ -224,7 +223,6 @@ impl DarkWindow {
         self.below >= DARK_WINDOWS
     }
 
-    /// Returns whether any window has already stopped looking like phasing.
     fn left_the_phasing_signal(&self) -> bool {
         self.below > 0
     }
@@ -445,7 +443,6 @@ mod tests {
         assert!(!detector.picture_started());
         assert!(detector.resolve().is_some());
 
-        // A mid-gray picture is nowhere near black.
         for sample in phasing..phasing + rate as u64 * 3 {
             detector.process(0.0, sample);
         }
@@ -458,8 +455,6 @@ mod tests {
         let format = Format::MARINE;
         let result = phase(rate, format, &[format.lines_per_minute], 12.0, 0.25, 0.0).unwrap();
         let line = format.samples_per_line(rate);
-        // The pulse began a quarter of a line into the fold, so line zero
-        // begins a quarter of a line after the fold's own origin.
         assert!((result.epoch_samples - line * 0.25).abs() < line / 500.0);
     }
 

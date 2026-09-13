@@ -69,7 +69,6 @@ pub struct AptStrengths {
     pub stop: f32,
 }
 
-/// What a channel means when it wins.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Meaning {
     Start(Ioc),
@@ -377,8 +376,6 @@ mod tests {
     #[case(11_025)]
     #[case(48_000)]
     fn calibration_makes_the_strengths_comparable_across_rates(#[case] rate: u32) {
-        // A full-deviation tone is a strength of one by construction, whatever
-        // the rate and whichever of the three it is.
         let mut detector = AptDetector::new(f64::from(rate)).unwrap();
         run(&mut detector, &keyed(rate, 450.0, 4.0), 0);
         let strength = f64::from(detector.strengths().stop);

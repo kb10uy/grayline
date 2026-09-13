@@ -151,7 +151,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// The eframe entry point, holding the application and its menu bar.
 struct Interface {
     app: App,
     menu: Option<menu::MenuHost>,
@@ -233,8 +232,6 @@ impl eframe::App for Interface {
         }
         self.app.poll_workers();
 
-        // The zoom shortcuts and the menu both change the scale; whichever
-        // route the operator took, the result is one value that gets persisted.
         self.app.set_ui_scale(ui.ctx().zoom_factor());
 
         let model = menu::model(&self.app);
@@ -276,7 +273,6 @@ impl eframe::App for Interface {
 mod tests {
     use super::*;
 
-    /// A system with none of the wanted families still has to render text.
     #[test]
     fn an_empty_database_leaves_the_bundled_fonts_usable() {
         let definitions = font_definitions(&fontdb::Database::new());

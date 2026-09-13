@@ -204,7 +204,6 @@ mod tests {
         assert_eq!(raster.size().height(), 2);
     }
 
-    /// A frame with no area says nothing, so what is on the canvas stays.
     #[test]
     fn degenerate_frames_are_rejected() {
         let mut raster = Raster::blank(Mode::Robot36);
@@ -216,9 +215,6 @@ mod tests {
         assert_eq!(raster.size().width(), Mode::Robot36.spec().width() as usize);
     }
 
-    /// A reception replaces the raster up to thirty times a second, and every
-    /// new texture is one the renderer has to allocate and the old one is one
-    /// it has to free. The pixels go into the texture already there instead.
     #[test]
     fn a_new_frame_is_written_into_the_texture_it_replaces() {
         let context = Context::default();
@@ -234,8 +230,6 @@ mod tests {
         assert_eq!(raster.texture(&context).id(), first);
     }
 
-    /// The pixel buffer is written in place while nothing else holds it, which
-    /// is what keeps a reception from allocating one per decoded row.
     #[test]
     fn replacing_pixels_reuses_the_buffer() {
         let mut raster = Raster::blank(Mode::Robot36);

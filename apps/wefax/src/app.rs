@@ -96,9 +96,6 @@ impl App {
             common,
             grayline_shell::platform::host(),
         );
-        // Either file can be the unreadable one, and the first of them the
-        // operator is told about is the one worth reporting: a second notice
-        // would only replace the first before it had been read.
         if let Some(error) = app.config.error().or_else(|| app.common.error()) {
             let message = app.i18n.text("error-config");
             app.notice = Some(format!("{message}: {error}"));
@@ -192,9 +189,6 @@ impl App {
     pub fn poll_workers(&mut self, ctx: &egui::Context) {
         if let Some(fault) = self.audio.take_capture_fault() {
             self.audio.rescan();
-            // A device that came back is opened again rather than left for the
-            // operator to reselect: a chart takes ten minutes, and a stream
-            // that stopped between two of them should not need a click.
             if !self.audio.reopen() {
                 let message = self.i18n.text("error-device-lost");
                 self.notice = Some(format!("{message}: {fault:?}"));

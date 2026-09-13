@@ -240,7 +240,6 @@ impl FileLock {
     pub fn publish_window(&self, _cc: &eframe::CreationContext<'_>) {}
 }
 
-/// Takes an exclusive lock on a file named after the application.
 #[cfg(not(target_os = "windows"))]
 fn lock_file_claim(identity: &Identity) -> Option<FileLock> {
     use std::fs::OpenOptions;

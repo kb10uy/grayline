@@ -152,7 +152,6 @@ mod tests {
     use crate::test_util::FakeWavelog;
 
     const ANSWER: &str = r#"{"name":"Taro","location":"Tokyo","gridsquare":"PM95TQ"}"#;
-    /// What Wavelog answers about a station it has nothing to say about.
     const NOTHING: &str = r#"{"callsign":"JA1ABC","name":"","gridsquare":""}"#;
 
     fn filed(store: &mut Store, callsign: &str, key: &str, value: &str, origin: Origin) {
@@ -184,8 +183,6 @@ mod tests {
         assert!(lookup.known);
         assert_eq!(lookup.record.get("qth"), Some("Tokyo"));
 
-        // The second lookup is served from what the first one filed; the
-        // stand-in would not accept another request in any case.
         let again = directory.look_up("JA1ABC", false).expect("an answer");
         assert_eq!(again.record.get("qth"), Some("Tokyo"));
         assert_eq!(server.requested().len(), 1);
@@ -230,7 +227,6 @@ mod tests {
         assert!(matches!(lookup.remote_error, Some(QsoError::Refused(503))));
     }
 
-    /// A failure teaches nothing, so it must not hold the next attempt off.
     #[test]
     fn a_failed_lookup_is_not_counted_as_having_asked() {
         let server = FakeWavelog::spawn(&[(503, ""), (200, ANSWER)]);

@@ -10,8 +10,6 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-# The package carries the `-app` suffix so it does not collide with the
-# `grayline-sstv` protocol library; the binary keeps the product's own name.
 [[bin]]
 name = "grayline-sstv"
 path = "src/main.rs"

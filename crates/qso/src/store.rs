@@ -460,8 +460,6 @@ mod tests {
         assert_eq!(orphans, 0);
     }
 
-    /// Dropping one field must not restamp the rest, or a fetched value would
-    /// become one a later lookup will never refresh.
     #[test]
     fn dropping_one_field_leaves_the_others_at_the_origin_that_wrote_them() {
         let mut store = Store::in_memory().expect("a store");
@@ -528,8 +526,6 @@ mod tests {
         assert!(found);
     }
 
-    /// A station a lookup found nothing for is one the store has to remember
-    /// asking about, so that it does not ask again on the next contact.
     #[test]
     fn a_fruitless_lookup_files_a_station_with_no_fields() {
         let mut store = Store::in_memory().expect("a store");

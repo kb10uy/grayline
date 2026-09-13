@@ -166,7 +166,6 @@ impl AudioState {
         Ok(())
     }
 
-    /// Stops the worker and lets go of whatever was feeding it.
     fn close(&mut self) {
         // The worker is stopped before its source is dropped, so a capture
         // queue never outlives its producer.
@@ -189,7 +188,6 @@ impl AudioState {
         }
     }
 
-    /// Starts a worker on `reader`, in the state the interface is in.
     fn start(&self, reader: CaptureReader) -> RxWorker {
         let worker = RxWorker::spawn(reader, self.settings, self.waker.clone());
         worker.set_scope(self.scope);

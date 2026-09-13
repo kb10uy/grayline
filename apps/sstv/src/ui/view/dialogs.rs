@@ -44,8 +44,6 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
     // for a dialog dismissed without moving focus first.
     let closing = done || response.should_close();
     if finished || closing {
-        // Normalizing composes again on its own, and does it with the
-        // uppercased callsign rather than with what was typed.
         app.normalize_station();
     }
     if closing {
@@ -167,9 +165,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let mut done = false;
     let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
-        // The callsign is what a record is filed under rather than something
-        // filed in it, so it is shown rather than offered for editing; the
-        // panel behind this dialog is where it is typed.
         ui.heading(format!("{title} — {callsign}"));
         ui.add_space(4.0);
         if let Some(state) = &state {
@@ -186,10 +181,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
             let mut headed = false;
             for (index, row) in app.contact_draft.iter_mut().enumerate() {
-                // What the settings asked for leads, in the order it was
-                // written, and is labelled because the operator chose it.
-                // Anything else the directory happens to hold follows with its
-                // name laid open, because nothing here chose that name.
                 if row.offered {
                     let label = labels.get(index).map_or(row.key.as_str(), String::as_str);
                     changed |= station_field(ui, label, "", &mut row.value, labelled_width);
@@ -226,8 +217,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             adding = ui.button(add).clicked();
-            // Absent rather than disabled when there is nobody to ask: a
-            // station with no logger configured has no "again" to press.
             if refreshable {
                 refreshing = ui.button(refresh).clicked();
             }
@@ -260,7 +249,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// What the directory is doing, in words, when it is worth saying.
 fn contact_state(app: &App) -> Option<String> {
     if let Some(error) = &app.contact_snapshot.error {
         return Some(
@@ -333,9 +321,6 @@ pub(super) fn device_fault_modal(ui: &mut Ui, app: &mut App) {
         });
     });
 
-    // A click outside the modal is the same acknowledgement as the button:
-    // the report has been read, and the interface should not trap the
-    // operator in it.
     if retry {
         app.retry_device();
     } else if dismiss || response.should_close() {

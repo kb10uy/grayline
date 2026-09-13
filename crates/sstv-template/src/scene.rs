@@ -81,7 +81,6 @@ impl Template {
     }
 }
 
-/// What every variable the radio fills in is named under.
 const RADIO_PREFIX: &str = "radio.";
 
 /// A frame-relative or font-relative length.
@@ -329,8 +328,6 @@ mod tests {
         .expect("the template is well formed")
     }
 
-    /// The clock only has to be watched for a template that shows it, and a
-    /// nested layer counts the same as a top-level one.
     #[test]
     fn a_timestamp_in_a_group_is_still_found() {
         let variables = variables();
@@ -339,8 +336,6 @@ mod tests {
         assert!(!text_template("plain").uses_timestamps(&variables));
     }
 
-    /// The rig only has to be watched for a template that prints what it is
-    /// tuned to, and a nested layer counts the same as a top-level one.
     #[test]
     fn a_radio_variable_in_a_group_is_still_found() {
         assert!(text_template("${radio.frequency:.3}").uses_radio());
@@ -349,8 +344,6 @@ mod tests {
         assert!(!text_template("plain").uses_radio());
     }
 
-    /// A caller that can stand in for a name has to be told about it whether
-    /// the layer reading it is nested or not.
     #[test]
     fn a_name_the_variables_cannot_answer_is_reported_from_inside_a_group() {
         let variables = variables();
@@ -371,8 +364,6 @@ mod tests {
         );
     }
 
-    /// The format after a colon says how to write a value, not which one to
-    /// read, so it must not be taken for part of the name.
     #[test]
     fn a_formatted_reference_is_reported_by_its_name_alone() {
         assert_eq!(
@@ -381,7 +372,6 @@ mod tests {
         );
     }
 
-    /// An escaped interpolation is literal text and reads nothing.
     #[test]
     fn an_escaped_interpolation_is_not_a_name_at_all() {
         assert!(text_template("$${contact.name}").missing(&variables()).is_empty());

@@ -287,8 +287,6 @@ mod tests {
         assert_eq!(transmission.next(), None);
     }
 
-    /// A contest number is four more symbols on the end of the identifier, and
-    /// nothing else about the transmission moves.
     #[test]
     fn a_contest_number_lengthens_only_the_identifier() {
         let mode = Mode::Robot36;
@@ -310,9 +308,6 @@ mod tests {
         );
     }
 
-    /// An operator who turns the identifier off gets neither the FSK symbols
-    /// nor the footer that introduces them, and the transmission is exactly
-    /// that much shorter.
     #[test]
     fn a_transmission_without_an_identifier_ends_after_the_raster() {
         let mode = Mode::Robot36;
@@ -332,8 +327,6 @@ mod tests {
         assert_eq!(components.last(), Some(&TxComponent::Silence));
     }
 
-    /// Progress reported by row needs the raster's exact place in the stream:
-    /// the leader before it and the identifier after it carry no image rows.
     #[rstest]
     #[case(Mode::Martin1, 0)]
     #[case(Mode::Scottie1, 9_000_000_000)]
@@ -351,8 +344,6 @@ mod tests {
             units * mode.spec().period().as_picos()
         );
 
-        // The image stage ends where the raster does, so the footer that opens
-        // the trailing framing is the first tone past the window.
         let end = start + transmission.raster_duration().as_picos();
         let footer = transmission
             .find(|tone| tone.component() == TxComponent::Footer)

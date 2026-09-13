@@ -374,8 +374,6 @@ fn read(document: &DocumentMut) -> Settings {
     settings.clamped()
 }
 
-/// Reads where a callsign is looked up, or the defaults when the file says
-/// nothing about it.
 fn read_contact(table: &Table) -> ContactSettings {
     let defaults = ContactSettings::default();
     let Some(qso) = table.get("qso").and_then(Item::as_table) else {
@@ -545,8 +543,6 @@ mod tests {
         assert_eq!(read_back, wanted);
     }
 
-    /// A comment beside a key the application does not own has to survive a
-    /// save, or editing the file by hand is pointless.
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
         let root = TempDir::new();
@@ -562,8 +558,6 @@ mod tests {
         assert!(written.contains("unknown = 7"));
     }
 
-    /// Overwriting a file that could not be parsed would throw away whatever
-    /// the operator had written in it.
     #[test]
     fn an_unparsable_file_is_never_written_over() {
         let root = TempDir::new();
@@ -590,7 +584,6 @@ mod tests {
         assert!(settings.reverse);
     }
 
-    /// A figure the receiver could not be built from must not reach it.
     #[test]
     fn stored_figures_are_brought_back_into_range() {
         let root = TempDir::new();
@@ -608,7 +601,6 @@ mod tests {
         assert_eq!(settings.squelch_threshold, MAXIMUM_SQUELCH);
     }
 
-    /// A shift written without a decimal point is still a shift.
     #[test]
     fn a_whole_number_is_read_as_the_figure_it_is() {
         let root = TempDir::new();
@@ -620,8 +612,6 @@ mod tests {
         assert_eq!(settings.baud, 75.0);
     }
 
-    /// Editing the file by hand is how macros are written, so the fields they
-    /// read have to survive being written and read back.
     #[test]
     fn operator_fields_survive_a_round_trip() {
         let root = TempDir::new();
@@ -639,8 +629,6 @@ mod tests {
         assert_eq!(read_back.custom_variables, wanted.custom_variables);
     }
 
-    /// A name no macro could ever name is dropped rather than carried around
-    /// unreachable, the way every other unusable value in the file is.
     #[test]
     fn an_unusable_field_name_is_dropped() {
         let root = TempDir::new();
@@ -660,7 +648,6 @@ grid = \"PM95UQ\"
         assert_eq!(settings.custom_variables["grid"], "PM95UQ");
     }
 
-    /// A field struck out in the window has to leave the file too.
     #[test]
     fn a_removed_field_leaves_the_file() {
         let root = TempDir::new();
@@ -683,8 +670,6 @@ grid = \"PM95UQ\"
         assert!(!fs::read_to_string(&path).unwrap().contains("JARL"));
     }
 
-    /// With nothing in it the table goes altogether, rather than an empty
-    /// heading being left behind in the operator's file.
     #[test]
     fn no_fields_leaves_no_table() {
         let root = TempDir::new();
@@ -701,8 +686,6 @@ grid = \"PM95UQ\"
 
         assert!(!fs::read_to_string(&path).unwrap().contains("variables"));
     }
-    /// A station that has set neither up still gets the directory its macros can
-    /// read, which is the store answering on its own.
     #[test]
     fn a_file_that_says_nothing_about_the_directory_gets_the_defaults() {
         let root = TempDir::new();
@@ -725,8 +708,6 @@ grid = \"PM95UQ\"
         }
     }
 
-    /// An operator who wrote `fields = []` asked for a dialog holding only what
-    /// the station already has, and handing the default back would argue with them.
     #[test]
     fn an_empty_field_list_is_taken_as_written() {
         let root = TempDir::new();
@@ -738,9 +719,6 @@ grid = \"PM95UQ\"
         assert!(settings.contact.fields.is_empty());
     }
 
-    /// The address is written even while it is empty: this file is where it is
-    /// edited, and an operator who has to invent the key before they can change it
-    /// has no way to learn it exists.
     #[test]
     fn the_logger_address_is_written_out_even_while_it_is_empty() {
         let root = TempDir::new();
@@ -754,8 +732,6 @@ grid = \"PM95UQ\"
         assert!(written.contains("url = \"\""), "{written}");
     }
 
-    /// A store key is read as `${contact.<key>}`, so a key holding anything a
-    /// name cannot hold would be filed and then be unreachable from a macro.
     #[test]
     fn every_well_known_contact_key_is_a_name_a_macro_can_read() {
         for key in grayline_qso::WELL_KNOWN_KEYS {

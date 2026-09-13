@@ -13,7 +13,6 @@ use crate::identity::{APP_DIRECTORY, PICTURES_DIRECTORY};
 /// The settings file, named here because a test writes one directly.
 pub const CONFIG_FILE: &str = "config.toml";
 
-/// The rolling log the application writes under its state directory.
 const LOG_FILE: &str = "grayline-wefax.log";
 
 const DEFAULT_CONFIG: &str = "";
@@ -156,8 +155,6 @@ mod tests {
         assert!(paths.log_file.parent().unwrap().is_dir());
     }
 
-    /// The log describes one machine's hardware, so it must not be written
-    /// where the account's roaming profile would synchronize it.
     #[test]
     fn the_log_is_kept_apart_from_the_roaming_data_directory() {
         let paths = AppPaths::from_roots(

@@ -169,7 +169,6 @@ impl Visible {
     }
 }
 
-/// Rounds a reading to the steps a meter can be seen to move in.
 fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 64.0) as u8
 }
@@ -349,9 +348,6 @@ impl RxWorker {
                 .spawn(move || run(reader, &mailbox, &stop, &controls))
                 .ok()
         };
-        // A worker that could not start would otherwise look like a live
-        // receiver that never hears anything, so the failure is published
-        // where every other receive failure is shown.
         if join.is_none() {
             mailbox.publish(RxSnapshot {
                 error: Some(AppError::WorkerUnavailable("reception")),
@@ -451,8 +447,6 @@ mod tests {
         assert!(strip.replaces_all, "the earlier update's own claim has to survive");
     }
 
-    /// A correction rewrites the columns already published, so what it carries
-    /// replaces whatever was waiting rather than being appended to it.
     #[test]
     fn a_redraw_replaces_what_was_waiting() {
         let mailbox = Mailbox::new(Waker::default());
@@ -506,8 +500,6 @@ mod tests {
         assert!(mailbox.take().is_none());
     }
 
-    /// A block of audio that moved nothing the interface draws says what the
-    /// one before it said, so it must not cost a frame.
     #[test]
     fn a_negligible_change_looks_the_same() {
         let earlier = RxSnapshot {
@@ -583,8 +575,6 @@ mod tests {
         assert_eq!(controls.take_phase_shift(), 0);
     }
 
-    /// Two presses before the worker looks are one correction, not one press
-    /// lost.
     #[test]
     fn a_line_rate_correction_accumulates_until_it_is_taken() {
         let controls = Controls::default();

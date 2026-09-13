@@ -170,14 +170,6 @@ pub fn model(app: &App) -> Vec<Menu> {
                     label: text("menu-history"),
                     items: history_items(app),
                 },
-                // Rig control is worked from the radio panel; what is left for
-                // a menu is putting the two files it runs on where they can be
-                // edited, which is a once-ever thing rather than an operating
-                // control.
-                // The directory is worked from the QSO panel; what is left
-                // for a menu is the switch and putting the credentials file
-                // where it can be edited, neither of which is an operating
-                // control.
                 Item::Submenu {
                     label: text("menu-contact"),
                     items: vec![
@@ -436,9 +428,6 @@ mod tests {
             .sum()
     }
 
-    /// The platform renderer creates one entry per item and later matches them
-    /// by position, so a missed item shifts every later label onto the wrong
-    /// entry.
     #[test]
     fn flattening_counts_every_item_including_separators() {
         let model = model(&App::headless());
@@ -470,8 +459,6 @@ mod tests {
         assert!(matches!(flat[3], Item::Pending(label) if label == "after"));
     }
 
-    /// Every directory the application keeps is reachable from one menu, or a
-    /// folder the operator is expected to work in has no way in.
     #[test]
     fn the_file_menu_offers_every_folder() {
         let app = App::headless();
@@ -495,8 +482,6 @@ mod tests {
         }
     }
 
-    /// A manual nothing opens is a manual nobody reads, so the Help menu has
-    /// to carry a command rather than the placeholder it started as.
     #[test]
     fn the_help_menu_opens_the_manual() {
         let app = App::headless();
@@ -513,9 +498,6 @@ mod tests {
         assert_ne!(app.i18n.text("menu-manual"), "menu-manual");
     }
 
-    /// The manual is a page on the web, so the entry has nothing to report
-    /// unless the browser could not be reached. What it opens is checked
-    /// where the application's own state is.
     #[test]
     fn opening_the_manual_reports_nothing() {
         let mut app = App::headless();
@@ -525,8 +507,6 @@ mod tests {
         assert_eq!(app.library.error, None);
     }
 
-    /// Every action the model offers has to be handled, or a menu entry does
-    /// nothing when clicked.
     #[test]
     fn every_action_in_the_model_is_applicable() {
         let mut app = App::headless();

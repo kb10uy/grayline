@@ -42,14 +42,12 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     activated
 }
 
-/// The controls on top, and a status line under them.
 fn controls(ui: &mut Ui, app: &mut App) {
     settings_row(ui, app);
     ui.add_space(2.0);
     status_row(ui, app);
 }
 
-/// Everything a reception is worked with, in groups that stay together.
 fn settings_row(ui: &mut Ui, app: &mut App) {
     // Every control on the bar is given the same height, rounded to a whole
     // point. Left to their own, a combo box, a button and a check box come out
@@ -107,12 +105,10 @@ fn group(ui: &mut Ui, salt: &str, add: impl FnOnce(&mut Ui)) {
     }
 }
 
-/// Where a group's measured width is kept between frames.
 fn group_id(salt: &str) -> Id {
     Id::new("wefax-control-group").with(salt)
 }
 
-/// What a reception is told about itself before it starts.
 fn flags(ui: &mut Ui, app: &mut App) {
     let mut changed = false;
     changed |= ui
@@ -131,7 +127,6 @@ fn flags(ui: &mut Ui, app: &mut App) {
     ui.separator();
 }
 
-/// Starting, ending, and throwing away a reception.
 fn actions(ui: &mut Ui, app: &mut App) {
     if ui.button(app.i18n.text("action-start")).clicked() {
         app.start();
@@ -210,7 +205,6 @@ fn geometry(ui: &mut Ui, app: &mut App) {
     ui.separator();
 }
 
-/// Nudges the picture sideways, for a chart the phasing signal placed wrongly.
 fn phase(ui: &mut Ui, app: &App) {
     ui.label(app.i18n.text("label-phase"));
     for (label, pixels) in [
@@ -256,7 +250,6 @@ fn slant(ui: &mut Ui, app: &App) {
     ui.separator();
 }
 
-/// How much signal is arriving, and how much of it looks like a framing tone.
 fn meter(ui: &mut Ui, app: &App) {
     let snapshot = app.audio.snapshot();
     let apt = snapshot.apt.iter().fold(0.0_f32, |high, value| high.max(*value));
@@ -270,7 +263,6 @@ fn meter(ui: &mut Ui, app: &App) {
     ui.label(app.i18n.text("label-signal"));
 }
 
-/// What the receiver is doing, and how far it has got.
 fn state_text(app: &App) -> RichText {
     let progress = app.progress();
     let text = describe(&app.i18n, progress, app);

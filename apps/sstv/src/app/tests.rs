@@ -129,9 +129,6 @@ fn automatic_history_follows_its_setting(#[case] enabled: bool, #[case] expected
     assert_eq!(fs::read_dir(received).unwrap().count(), expected_files);
 }
 
-/// The received image belongs to the template, not to the received folder,
-/// so an operator who keeps nothing on disk still transmits over what was
-/// just received.
 #[rstest]
 #[case(true)]
 #[case(false)]
@@ -166,8 +163,6 @@ fn a_kept_reception_becomes_the_received_image(#[case] saving: bool) {
     );
 }
 
-/// A reception the worker never offered leaves the layer showing what it
-/// showed before, so a lost signal does not blank a prepared transmission.
 #[test]
 fn a_reception_without_a_candidate_leaves_the_received_image_alone() {
     let mut app = App::headless();
@@ -203,9 +198,6 @@ fn settled(app: &App) -> ContactSnapshot {
     }
 }
 
-/// Leaving the field is what commits a callsign, and the operator leaves it
-/// whether or not they changed anything. Asking again for the station already
-/// showing would put a second question to somebody's logger for nothing.
 #[test]
 fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
     let mut app = App::headless();
@@ -237,8 +229,6 @@ fn a_changed_callsign_is_asked_about() {
     assert_eq!(settled(&app).callsign, "JH1XYZ");
 }
 
-/// The identifier path does not go through the field, so it has to ask for
-/// itself.
 #[test]
 fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
     let mut app = App::headless();
@@ -281,8 +271,6 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
     assert!(app.library.error.is_none());
 }
 
-/// And when there is one to write, it goes where the paths name rather than
-/// wherever the crate would have discovered.
 #[test]
 fn the_credentials_file_is_written_where_the_paths_name_it() {
     let root = TempDir::new();
@@ -314,7 +302,6 @@ fn the_credentials_file_is_written_where_the_paths_name_it() {
     assert!(app.notice.is_some());
 }
 
-/// Half a callsign is not one, and neither is a garbled identifier.
 #[rstest]
 #[case("JA")]
 #[case("")]
@@ -342,8 +329,6 @@ fn an_unchanged_identifier_list_leaves_the_contact_field_alone() {
     assert_eq!(app.qso.call, "JA1XYZ");
 }
 
-/// The identifier names whoever is on the air now, so a new arrival takes
-/// the field even when the operator had put something else there.
 #[test]
 fn a_newly_decoded_identifier_replaces_the_contact_field() {
     let mut app = App::headless();
@@ -373,10 +358,6 @@ fn an_identifier_after_a_restart_is_adopted_again() {
     assert_eq!(app.qso.call, "JA1ABC");
 }
 
-/// A sync-interval match can only narrow a mode down, never confirm it the
-/// way a header does, so how far it may reach follows the operator's own
-/// choice: it may pick any mode while automatic detection is on, and
-/// otherwise only confirm the mode already selected.
 #[test]
 fn sync_start_scope_follows_automatic_mode_detection() {
     let mut app = App::headless();
@@ -407,8 +388,6 @@ fn a_blank_identifier_does_not_reach_the_contact_field() {
     assert_eq!(app.qso.call, "JA1ABC");
 }
 
-/// The switch in the menu is the whole of the decision, so a worker has to
-/// come and go with it rather than needing anything else to be asked.
 #[test]
 fn a_rig_worker_exists_exactly_while_rig_control_is_switched_on() {
     let mut app = App::headless();
@@ -463,8 +442,6 @@ fn rig_control_that_is_not_ready_stops_a_transmission(
     assert_eq!(app.rig_problem().is_some(), blocked);
 }
 
-/// What the rig said is more use than the state it ended up in, so the
-/// failure is what the operator is shown when there is one.
 #[test]
 fn a_rig_failure_is_reported_in_the_rig_s_own_words() {
     let mut app = App::headless();
@@ -522,7 +499,6 @@ fn a_band_with_no_step_has_nothing_to_move_by() {
     assert_eq!(app.stepped_frequency(1), None);
 }
 
-/// Moving a rig that is on the air moves the transmission with it.
 #[rstest]
 #[case(RigState::Receiving, true)]
 #[case(RigState::Transmitting, false)]
@@ -548,7 +524,6 @@ impl Platform for RecordingPlatform {
     }
 }
 
-/// A platform that records the addresses the interface asked it to open.
 #[derive(Clone, Default)]
 struct RecordingBrowser(Rc<RefCell<Vec<String>>>);
 
@@ -561,9 +536,6 @@ impl Platform for RecordingBrowser {
     }
 }
 
-/// The manual this application opens has to be its own pages: the site
-/// carries one set per application, and the WEFAX pages describe a mode this
-/// one does not receive.
 #[test]
 fn the_manual_opens_at_this_application_s_own_address() {
     let browser = RecordingBrowser::default();
@@ -575,8 +547,6 @@ fn the_manual_opens_at_this_application_s_own_address() {
     assert_eq!(app.library.error, None);
 }
 
-/// Sleep has to be held off for the whole of a reception and released
-/// again when it ends, or a long picture is cut short by an idle timer.
 #[test]
 fn a_reception_asks_the_platform_to_stay_awake_until_it_ends() {
     let recorder = RecordingPlatform::default();
@@ -596,8 +566,6 @@ fn a_reception_asks_the_platform_to_stay_awake_until_it_ends() {
     );
 }
 
-/// An unchanged activity must not be restated, or the platform is asked
-/// the same thing on every frame.
 #[test]
 fn an_unchanged_activity_is_not_reported_again() {
     let recorder = RecordingPlatform::default();
@@ -611,8 +579,6 @@ fn an_unchanged_activity_is_not_reported_again() {
     assert_eq!(recorder.0.take(), vec![Activity::Receiving]);
 }
 
-/// A transmission outranks a reception: both cannot hold the device, and
-/// the transmission is the stronger claim on the machine.
 #[rstest]
 #[case(TxPhase::Priming, Activity::Transmitting)]
 #[case(TxPhase::Producing, Activity::Transmitting)]
@@ -632,9 +598,6 @@ fn a_transmission_outranks_a_reception(#[case] phase: TxPhase, #[case] expected:
     assert_eq!(app.activity(), expected);
 }
 
-/// The station's own signal comes back off the antenna, so nothing is
-/// listened for while anything is going out. Every ending releases it,
-/// including one the operator did not ask for.
 #[rstest]
 #[case(TxPhase::Priming, true)]
 #[case(TxPhase::Producing, true)]
@@ -654,8 +617,6 @@ fn reception_is_muted_for_as_long_as_a_transmission_runs(#[case] phase: TxPhase,
     assert_eq!(app.audio.is_muted_for_transmit(), expected);
 }
 
-/// A tone keys the rig just as a picture does, and the operator stopping it
-/// is what gives reception back.
 #[test]
 fn a_tune_tone_mutes_reception_until_it_is_stopped() {
     let mut app = App::headless();
@@ -681,7 +642,6 @@ fn switching_tabs_preserves_receive_progress() {
     assert_eq!(app.decoded_fraction(), 0.4);
 }
 
-/// A tone sends no picture, so the one on the tab is not drawn out under it.
 #[test]
 fn a_tune_tone_leaves_the_transmit_raster_whole() {
     let mut app = App::headless();
@@ -691,8 +651,6 @@ fn a_tune_tone_leaves_the_transmit_raster_whole() {
     assert_eq!(app.decoded_fraction(), 1.0);
 }
 
-/// The tone asks for less than a picture does: it carries no image and names
-/// no station, so only the output device and the rig stand in its way.
 #[test]
 fn a_tune_tone_needs_only_an_output_device() {
     let mut app = App::headless();
@@ -707,7 +665,6 @@ fn a_tune_tone_needs_only_an_output_device() {
     assert_eq!(app.tx_error, Some(app.i18n.text("error-no-output-device")));
 }
 
-/// One stream and one rig: whichever of the two is running refuses the other.
 #[test]
 fn a_tone_and_a_picture_refuse_each_other() {
     let mut app = App::headless();
@@ -721,8 +678,6 @@ fn a_tone_and_a_picture_refuse_each_other() {
     assert!(!app.can_transmit());
 }
 
-/// A keyed carrier is the one thing here that goes out with nobody watching
-/// it, so it gives the rig back on its own.
 #[test]
 fn a_tune_tone_stops_itself_once_its_time_is_up() {
     let mut app = App::headless();
@@ -791,8 +746,6 @@ fn dsp_toggles_flip_one_flag(#[case] dsp: Dsp, #[case] expected: bool) {
     }
 }
 
-/// A frame that prints the clock is composed again as the minute turns,
-/// and one that does not is left alone however long it sits there.
 #[test]
 fn only_a_composition_that_shows_the_time_is_made_again() {
     let mut app = App::headless();
@@ -808,8 +761,6 @@ fn only_a_composition_that_shows_the_time_is_made_again() {
     assert_eq!(app.composition.minute, current_minute());
 }
 
-/// A half-typed name is still in the dialog to be finished, but it is not
-/// offered to a template, which could only fail to read it.
 #[test]
 fn an_unusable_custom_variable_name_is_kept_out_of_the_composition() {
     let mut app = App::headless();
@@ -834,8 +785,6 @@ fn slant_is_enabled_by_default_in_the_ui_and_worker_settings() {
     assert!(app.audio.live_slant());
 }
 
-/// The setting reaches the receive worker rather than only the menu mark,
-/// or turning it off would leave the reception restarting anyway.
 #[test]
 fn the_vis_restart_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
@@ -847,8 +796,6 @@ fn the_vis_restart_setting_reaches_the_receive_worker() {
     assert!(!app.audio.vis_restart());
 }
 
-/// Loose detection is the default, and turning strictness on has to reach
-/// the receive worker rather than only the menu mark.
 #[test]
 fn the_vis_strict_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
@@ -860,9 +807,6 @@ fn the_vis_strict_setting_reaches_the_receive_worker() {
     assert!(app.audio.vis_strict());
 }
 
-/// The setting decides whether the identifier is sent, not whether the
-/// station needs a callsign: a transmission is made by a station either
-/// way, and nothing else names it.
 #[test]
 fn the_identifier_setting_decides_only_whether_the_callsign_is_sent() {
     let mut app = App::headless();
@@ -872,8 +816,6 @@ fn the_identifier_setting_decides_only_whether_the_callsign_is_sent() {
 
     app.send_fskid = false;
 
-    // Nothing is sent now, but the station still has to be named: the
-    // callsign is reported before anything else a transmission needs.
     assert!(app.station_id().is_none());
     let problem = app.transmit_problem().expect("an unusable callsign");
     assert_ne!(problem, app.i18n.text("error-no-transmit-frame"));
@@ -883,8 +825,6 @@ fn the_identifier_setting_decides_only_whether_the_callsign_is_sent() {
     assert_eq!(app.transmit_problem(), Some(app.i18n.text("error-no-transmit-frame")));
 }
 
-/// The station dialog writes the same fields the composition reads, and a
-/// callsign typed into it reaches the transmit check uppercased.
 #[test]
 fn station_details_are_kept_and_normalized() {
     let mut app = App::headless();
@@ -901,8 +841,6 @@ fn station_details_are_kept_and_normalized() {
     assert_eq!(settings.station_grid, "PM95uq");
 }
 
-/// Every field but the operator's own template variables is a value rather
-/// than text, so what is taken up when one is left is the trimmed field.
 #[test]
 fn leaving_a_qso_field_trims_it() {
     let mut app = App::headless();
@@ -919,8 +857,6 @@ fn leaving_a_qso_field_trims_it() {
     assert_eq!(app.qso.number, "007");
 }
 
-/// What the operator wrote is what a template reads, spaces and all: these
-/// are the values only they know the shape of.
 #[test]
 fn custom_variables_are_kept_exactly_as_they_were_entered() {
     let mut app = App::headless();
@@ -939,8 +875,6 @@ fn callsign_input_is_normalized() {
     assert_eq!(app.qso.call, "JA1XYZ");
 }
 
-/// The serial keeps its three digits as it counts, and is allowed to grow
-/// out of them rather than starting over.
 #[rstest]
 #[case("001", "002")]
 #[case("009", "010")]
@@ -955,8 +889,6 @@ fn the_serial_number_counts_on(#[case] before: &str, #[case] after: &str) {
     assert_eq!(app.qso.number, after);
 }
 
-/// An exchange that is not a serial has nothing to count, so the button
-/// leaves it as it was typed.
 #[test]
 fn a_serial_that_is_not_a_number_is_left_alone() {
     let mut app = App::headless();
@@ -977,8 +909,6 @@ fn the_serial_number_is_reset_and_kept() {
     assert_eq!(app.qso.number, FIRST_QSO_NUMBER);
 }
 
-/// The number is filtered the way MMSSTV filters it, and one the record
-/// cannot hold is left off rather than stopping the transmission.
 #[rstest]
 #[case("001", Some("001"))]
 #[case("13h", Some("13H"))]
@@ -996,8 +926,6 @@ fn the_contest_number_is_sent_as_the_record_can_hold_it(#[case] typed: &str, #[c
     assert_eq!(number.map(|number| number.as_str().to_owned()).as_deref(), expected);
 }
 
-/// A station that is not in a contest gives out no number, whatever is left
-/// in the field from the last one.
 #[test]
 fn no_contest_number_is_sent_outside_contest_mode() {
     let mut app = App::headless();
@@ -1007,8 +935,6 @@ fn no_contest_number_is_sent_outside_contest_mode() {
     assert_eq!(app.contest_number(), None);
 }
 
-/// A contest number arrives as digits alone, and is read as the report
-/// MMSSTV reads it as.
 #[test]
 fn a_decoded_contest_number_fills_the_received_report() {
     let mut app = App::headless();
@@ -1019,8 +945,6 @@ fn a_decoded_contest_number_fills_the_received_report() {
     assert_eq!(app.qso.rsv_received, "595001");
 }
 
-/// The worker republishes every number it has decoded, so the same list
-/// observed again must not undo an edit made in the meantime.
 #[test]
 fn an_unchanged_number_list_leaves_the_received_report_alone() {
     let mut app = App::headless();
@@ -1033,8 +957,6 @@ fn an_unchanged_number_list_leaves_the_received_report_alone() {
     assert_eq!(app.qso.rsv_received, "599");
 }
 
-/// A restarted worker publishes an empty list, and the next number it
-/// decodes is a new arrival even though the count went down.
 #[test]
 fn a_number_after_a_restart_is_adopted_again() {
     let mut app = App::headless();
@@ -1212,7 +1134,6 @@ fn qso_changes_do_not_invalidate_template_or_stock_files() {
     assert_eq!(app.composition.stock_generation, stock_generation.wrapping_add(1));
 }
 
-/// Polls until the composition worker has delivered the transmit image.
 fn composed(app: &mut App) -> Arc<RgbImage> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -1226,7 +1147,6 @@ fn composed(app: &mut App) -> Arc<RgbImage> {
     }
 }
 
-/// A pixel from the middle of the frame, away from any resampled edge.
 fn center(frame: &RgbImage) -> Rgb8 {
     let size = frame.size();
     frame.row(size.height() / 2).expect("a middle row")[size.width() / 2]
@@ -1260,8 +1180,6 @@ size width=(fw)100 height=(fh)100 fit="stretch"
     assert!(app.transmit_problem().is_none() || app.audio.output_device.is_none());
 }
 
-/// A kept reception reaches the transmit image on its own, so the operator
-/// does not have to touch the library to send what was just received.
 #[test]
 fn a_kept_reception_reaches_the_transmit_image() {
     let root = TempDir::new();
@@ -1303,8 +1221,6 @@ size width=(fw)100 height=(fh)100 fit="stretch"
     assert_eq!(frame.pixels().first(), Some(&Rgb8::new(200, 10, 20)));
 }
 
-/// The transmit image is what a transmission is sending, so a stock chosen
-/// while one runs must not replace it until the transmission is over.
 #[test]
 fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
     let root = TempDir::new();
@@ -1334,19 +1250,12 @@ fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
     assert!(center(&second).g > center(&second).r);
 }
 
-/// An interface with nothing running asks for no frames at all.
-///
-/// This is the whole point of the workers asking for their own: a station
-/// sitting idle has nothing to draw, and drawing it anyway is what kept the
-/// machine busy.
 #[test]
 fn an_idle_interface_schedules_no_frames() {
     let app = App::headless();
     assert_eq!(app.repaint_after(), None);
 }
 
-/// A transmission is read by polling its worker and the playback queue, so it
-/// has to be looked at rather than waited on.
 #[test]
 fn a_running_tone_schedules_frames() {
     let mut app = App::headless();
@@ -1354,7 +1263,6 @@ fn a_running_tone_schedules_frames() {
     assert_eq!(app.repaint_after(), Some(LIVE_INTERVAL));
 }
 
-/// The soonest of the reasons to draw is the one that decides.
 #[test]
 fn the_shortest_interval_wins() {
     let mut app = App::headless();
@@ -1365,8 +1273,6 @@ fn the_shortest_interval_wins() {
     assert_eq!(app.repaint_after(), Some(LIVE_INTERVAL));
 }
 
-/// Writing a file out is a success, and the status line must not dress it in
-/// the error color a failure gets.
 #[test]
 fn a_written_file_reports_as_a_notice_rather_than_a_failure() {
     let mut app = App::headless();

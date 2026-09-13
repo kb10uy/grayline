@@ -401,7 +401,6 @@ mod tests {
         assert_eq!(state.played.load(Ordering::Acquire), 0);
         assert_eq!(state.underrun.load(Ordering::Acquire), 0);
 
-        // The samples the stream was not given are still the ones it plays.
         state.started.store(true, Ordering::Release);
         render(&mut output, 2, &mut consumer, &state);
 

@@ -341,8 +341,6 @@ mod tests {
     fn a_spaced_stop_element_reports_the_framing_error_and_recovers() {
         let mut driver = Driver::new(11_025.0, framing(45.45, StopTolerance::Ratio142));
         driver.feed(Bit::Mark, 2.0);
-        // A character whose stop element is space: the code still comes out,
-        // flagged, and the next clean character decodes.
         driver.feed(Bit::Space, 1.0);
         for _ in 0..5 {
             driver.feed(Bit::Mark, 1.0);
@@ -461,8 +459,6 @@ mod tests {
     fn a_two_percent_fast_or_slow_transmitter_still_decodes(#[case] speed: f64) {
         let rate = 11_025.0;
         let mut driver = Driver::new(rate, framing(45.45, StopTolerance::Ratio142));
-        // The transmitter's bit lasts 1/speed of the receiver's, so feed in
-        // transmitter bits by scaling the durations.
         let scale = 1.0 / speed;
         driver.feed(Bit::Mark, 4.0);
         let text = [0b11000, 0b10011, 0b00111, 0b10101, 0b01010];

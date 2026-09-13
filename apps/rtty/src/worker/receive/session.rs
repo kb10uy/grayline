@@ -98,7 +98,6 @@ pub(super) fn run(mut reader: CaptureReader, mailbox: &Mailbox, stop: &AtomicBoo
     }
 }
 
-/// One decode path, and what it has decoded since the last snapshot.
 struct Column {
     path: DecodePath,
     pipeline: ReceivePipeline,
@@ -142,7 +141,6 @@ struct Session {
     /// own rather than the receiver's.
     scope: bool,
     spectrum: Option<Spectrum>,
-    /// Counts the frames handed to the scope.
     sequence: u64,
 }
 
@@ -198,7 +196,6 @@ impl Session {
         }
     }
 
-    /// Acts on whatever the interface asked for since the last block.
     fn obey(&mut self, controls: &Controls) -> Option<AppError> {
         let scope = controls.scope.load(Ordering::Relaxed);
         if scope != self.scope {
@@ -243,7 +240,6 @@ impl Session {
         failure
     }
 
-    /// The pairs and the band the scope window draws, while one is open.
     fn scope_frame(&mut self) -> Option<ScopeFrame> {
         if !self.scope {
             return None;
@@ -303,7 +299,6 @@ mod tests {
         controls
     }
 
-    /// A transmission of `text`, produced by the crate's own transmitter.
     fn transmission(text: &str) -> Vec<f32> {
         let config = TxConfig::default();
         let codes = encode_text(text, &config).unwrap();
@@ -339,13 +334,9 @@ mod tests {
 
         let snapshot = session.snapshot(0, None);
         assert_eq!(snapshot.columns[0].text, "CQ DE JL1HIS\r\n");
-        // Taken rather than copied: the interface appends what it is given,
-        // so a character handed over twice would be printed twice.
         assert!(session.snapshot(0, None).columns[0].text.is_empty());
     }
 
-    /// The header says which tone is being heard, and it has to be right or
-    /// the operator tunes away from a signal that was arriving.
     #[test]
     fn the_reading_follows_the_tone_being_heard() {
         let mut session = Session::new(RATE, settings()).unwrap();
@@ -384,8 +375,6 @@ mod tests {
         );
     }
 
-    /// A reset is how the operator says the receiver has lost its place, so
-    /// it has to act even when nothing about the settings changed.
     #[test]
     fn a_reset_starts_the_paths_over() {
         let controls = controls(settings());
@@ -397,8 +386,6 @@ mod tests {
         assert_eq!(session.columns[0].case, Case::default());
     }
 
-    /// Nothing is tapped and nothing is transformed until a window is open,
-    /// because a display nobody is looking at is work nobody asked for.
     #[test]
     fn a_closed_scope_is_published_nothing() {
         let mut session = Session::new(RATE, settings()).unwrap();
@@ -427,8 +414,6 @@ mod tests {
         assert!(frame.bin_hz > 0.0);
     }
 
-    /// The frames are what tells the interface a picture is worth drawing, so
-    /// two of them must not look alike.
     #[test]
     fn every_frame_says_it_is_a_new_one() {
         let controls = controls(settings());
@@ -469,12 +454,9 @@ mod tests {
         controls.scope.store(false, Ordering::Relaxed);
         assert!(session.obey(&controls).is_none());
         assert!(session.snapshot(0, None).scope.is_none());
-        // And the reception it was watching is still the same one.
         assert!(!session.columns[0].pipeline.tones().mark_hz.is_nan());
     }
 
-    /// The tap is decimated by the caller, and every rate a device offers has
-    /// to land near the rate the picture is drawn at.
     #[test]
     fn the_tap_keeps_about_the_same_rate_whatever_the_device_runs_at() {
         for rate in [8_000, 11_025, 22_050, 44_100, 48_000, 96_000] {

@@ -123,7 +123,6 @@ fn drift_between(raster: &GrayRaster, first: usize, last: usize, baseline: usize
     Some(center / baseline as f64)
 }
 
-/// Returns whether a row carries enough variation to be correlated.
 fn has_contrast(row: &[u8]) -> bool {
     let (low, high) = row.iter().fold((u8::MAX, u8::MIN), |(low, high), level| {
         (low.min(*level), high.max(*level))

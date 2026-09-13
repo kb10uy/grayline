@@ -221,7 +221,6 @@ mod tests {
 
     const BIN_HZ: f64 = 5.859_375;
 
-    /// A synthetic spectrum: a small noise floor with peaks at the tones.
     fn spectrum(peaks: &[(f64, f64)]) -> Vec<f64> {
         let mut magnitudes = vec![1.0; 512];
         for &(frequency_hz, magnitude) in peaks {

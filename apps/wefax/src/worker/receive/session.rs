@@ -83,7 +83,6 @@ pub(super) fn run(mut reader: CaptureReader, mailbox: &Mailbox, stop: &AtomicBoo
     }
 }
 
-/// One reception, and what the interface has already been told about it.
 struct Session {
     pipeline: ReceivePipeline,
     sample_rate_hz: u32,
@@ -114,7 +113,6 @@ impl Session {
         })
     }
 
-    /// Starts over on a fresh pipeline, keeping nothing.
     fn restart(&mut self, controls: &Controls) -> Result<(), AppError> {
         let config = configure(controls);
         self.pipeline = ReceivePipeline::new(self.sample_rate_hz, config)?;
@@ -174,8 +172,6 @@ impl Session {
         }
         let shift = controls.take_phase_shift();
         if shift != 0 {
-            // A picture with no raster yet has nothing to move, which is not a
-            // failure: the operator pressed the button before a line arrived.
             changed |= self.pipeline.decoder_mut().shift_phase(shift).is_ok();
         }
         let ppm = controls.take_slant_ppm();

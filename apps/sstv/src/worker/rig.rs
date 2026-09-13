@@ -422,8 +422,6 @@ mod tests {
         }
     }
 
-    /// The band plan the application ships, which is what a station that has
-    /// written no bands.toml of its own runs on.
     fn plan() -> Arc<BandPlan> {
         Arc::new(BandPlan::built_in())
     }
@@ -443,7 +441,6 @@ mod tests {
         }
     }
 
-    /// Waits for `predicate` to hold of the snapshot, or gives up.
     fn settle(worker: &RigWorker, predicate: impl Fn(&RigSnapshot) -> bool) -> RigSnapshot {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
@@ -456,8 +453,6 @@ mod tests {
         }
     }
 
-    /// The script the application ships has to key a rig on its own, because
-    /// it is what runs for every operator who has not written one.
     #[test]
     fn the_default_script_keys_and_unkeys() {
         let fake = FakeRig::spawn(14_230_000);
@@ -474,8 +469,6 @@ mod tests {
         assert_eq!(fake.received(), ["+\\chk_vfo", "+T 1", "+T 0"]);
     }
 
-    /// A module that omits a function is not in error: a station keyed by VOX
-    /// exports no `transmit`, and leaving it out is the whole of saying so.
     #[test]
     fn a_script_that_exports_nothing_keys_nothing_and_still_connects() {
         let fake = FakeRig::spawn(14_230_000);
@@ -490,8 +483,6 @@ mod tests {
         assert_eq!(fake.received(), ["+\\chk_vfo"]);
     }
 
-    /// The lead-in is what a rig needs to switch over, so nothing may call the
-    /// rig ready to transmit until it has passed.
     #[test]
     fn the_lead_in_is_waited_out_before_the_rig_reports_it_is_transmitting() {
         let fake = FakeRig::spawn(14_230_000);
@@ -558,8 +549,6 @@ mod tests {
         );
     }
 
-    /// A keyed rig has to be left alone: a poll landing mid-transmission is
-    /// CAT traffic during the one part of a session that cannot take it.
     #[test]
     fn a_keyed_rig_is_not_polled() {
         let fake = FakeRig::spawn(7_178_000);
@@ -582,8 +571,6 @@ mod tests {
         assert_eq!(fake.received().len(), keyed_at);
     }
 
-    /// The band the rig is on reaches the script, which is what lets one
-    /// script cover a station's bands rather than one per band.
     #[test]
     fn the_script_is_told_which_band_the_rig_is_on() {
         let fake = FakeRig::spawn(7_178_000);
@@ -619,8 +606,6 @@ mod tests {
         );
     }
 
-    /// A script that raises leaves the rig unkeyed, and the interface has to
-    /// be told so that the transmission it was keyed for does not go out.
     #[test]
     fn a_script_that_raises_reports_the_failure_and_stays_connected() {
         let fake = FakeRig::spawn(14_230_000);
@@ -635,12 +620,9 @@ mod tests {
             snapshot.error.as_ref().unwrap().to_string().contains("no antenna"),
             "{snapshot:?}"
         );
-        // The script failed, not the connection, so rig control is still up.
         assert_eq!(snapshot.state, RigState::Receiving);
     }
 
-    /// A script that does not finish would hold the worker, and with it every
-    /// transmission after the one it was called for.
     #[test]
     fn a_script_that_never_finishes_is_abandoned() {
         let fake = FakeRig::spawn(14_230_000);
@@ -688,8 +670,6 @@ mod tests {
         assert!(snapshot.error.is_some());
     }
 
-    /// A band is handed over whole, so a setting the operator invented reaches
-    /// the script beside the ones the plan ships with.
     #[test]
     fn changing_band_hands_the_script_the_whole_band() {
         let fake = FakeRig::spawn(14_230_000);
@@ -728,7 +708,6 @@ mod tests {
         );
     }
 
-    /// Tuning a keyed rig would move a transmission that is on the air.
     #[test]
     fn a_keyed_rig_is_not_tuned() {
         let fake = FakeRig::spawn(14_230_000);
@@ -748,8 +727,6 @@ mod tests {
         );
     }
 
-    /// Closing is the operator's, and giving up the connection is what it
-    /// hangs off.
     #[test]
     fn dropping_the_worker_calls_close() {
         let fake = FakeRig::spawn(14_230_000);

@@ -324,8 +324,6 @@ mod tests {
         assert_eq!(stepped, once);
     }
 
-    /// A picture rolled and then rolled back is the picture again, whatever
-    /// fractional position the corrections left its rows at.
     #[test]
     fn a_roll_is_undone_exactly_however_the_rows_were_left() {
         let width = 64;

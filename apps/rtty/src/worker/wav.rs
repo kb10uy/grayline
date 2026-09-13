@@ -16,7 +16,6 @@ use crate::error::AppError;
 
 /// Samples handed to the queue in one write.
 const WRITE_SAMPLES: usize = 4_096;
-/// How long to wait when the queue is full, or still draining.
 const IDLE_POLL: Duration = Duration::from_millis(2);
 
 /// A recording feeding the receive worker in place of a device.
@@ -262,9 +261,6 @@ mod tests {
         assert!(source.is_drained(), "the recording never finished");
     }
 
-    /// A queue told more than it can hold counts the rest as dropped, which
-    /// reads as a hole in the timeline and restarts the reception. A file that
-    /// is longer than the queue must not look like one.
     #[test]
     fn a_recording_longer_than_the_queue_drops_nothing() {
         let root = TempDir::new();

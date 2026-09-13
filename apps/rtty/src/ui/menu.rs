@@ -88,9 +88,6 @@ pub fn model(app: &App) -> Vec<Menu> {
         Menu {
             label: text("menu-view"),
             items: vec![
-                // The one window the operator opens rather than works in, so
-                // it is named where windows are named and on the panel it is
-                // read beside.
                 Item::Check {
                     label: text("action-scope"),
                     checked: app.scope.is_open(),
@@ -144,8 +141,6 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: output_device_items(app),
                 },
                 Item::Separator,
-                // What is set once and left alone. Everything worked while
-                // listening is on the panel instead.
                 Item::Check {
                     label: text("action-unshift-on-space"),
                     checked: app.unshift_on_space,
@@ -173,7 +168,6 @@ pub fn model(app: &App) -> Vec<Menu> {
     ]
 }
 
-/// The File menu: throwing away what was printed, the directories, and Quit.
 fn file_items(app: &App) -> Vec<Item> {
     let mut items = vec![
         Item::Command {
@@ -370,9 +364,6 @@ mod tests {
             .sum()
     }
 
-    /// The platform renderer creates one entry per item and later matches them
-    /// by position, so a missed item shifts every later label onto the wrong
-    /// entry.
     #[test]
     fn flattening_counts_every_item_including_separators() {
         let model = model(&App::headless());
@@ -404,8 +395,6 @@ mod tests {
         assert!(matches!(flat[3], Item::Pending(label) if label == "after"));
     }
 
-    /// Every directory the application keeps is reachable from one menu, or a
-    /// folder the operator is expected to work in has no way in.
     #[test]
     fn the_file_menu_offers_every_folder() {
         let app = App::headless();
@@ -429,8 +418,6 @@ mod tests {
         }
     }
 
-    /// Every action the model offers has to be handled, or a menu entry does
-    /// nothing when clicked.
     #[test]
     fn every_action_in_the_model_is_applicable() {
         let mut app = App::headless();
@@ -444,8 +431,6 @@ mod tests {
         }
     }
 
-    /// The receive settings the menu carries have to reach the worker, or a
-    /// check mark moves and the decoder goes on doing what it was doing.
     #[test]
     fn the_settings_on_the_menu_reach_the_receiver() {
         let mut app = App::headless();
@@ -458,9 +443,6 @@ mod tests {
         assert_ne!(after.atc, before.atc);
     }
 
-    /// The manual is a page on the web, so the entry has nothing to report
-    /// unless the browser could not be reached. What it opens is checked
-    /// where the application's own state is.
     #[test]
     fn opening_the_manual_reports_nothing() {
         let mut app = App::headless();

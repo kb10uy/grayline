@@ -229,8 +229,6 @@ mod tests {
         mode.spec().period().as_picos() as f64 / 1.0e12
     }
 
-    /// A transmission joined after its header has nothing but its raster to
-    /// identify it, and the spacing of sync pulses is the mode's line period.
     #[rstest]
     #[case(Mode::Robot36)]
     #[case(Mode::Martin1)]
@@ -249,8 +247,6 @@ mod tests {
         assert_eq!(detect_from_gaps(SyncStart::Disabled, 8_000.0, &gaps), None);
     }
 
-    /// The operator's choice is confirmed, not overridden: a period that
-    /// belongs to some other mode starts nothing.
     #[test]
     fn a_scoped_detector_ignores_a_period_that_is_not_its_own() {
         let gaps = vec![period_seconds(Mode::Martin1); INTERVAL_HISTORY];
@@ -261,8 +257,6 @@ mod tests {
         assert_eq!(detect_from_gaps(SyncStart::Only(Mode::Scottie1), 8_000.0, &gaps), None);
     }
 
-    /// Pulses lost to noise leave a gap a whole number of lines wide, which is
-    /// why the multiples are tested at all.
     #[test]
     fn a_train_with_missed_pulses_still_identifies_its_mode() {
         let gaps = vec![period_seconds(Mode::Martin1) * 3.0; INTERVAL_HISTORY];
@@ -285,14 +279,12 @@ mod tests {
         assert_eq!(detect_from_gaps(SyncStart::Any, 8_000.0, &gaps), Some(Mode::Martin2));
     }
 
-    /// Random spacing is not a raster.
     #[test]
     fn unrelated_intervals_report_nothing() {
         let gaps = [0.21, 0.33, 0.19, 0.41, 0.27, 0.36, 0.23, 0.31];
         assert_eq!(detect_from_gaps(SyncStart::Any, 8_000.0, &gaps), None);
     }
 
-    /// A receiver's clock is never exact, so a match cannot demand one.
     #[test]
     fn a_mistimed_raster_is_still_identified() {
         let gaps = vec![period_seconds(Mode::Scottie1) * 1.0003; INTERVAL_HISTORY];

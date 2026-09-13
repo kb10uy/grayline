@@ -24,7 +24,6 @@ const MINIMUM_SAMPLES_PER_BIT: f64 = 8.0;
 /// is the smallest power of two that reaches it.
 const AFC_MAXIMUM_BIN_HZ: f64 = 6.0;
 
-/// The AFC machinery the pipeline runs when it is enabled.
 struct AfcState {
     afc: Afc,
     spectrum: RealSpectrum,
@@ -317,8 +316,6 @@ mod tests {
         pipeline
     }
 
-    /// The tuning reading has to say which tone is being heard, or the column
-    /// header shows the same figure whatever the receiver is listening to.
     #[test]
     fn the_channel_reading_leans_towards_the_tone_being_heard() {
         let tones = ToneSet::AFSK_170;
@@ -347,7 +344,6 @@ mod tests {
         assert_eq!(pipeline.drain_monitor().count(), 0);
     }
 
-    /// Closing a display must not leave the ring filling behind it.
     #[test]
     fn closing_the_tap_stops_the_collection() {
         let mut pipeline = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
@@ -360,8 +356,6 @@ mod tests {
         assert_eq!(pipeline.drain_monitor().count(), 0);
     }
 
-    /// A display polls at its own frame rate, and a reopened tap that threw
-    /// away what it had collected would drop a frame's worth of signal.
     #[test]
     fn a_tap_that_is_already_open_keeps_what_it_has() {
         let config = MonitorConfig {

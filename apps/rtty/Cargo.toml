@@ -1,17 +1,12 @@
 [package]
 name = "grayline-rtty-app"
 description = "RTTY for amateur radio"
-# Versioned on its own for the reason recorded beside the SSTV application's
-# own manifest. This one starts at 0.1.0 rather than inheriting the numbers
-# the other two had reached before it existed.
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-# The package carries the `-app` suffix so it does not collide with the
-# `grayline-rtty` protocol library; the binary keeps the product's own name.
 [[bin]]
 name = "grayline-rtty"
 path = "src/main.rs"

@@ -3,8 +3,6 @@
 use super::*;
 
 pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
-    // The sections below can outgrow the panel's height on a small window or
-    // a large font scale; scroll rather than silently clipping the bottom.
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add_space(4.0);
         tab_selector(ui, app);
@@ -104,8 +102,6 @@ pub(super) fn tuning_row(ui: &mut Ui, app: &mut App) {
             let step = ui.spacing().interact_size.y * 1.6;
             let gaps = ui.spacing().item_spacing.x * 2.0;
             let width = (ui.available_width() - gaps - step * 2.0).max(0.0);
-            // Disabled at the band edges rather than clamped: a button that
-            // moves nothing is better than one that says it moved something.
             let back = egui::Button::new("−").min_size([step, height].into());
             if ui.add_enabled(down.is_some(), back).clicked() {
                 stepped = -1;
@@ -197,8 +193,6 @@ pub(super) fn rx_state(ui: &mut Ui, app: &mut App) {
     let fill = if active { colors::RX_ACTIVE } else { colors::RX_IDLE };
     let hint = app.i18n.text("rx-reset-hint");
     let bar = ui.add(ProgressBar::new(1.0).fill(fill));
-    // A bar carries no sign that it can be clicked, so the pointer and the
-    // hover text are the whole of the invitation.
     let clicked = bar
         .interact(egui::Sense::click())
         .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -303,15 +297,10 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
     let sent_label = app.i18n.text("qso-rsv-nr");
     let details_hint = app.i18n.text("contact-open");
 
-    // A field is taken up as typed while it is being typed, and trimmed once
-    // the operator has left it.
     let mut finished = false;
     let mut opening = false;
     ui.horizontal(|ui| {
         field_label(ui, &call_label);
-        // The button sits beside the callsign rather than in a menu: what the
-        // directory holds is about the station on the air right now, and this
-        // is where that station is named.
         let details_width = ui.spacing().interact_size.y;
         let edit = egui::TextEdit::singleline(&mut app.qso.call)
             .desired_width(fields - details_width - gap)
@@ -328,8 +317,6 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
             .on_hover_text(details_hint.as_str())
             .clicked();
     });
-    // The report the other station gave is one field: the number in it arrives
-    // over the air as one thing, and it is read rather than composed.
     ui.horizontal(|ui| {
         field_label(ui, &received_label);
         let edit = egui::TextEdit::singleline(&mut app.qso.rsv_received).desired_width(fields);
@@ -339,14 +326,8 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
             app.qso_changed();
         }
     });
-    // The serial number belongs to a contest, so it is worked only while the
-    // operator has said they are in one. The report beside it is not: every
-    // contact gets one.
     let contest = app.contest_mode;
     ui.horizontal(|ui| {
-        // The report being sent is two fields rather than one: the report
-        // itself is set once and then left alone, while the serial number
-        // moves with every contact.
         field_label(ui, &sent_label);
         let field_width = (fields - gap) / 2.0;
         let report = ui.add(egui::TextEdit::singleline(&mut app.qso.rsv).desired_width(field_width));

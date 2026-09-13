@@ -24,7 +24,6 @@ pub struct MenuHost {
     hwnd: Option<isize>,
 }
 
-/// One created menu entry, positionally matched to a model item.
 enum Entry {
     Check(CheckMenuItem),
     Command(MenuItem),
@@ -248,7 +247,6 @@ impl MenuHost {
     }
 }
 
-/// Reduces a model to the shape a rebuild would be needed to change.
 fn structure_of(model: &[Menu]) -> Vec<Vec<Shape>> {
     model.iter().map(|menu| shapes(&menu.items)).collect()
 }
@@ -275,7 +273,6 @@ fn shapes(items: &[Item]) -> Vec<Shape> {
         .collect()
 }
 
-/// Exercises the platform renderer itself, where label drift actually happens.
 #[cfg(test)]
 mod tests {
     use super::{
@@ -341,9 +338,6 @@ mod tests {
         assert_eq!(native.checks(), expected_checks(&switched));
     }
 
-    /// Switching the language relabels every entry in place. Getting this
-    /// wrong writes each label onto its neighbour, which destroys the submenus
-    /// rather than merely mislabelling the bar.
     #[test]
     fn relabelling_lands_on_the_right_entries() {
         let mut app = App::headless();
@@ -366,8 +360,6 @@ mod tests {
             app.select_locale(locale);
             native.sync(&model(&app));
         }
-        // The zoom label carries a percentage, so a scale change relabels one
-        // entry without touching the structure.
         app.zoom_by(0.5);
         let scaled = model(&app);
         native.sync(&scaled);

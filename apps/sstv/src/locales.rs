@@ -152,11 +152,6 @@ mod tests {
         }
     }
 
-    /// Every well-known contact key has to have a label to be shown under.
-    ///
-    /// The key list belongs to the directory crate rather than to this
-    /// application, so a key added there arrives here without anyone editing a
-    /// call site; this is what notices.
     #[test]
     fn every_well_known_contact_key_is_labelled() {
         let defined = message_keys(Locale::default());
@@ -179,8 +174,6 @@ mod tests {
         assert_eq!(icon.width(), icon.height());
     }
 
-    /// Whichever platform this runs on has to produce a usable icon from what
-    /// this application carries.
     #[test]
     fn the_application_icon_loads() {
         let icon = grayline_shell::platform::window_icon(&crate::identity::IDENTITY)
