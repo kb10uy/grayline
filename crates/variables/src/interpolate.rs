@@ -3,14 +3,20 @@ use std::fmt::Write;
 use jiff::fmt::strtime;
 
 use crate::{
-    TemplateError,
-    scene::{VariableValue, Variables},
+    VariableError,
+    value::{VariableValue, Variables},
 };
 
-/// How a timestamp is written when a text expression names no format.
-pub(crate) const DEFAULT_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
+/// How a timestamp is written when an expression names no format.
+pub const DEFAULT_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
 
-pub(super) fn interpolate(source: &str, variables: &Variables) -> Result<String, TemplateError> {
+/// Replaces every `${name}` in `source` with what `variables` says it is.
+///
+/// `$$` is a literal dollar sign, and a dollar sign that does not open an
+/// expression is one too. A name nothing was provided for is a failure rather
+/// than a gap: text that silently lost part of itself is worse than text that
+/// does not render, and the caller knows which names it offered.
+pub fn interpolate(source: &str, variables: &Variables) -> Result<String, VariableError> {
     let mut output = String::with_capacity(source.len());
     let mut rest = source;
     while let Some(dollar) = rest.find('$') {
@@ -26,12 +32,12 @@ pub(super) fn interpolate(source: &str, variables: &Variables) -> Result<String,
             continue;
         };
         let Some(end) = expression.find('}') else {
-            return Err(TemplateError::Schema("unterminated variable interpolation".into()));
+            return Err(VariableError::Unterminated);
         };
         let reference = Reference::parse(&expression[..end])?;
         let value = variables
             .get(reference.name)
-            .ok_or_else(|| TemplateError::MissingVariable(reference.name.to_owned()))?;
+            .ok_or_else(|| VariableError::Missing(reference.name.to_owned()))?;
         reference.write(&mut output, value)?;
         rest = &expression[end + 1..];
     }
@@ -39,16 +45,17 @@ pub(super) fn interpolate(source: &str, variables: &Variables) -> Result<String,
     Ok(output)
 }
 
-/// The variable names one text expression reads, in the order they appear.
+/// The variable names one expression reads, in the order they appear.
 ///
 /// Malformed expressions are passed over rather than reported: this walk
-/// answers what a template would read, and [`interpolate`] is what refuses to
-/// render text it cannot resolve.
-pub(crate) fn references(source: &str) -> References<'_> {
+/// answers what a piece of text would read, and [`interpolate`] is what
+/// refuses to render text it cannot resolve.
+pub fn references(source: &str) -> References<'_> {
     References { rest: source }
 }
 
-pub(crate) struct References<'a> {
+/// The names [`references`] walks.
+pub struct References<'a> {
     rest: &'a str,
 }
 
@@ -84,13 +91,13 @@ struct Reference<'a> {
 }
 
 impl<'a> Reference<'a> {
-    fn parse(expression: &'a str) -> Result<Self, TemplateError> {
+    fn parse(expression: &'a str) -> Result<Self, VariableError> {
         let (name, format) = Self::split(expression);
         if !valid_variable_name(name) {
-            return Err(TemplateError::Schema(format!("invalid variable name `{name}`")));
+            return Err(VariableError::InvalidName(name.to_owned()));
         }
         if format.is_some_and(str::is_empty) {
-            return Err(TemplateError::VariableFormat {
+            return Err(VariableError::Format {
                 name: name.to_owned(),
                 message: "the format is empty".into(),
             });
@@ -109,18 +116,18 @@ impl<'a> Reference<'a> {
         }
     }
 
-    fn write(&self, output: &mut String, value: &VariableValue) -> Result<(), TemplateError> {
+    fn write(&self, output: &mut String, value: &VariableValue) -> Result<(), VariableError> {
         match (value, self.format) {
             (VariableValue::Timestamp(zoned), format) => {
                 let format = format.unwrap_or(DEFAULT_TIMESTAMP_FORMAT);
-                let formatted = strtime::format(format, zoned).map_err(|error| TemplateError::VariableFormat {
+                let formatted = strtime::format(format, zoned).map_err(|error| VariableError::Format {
                     name: self.name.to_owned(),
                     message: error.to_string(),
                 })?;
                 output.push_str(&formatted);
             }
             (_, Some(_)) => {
-                return Err(TemplateError::VariableFormat {
+                return Err(VariableError::Format {
                     name: self.name.to_owned(),
                     message: "only a timestamp takes a format".into(),
                 });
@@ -171,7 +178,7 @@ mod tests {
         );
         assert!(matches!(
             interpolate("${station.callsign}", &variables),
-            Err(TemplateError::MissingVariable(_))
+            Err(VariableError::Missing(_))
         ));
     }
 
@@ -204,15 +211,15 @@ mod tests {
         variables.insert("station.callsign", VariableValue::Text("JA1ABC".into()));
         assert!(matches!(
             interpolate("${tx.timestamp.utc:%J}", &variables),
-            Err(TemplateError::VariableFormat { .. })
+            Err(VariableError::Format { .. })
         ));
         assert!(matches!(
             interpolate("${station.callsign:%Y}", &variables),
-            Err(TemplateError::VariableFormat { .. })
+            Err(VariableError::Format { .. })
         ));
         assert!(matches!(
             interpolate("${tx.timestamp.utc:}", &variables),
-            Err(TemplateError::VariableFormat { .. })
+            Err(VariableError::Format { .. })
         ));
     }
 

@@ -14,10 +14,11 @@ mod scene;
 
 pub use error::{AssetError, TemplateError};
 pub use image::{RenderSize, Rgba8, RgbaImage, composite};
-pub use renderer::{
-    AssetProvider, EmptyAssetProvider, EncodedAsset, FileAssetProvider, RenderContext, Renderer, valid_variable_name,
-};
+pub use renderer::{AssetProvider, EmptyAssetProvider, EncodedAsset, FileAssetProvider, RenderContext, Renderer};
 pub use scene::{
     Anchor, Color, EllipseLayer, GroupLayer, ImageFit, ImageLayer, Layer, Length, LineLayer, ReceivedImageLayer,
-    RectangleLayer, Template, TextLayer, VariableValue, Variables,
+    RectangleLayer, Template, TextLayer,
 };
+// Interpolation is the family's rather than this crate's, and is re-exported
+// so a caller that renders templates needs only the one dependency.
+pub use grayline_variables::{VariableValue, Variables, valid_variable_name};

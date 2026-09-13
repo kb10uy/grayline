@@ -2199,6 +2199,7 @@ name = "grayline-sstv-template"
 version = "0.4.2"
 dependencies = [
  "grayline-sstv",
+ "grayline-variables",
  "image",
  "jiff",
  "kdl",
@@ -2215,6 +2216,15 @@ dependencies = [
  "criterion",
  "grayline-dsp",
  "grayline-sstv",
+ "rstest",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "grayline-variables"
+version = "0.4.2"
+dependencies = [
+ "jiff",
  "rstest",
  "thiserror 2.0.20",
 ]

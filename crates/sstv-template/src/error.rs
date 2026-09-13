@@ -25,17 +25,9 @@ pub enum TemplateError {
     /// The document violates the Grayline SSTV template schema.
     #[error("invalid template: {0}")]
     Schema(String),
-    /// A text expression references a value absent from the render context.
-    #[error("template variable `{0}` was not provided")]
-    MissingVariable(String),
-    /// A text expression asks for a format the referenced value cannot take.
-    #[error("cannot format template variable `{name}`: {message}")]
-    VariableFormat {
-        /// Referenced variable name.
-        name: String,
-        /// Why the format was rejected.
-        message: String,
-    },
+    /// A text expression could not be read or resolved.
+    #[error("invalid template: {0}")]
+    Variable(#[from] grayline_variables::VariableError),
     /// An `rximage` layer has no caller-provided received image.
     #[error("template contains rximage but no received image was provided")]
     MissingReceivedImage,
