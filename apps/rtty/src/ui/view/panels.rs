@@ -2,7 +2,7 @@
 
 use super::*;
 
-use grayline_shell::i18n::{number, owned};
+use grayline_shell::i18n::owned;
 
 use crate::{
     app::MARK_STEP_HZ,
@@ -10,7 +10,6 @@ use crate::{
         BAUD_RATES, MAXIMUM_MARK_HZ, MAXIMUM_SQUELCH, MAXIMUM_TX_LEVEL, MINIMUM_MARK_HZ, MINIMUM_SQUELCH,
         MINIMUM_TX_LEVEL, SHIFTS_HZ,
     },
-    ui::scrollback::sent_color,
 };
 
 /// What a slider's own reading is written in, and the least a slider is drawn
@@ -224,16 +223,6 @@ fn transmit_controls(ui: &mut Ui, app: &mut App) {
                 .max_decimals(2),
         );
     });
-
-    // Last in the section, because it comes and goes with the transmission:
-    // egui hands identifiers out by position, and anything drawn after it
-    // would be renumbered every time a message started or ended.
-    if let Some(remaining) = app.transmission_remaining() {
-        let left = app
-            .i18n
-            .text_with("status-remaining", &[("seconds", number(remaining.as_secs() as u32))]);
-        ui.label(RichText::new(left).size(LABEL).color(sent_color(ui.visuals())));
-    }
 
     if sending {
         app.send_draft();

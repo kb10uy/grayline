@@ -43,6 +43,20 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.label(RichText::new(audio).size(LABEL));
+            // After the reading rather than before it, so that the reading
+            // keeps the right edge: a countdown put outside it would shove the
+            // rate along by a digit's width every second, and would renumber
+            // it every time a message started.
+            if let Some(remaining) = app.transmission_remaining() {
+                let left = app
+                    .i18n
+                    .text_with("status-remaining", &[("seconds", number(remaining.as_secs() as u32))]);
+                ui.label(
+                    RichText::new(left)
+                        .size(LABEL)
+                        .color(scrollback::sent_color(ui.visuals())),
+                );
+            }
         });
     });
 }
