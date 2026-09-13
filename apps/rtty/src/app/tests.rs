@@ -15,7 +15,6 @@ use rstest::rstest;
 use super::*;
 use crate::worker::contact::ContactState;
 
-/// A platform that records what the interface asked it for.
 #[derive(Default)]
 struct RecordingPlatform {
     activities: Arc<Mutex<Vec<Activity>>>,
@@ -39,8 +38,6 @@ impl Platform for RecordingPlatform {
     }
 }
 
-/// The tap and the transform are only worth paying for while something is
-/// drawing them, so the receiver is told whenever the window opens or closes.
 #[test]
 fn opening_the_scope_taps_the_receiver() {
     let mut app = App::headless();
@@ -83,8 +80,6 @@ fn what_the_worker_tapped_reaches_the_window() {
     assert_eq!(app.scope.drawn_points(), 4);
 }
 
-/// The operator closes the window from its own frame, and the application is
-/// what stops the tap behind them.
 #[test]
 fn closing_the_window_from_its_own_frame_stops_the_tap() {
     let mut app = App::headless();
@@ -96,8 +91,6 @@ fn closing_the_window_from_its_own_frame_stops_the_tap() {
     assert!(!app.audio.scope());
 }
 
-/// An operator who works with the window open should not have to open it
-/// again every session.
 #[test]
 fn a_window_left_open_is_written_to_the_settings() {
     let mut app = App::headless();
@@ -137,8 +130,6 @@ fn the_zoom_stays_inside_what_the_settings_allow() {
     assert_eq!(app.ui_scale, DEFAULT_UI_SCALE);
 }
 
-/// The pair is two figures on the panel and one pair in the receiver, and the
-/// space tone is the one the panel never names.
 #[test]
 fn the_shift_is_added_to_the_mark_tone() {
     let mut app = App::headless();
@@ -171,9 +162,6 @@ fn the_tuning_settings_reach_the_worker() {
     assert!(settings.afc);
 }
 
-/// A threshold of zero is the squelch being off, which is what the panel
-/// offers instead of a switch: the core takes the absence of a threshold as
-/// the squelch being clamped open.
 #[test]
 fn a_threshold_of_nothing_is_no_squelch_at_all() {
     let mut app = App::headless();
@@ -186,8 +174,6 @@ fn a_threshold_of_nothing_is_no_squelch_at_all() {
     assert_eq!(app.audio.settings().squelch, Some(0.4));
 }
 
-/// A figure the receiver could not be built from must not reach it, whichever
-/// way it was typed.
 #[test]
 fn what_is_persisted_is_brought_back_into_range() {
     let mut app = App::headless();
@@ -207,8 +193,6 @@ fn clearing_throws_away_what_was_printed() {
     assert!(app.columns[0].is_empty());
 }
 
-/// A device change starts a worker whose decoders begin again, so the text on
-/// screen no longer belongs to what is being decoded.
 #[test]
 fn a_new_capture_session_starts_the_text_over() {
     let mut app = App::headless();
@@ -220,14 +204,10 @@ fn a_new_capture_session_starts_the_text_over() {
     assert!(app.columns[0].is_empty());
 }
 
-/// What the frequency control found is lost when the receiver is next built,
-/// so taking it has to move the panel's own figures.
 #[test]
 fn the_detected_pair_can_be_taken_up() {
     let mut app = App::headless();
     app.adopt_detected_tones();
-    // Nothing has been received, so there is nothing to take and the figures
-    // stay where the operator left them.
     assert_eq!(app.mark_hz, Settings::default().mark_hz);
 }
 
@@ -261,8 +241,6 @@ fn the_manual_is_opened_at_this_applications_own_address() {
     assert_eq!(visited.lock().unwrap().as_slice(), [crate::identity::MANUAL_URL]);
 }
 
-/// An idle watch must not hold the machine awake, and one that is printing
-/// must.
 #[test]
 fn only_a_printing_watch_keeps_the_machine_awake() {
     let platform = RecordingPlatform::default();
@@ -281,9 +259,6 @@ fn only_a_printing_watch_keeps_the_machine_awake() {
     );
 }
 
-/// The language and the zoom are read from the file the family shares and
-/// written back to it, which is what makes a language chosen in one
-/// application the language the next one opens in.
 #[test]
 fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
     let root = crate::test_util::TempDir::new();
@@ -320,14 +295,10 @@ fn a_settings_change_is_persisted_once() {
     app.baud = 50.0;
     app.persist();
     assert_eq!(app.saved.baud, 50.0);
-    // The second call has nothing to write, which is what keeps the file from
-    // being rewritten on every frame.
     app.persist();
     assert_eq!(app.saved.baud, 50.0);
 }
 
-/// Nothing may key a rig that has nowhere to key into, and the operator is
-/// told why rather than left pressing a button that does nothing.
 #[test]
 fn a_message_cannot_be_sent_without_an_output_device() {
     let mut app = App::headless();
@@ -341,8 +312,6 @@ fn a_message_cannot_be_sent_without_an_output_device() {
     assert!(app.notice.is_some());
 }
 
-/// A character that came in by paste holds the send button until it is gone,
-/// rather than being dropped on its way to the air.
 #[test]
 fn a_message_holding_an_unsendable_character_cannot_be_sent() {
     let mut app = App::headless();
@@ -363,8 +332,6 @@ fn an_empty_draft_is_nothing_to_send() {
     assert!(!app.can_send());
 }
 
-/// Stopping when nothing is going out must not disturb what the operator is
-/// in the middle of writing.
 #[test]
 fn stopping_with_nothing_on_the_air_leaves_the_draft_alone() {
     let mut app = App::headless();
@@ -375,8 +342,6 @@ fn stopping_with_nothing_on_the_air_leaves_the_draft_alone() {
     assert_eq!(app.transmit.draft, "HALF WRITTEN");
 }
 
-/// What was queued but never keyed comes back in front of whatever the
-/// operator had started writing since.
 #[test]
 fn stopping_returns_queued_messages_to_the_draft() {
     let mut app = App::headless();
@@ -390,8 +355,6 @@ fn stopping_returns_queued_messages_to_the_draft() {
     assert!(!app.transmit.is_busy());
 }
 
-/// The transmitter is built from the panel the receiver is tuned with, so a
-/// station worked on one frequency is answered on it.
 #[test]
 fn the_transmitter_follows_the_tuning_panel() {
     let mut app = App::headless();
@@ -408,8 +371,6 @@ fn the_transmitter_follows_the_tuning_panel() {
     assert!(config.tx_unshift_on_space);
 }
 
-/// A level at the bottom of its travel is a quiet transmitter rather than one
-/// that cannot be built at all.
 #[rstest]
 #[case(0.0)]
 #[case(0.5)]
@@ -434,8 +395,6 @@ fn the_transmit_level_is_stored_and_read_back() {
     assert!(!settings.tx_unshift_on_space);
 }
 
-/// A macro is written into the message field where the caret is, so one
-/// pressed in the middle of a reply lands in the reply.
 #[test]
 fn a_macro_is_written_into_the_draft_at_the_caret() {
     let mut app = App::headless();
@@ -469,8 +428,6 @@ fn a_macro_written_into_the_middle_of_a_draft_stays_in_the_middle() {
     assert_eq!(app.transmit.draft, "DE JL1HIS K");
 }
 
-/// A macro that sends goes out on its own rather than taking a half-written
-/// reply with it.
 #[test]
 fn a_sending_macro_does_not_disturb_the_draft() {
     let mut app = App::headless();
@@ -481,16 +438,12 @@ fn a_sending_macro_does_not_disturb_the_draft() {
     }];
     app.transmit.draft = "HALF WRITTEN".to_owned();
 
-    // Without a device there is nowhere to send it, and the draft is still
-    // not touched.
     app.apply_macro(0, 0);
     assert_eq!(app.transmit.draft, "HALF WRITTEN");
     assert_eq!(app.transmit.queued().len(), 0);
     assert!(app.notice.is_some());
 }
 
-/// An expanded macro arrives through the same filter a paste does, so what it
-/// writes is upper case and its line endings are the field's own.
 #[test]
 fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
     let mut app = App::headless();
@@ -504,8 +457,6 @@ fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
     assert_eq!(app.expand_macro(0).unwrap().unwrap(), "CQ DE JL1HIS\n");
 }
 
-/// A set message replaces the draft rather than joining it: it is picked
-/// because it is the whole of what is about to be said.
 #[test]
 fn a_set_message_takes_the_draft_over() {
     let mut app = App::headless();
@@ -522,8 +473,6 @@ fn a_set_message_takes_the_draft_over() {
     assert_eq!(caret, Some(15));
 }
 
-/// Never sent, whatever it says: it is picked to be read once more against
-/// what is already in the field.
 #[test]
 fn a_set_message_is_written_rather_than_sent() {
     let mut app = App::headless();
@@ -538,8 +487,6 @@ fn a_set_message_is_written_rather_than_sent() {
     assert_eq!(app.transmit.queued().len(), 0);
 }
 
-/// One naming something this station cannot fill in is reported rather than
-/// written into the field half finished, which is what a macro does.
 #[test]
 fn a_set_message_that_cannot_be_written_is_reported() {
     let mut app = App::headless();
@@ -567,8 +514,6 @@ fn a_macro_that_is_not_there_does_nothing() {
     assert_eq!(app.apply_macro(99, 0), None);
 }
 
-/// The callsign taken from a received line is upper cased the way a typed one
-/// is, so the two reach the macros identically.
 #[test]
 fn a_callsign_taken_from_the_received_text_is_brought_into_shape() {
     let mut app = App::headless();
@@ -588,8 +533,6 @@ fn the_station_details_are_stored_and_read_back() {
     assert_eq!(settings.station.qth, "TOKYO");
 }
 
-/// A message that could not be started has already left the queue, and
-/// dropping it there would lose text the operator wrote.
 #[test]
 fn a_message_that_cannot_be_started_is_given_back() {
     let mut app = App::headless();
@@ -604,8 +547,6 @@ fn a_message_that_cannot_be_started_is_given_back() {
     assert!(app.notice.is_some());
 }
 
-/// A name still being typed is not a field yet: it stays on screen to be
-/// finished rather than briefly becoming one of its own.
 #[test]
 fn only_usable_rows_become_fields_the_macros_can_read() {
     let mut app = App::headless();
@@ -619,12 +560,9 @@ fn only_usable_rows_become_fields_the_macros_can_read() {
 
     assert_eq!(app.custom_variables.len(), 1);
     assert_eq!(app.custom_variables["grid"], "PM95UQ");
-    // The unusable row is still there to be corrected.
     assert_eq!(app.variables_draft.len(), 2);
 }
 
-/// The window edits a copy, so what it is given back is what was already
-/// stored rather than an empty list.
 #[test]
 fn opening_the_window_loads_the_fields_that_are_stored() {
     let mut app = App::headless();
@@ -636,7 +574,6 @@ fn opening_the_window_loads_the_fields_that_are_stored() {
     assert_eq!(app.variables_draft, [("grid".to_owned(), "PM95UQ".to_owned())]);
 }
 
-/// A field the operator added is what their own macros are written from.
 #[test]
 fn a_macro_reads_the_fields_the_operator_added() {
     let mut app = App::headless();
@@ -660,9 +597,6 @@ fn the_operator_fields_are_stored_and_read_back() {
     assert_eq!(settings.custom_variables["grid"], "PM95UQ");
 }
 
-/// A macro naming something the application cannot fill in is reported rather
-/// than written half finished: what it would put in the field is a message
-/// with a gap where a callsign belongs.
 #[test]
 fn a_macro_naming_nothing_is_reported_rather_than_written() {
     let mut app = App::headless();
@@ -681,8 +615,6 @@ fn a_macro_naming_nothing_is_reported_rather_than_written() {
     assert!(notice.contains("station.kallsign"), "{notice}");
 }
 
-/// The clock is one name a macro formats however it wants, the way a template
-/// formats one.
 #[test]
 fn a_macro_writes_the_clock_in_the_format_it_asks_for() {
     let mut app = App::headless();
@@ -741,9 +673,6 @@ fn file(app: &mut App, fields: &[(&str, &str)]) {
     app.poll_contact();
 }
 
-/// Leaving the field is what commits a callsign, and the operator leaves it
-/// whether or not they changed anything. Asking again for the station already
-/// showing would put a second question to somebody's logger for nothing.
 #[test]
 fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
     let mut app = App::headless();
@@ -775,8 +704,6 @@ fn a_changed_callsign_is_asked_about() {
     assert_eq!(settled(&app).callsign, "JH1XYZ");
 }
 
-/// A callsign double-clicked out of the received text never passes through the
-/// field, so it has to ask for itself.
 #[test]
 fn a_callsign_taken_from_the_text_is_asked_about_like_a_typed_one() {
     let mut app = App::headless();
@@ -786,7 +713,6 @@ fn a_callsign_taken_from_the_text_is_asked_about_like_a_typed_one() {
     assert_eq!(settled(&app).callsign, "JA1ABC");
 }
 
-/// Half a callsign is not one, and neither is a word out of a garbled line.
 #[rstest]
 #[case("JA")]
 #[case("")]
@@ -822,8 +748,6 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
     assert!(app.notice.is_none());
 }
 
-/// And when there is one to write, it goes where the paths name rather than
-/// wherever the crate would have discovered.
 #[test]
 fn the_credentials_file_is_written_where_the_paths_name_it() {
     let root = crate::test_util::TempDir::new();
@@ -852,8 +776,6 @@ fn the_credentials_file_is_written_where_the_paths_name_it() {
     assert!(app.notice.is_some());
 }
 
-/// What the directory holds is what the operator would otherwise type again
-/// at every exchange, so it lands in the fields they left empty.
 #[test]
 fn what_the_directory_filed_fills_the_fields_left_empty() {
     let mut app = App::headless();
@@ -867,8 +789,6 @@ fn what_the_directory_filed_fills_the_fields_left_empty() {
     assert_eq!(app.contact.qth, "TOKYO");
 }
 
-/// The panel is what the operator heard on the air, and an answer out of a
-/// store is not a reason to argue with it.
 #[test]
 fn a_field_the_operator_filled_in_is_left_alone() {
     let mut app = App::headless();
@@ -882,9 +802,6 @@ fn a_field_the_operator_filled_in_is_left_alone() {
     assert_eq!(app.contact.name, "TAR");
 }
 
-/// ITA2 has no kanji: a name filed in one is a good entry that this mode
-/// cannot send, and writing it into the field would hold the send button down
-/// over a value the operator never typed.
 #[test]
 fn a_name_this_mode_could_not_send_is_left_where_it_was_filed() {
     let mut app = App::headless();
@@ -901,8 +818,6 @@ fn a_name_this_mode_could_not_send_is_left_where_it_was_filed() {
     );
 }
 
-/// A macro reads whatever the directory holds, including the fields the panel
-/// has nowhere to put.
 #[test]
 fn a_macro_reads_what_the_directory_filed() {
     let mut app = App::headless();
@@ -918,8 +833,6 @@ fn a_macro_reads_what_the_directory_filed() {
     assert_eq!(expanded, "UR GRID PM95UQ");
 }
 
-/// Emptying a field is how a wrong value is taken back, so it has to leave the
-/// store rather than be handed back on the next lookup.
 #[test]
 fn a_field_the_operator_emptied_is_dropped() {
     let mut app = App::headless();

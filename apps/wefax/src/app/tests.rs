@@ -11,7 +11,6 @@ use rstest::rstest;
 use super::*;
 use crate::worker::receive::StripUpdate;
 
-/// A platform that records what the interface asked it for.
 #[derive(Default)]
 struct RecordingPlatform {
     activities: Arc<Mutex<Vec<Activity>>>,
@@ -168,9 +167,6 @@ fn opening_a_folder_reaches_the_platform() {
     assert_eq!(opened.lock().unwrap().len(), 2);
 }
 
-/// The manual this application opens has to be its own pages: the site
-/// carries one set per application, and the SSTV pages describe equipment
-/// this one has nothing to do with.
 #[test]
 fn the_manual_opens_at_this_application_s_own_address() {
     let platform = RecordingPlatform::default();
@@ -183,8 +179,6 @@ fn the_manual_opens_at_this_application_s_own_address() {
     assert_eq!(app.notice, None);
 }
 
-/// Nothing changed means nothing written: the settings file is the operator's,
-/// and rewriting it on every frame would touch its timestamp forever.
 #[test]
 fn persisting_an_unchanged_application_writes_nothing() {
     let mut app = App::headless();
@@ -222,8 +216,6 @@ fn a_recording_that_cannot_be_read_is_reported() {
     assert!(!app.audio.is_capturing());
 }
 
-/// The whole path a dropped file takes: read, demodulated, decoded, and drawn
-/// as columns of the strip.
 #[test]
 fn a_recording_is_decoded_into_the_strip() {
     let root = crate::test_util::TempDir::new();
@@ -233,7 +225,6 @@ fn a_recording_is_decoded_into_the_strip() {
 
     let ctx = egui::Context::default();
     let mut app = App::headless();
-    // Saving is what an operator wants and what a test does not.
     app.auto_save = false;
     app.open_wav(&path);
     assert!(app.audio.is_capturing(), "{:?}", app.notice);
@@ -285,7 +276,6 @@ fn a_recording_is_decoded_into_the_strip() {
     }
 }
 
-/// What the operator can still change once a chart has arrived.
 #[derive(Clone, Copy, Debug)]
 enum Correction {
     Phase(i64),

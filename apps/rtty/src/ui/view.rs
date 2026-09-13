@@ -81,8 +81,6 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     Panel::bottom(Id::new("transmit-panel"))
         .resizable(false)
         .show(ui, |ui| transmit_panel(ui, app));
-    // Above the field, because it is claimed after it, and only while there is
-    // something on the air or waiting behind it.
     if has_pending(app) {
         Panel::bottom(Id::new("pending-panel"))
             .resizable(false)
@@ -96,9 +94,6 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
         ui.skip_ahead_auto_ids(1);
     }
     let picked = egui::CentralPanel::default().show(ui, |ui| columns(ui, app)).inner;
-    // A callsign is read off the line that printed it and worked from the
-    // field beside it, so the way across is the one gesture that means "this
-    // word": there is nothing else in a received line to double-click for.
     if let Some(callsign) = picked {
         app.set_contact_callsign(&callsign);
     }
@@ -137,7 +132,6 @@ fn columns(ui: &mut Ui, app: &App) -> Option<String> {
     picked
 }
 
-/// What one decode path is hearing, over the text it printed from it.
 fn column_header(ui: &mut Ui, app: &App, index: usize) {
     let snapshot = app.column(index);
     let path = snapshot
@@ -188,7 +182,6 @@ fn heading(ui: &mut Ui, label: &str) {
     ui.label(RichText::new(label).size(LABEL).weak());
 }
 
-/// A field label, aligned with the middle of the field beside it.
 fn field_label(ui: &mut Ui, label: &str) {
     let height = ui.spacing().interact_size.y;
     ui.allocate_ui_with_layout(

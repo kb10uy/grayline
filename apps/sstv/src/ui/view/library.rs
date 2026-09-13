@@ -52,7 +52,6 @@ fn list_width(ui: &Ui) -> f32 {
     (available / 2.0).max(LIST_WIDTH)
 }
 
-/// The strings one library list needs, resolved before the list borrows state.
 struct ListLabels {
     title: String,
     empty: String,

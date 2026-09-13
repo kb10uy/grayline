@@ -162,8 +162,6 @@ mod tests {
         }
     }
 
-    /// The schedule exists to describe audio somebody else produces, so the
-    /// length it claims has to be the length that comes out.
     #[rstest]
     #[case(TxConfig::default())]
     #[case(TxConfig { char_gap_bits: 2.5, diddle: crate::tx::Diddle::Ltrs, ..TxConfig::default() })]
@@ -192,9 +190,6 @@ mod tests {
         assert_eq!(schedule.character_count(), 5);
     }
 
-    /// A newline is one character of the message and two codes on the air, and
-    /// the shift before a figure is a code with no character at all: neither
-    /// may shift the text out from under the positions.
     #[test]
     fn inserted_codes_do_not_displace_the_characters_they_serve() {
         let config = TxConfig::default();
@@ -241,8 +236,6 @@ mod tests {
         assert_eq!(schedule.characters_sent_by(u64::MAX), 0);
     }
 
-    /// A message that cannot be encoded has no schedule, rather than one that
-    /// stops short of the text it was given.
     #[test]
     fn an_unmappable_character_is_refused_where_the_encoder_refuses_it() {
         let error = TxSchedule::new("OK %", RATE, &TxConfig::default()).unwrap_err();
@@ -261,8 +254,6 @@ mod tests {
         assert_eq!(error, RttyError::TooFewSamplesPerBit);
     }
 
-    /// The gap is the same length whether diddle characters fill it or mark
-    /// idle does, which is what lets one duration cover a character.
     #[test]
     fn a_filled_gap_and_an_idle_one_are_the_same_length() {
         let text = "RYRY";
@@ -281,9 +272,6 @@ mod tests {
         );
     }
 
-    /// Long messages are what an operator actually sends, and a position that
-    /// drifted from the audio would put the underline in the wrong place by
-    /// the end of one.
     #[test]
     fn positions_hold_against_the_audio_over_a_long_message() {
         let config = TxConfig::default();

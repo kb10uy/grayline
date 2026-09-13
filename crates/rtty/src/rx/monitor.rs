@@ -134,8 +134,6 @@ mod tests {
         assert_eq!(monitor.drain().count(), 0);
     }
 
-    /// A zero would keep nothing at all, which reads as a tap that is on and
-    /// silent rather than as one that was configured wrongly.
     #[test]
     fn an_impossible_configuration_is_brought_back_into_range() {
         let monitor = Monitor::new(MonitorConfig {

@@ -105,9 +105,6 @@ impl Wavelog {
 
     fn send(&self, path: &str, request: &Value) -> Result<String, QsoError> {
         let url = format!("{}{path}", self.base);
-        // The body is serialized here rather than through `ureq`'s own JSON
-        // helpers, which would want a `Deserialize` type for the answer; this
-        // crate reads a foreign document field by field instead.
         let body = request.to_string();
         let mut response = self
             .agent
@@ -133,7 +130,6 @@ impl Wavelog {
     }
 }
 
-/// The host part of a base URL, or nothing when it names none.
 fn host_of(base: &str) -> Option<&str> {
     let rest = base.strip_prefix("https://").or_else(|| base.strip_prefix("http://"))?;
     let host = rest.split('/').next().unwrap_or_default();
@@ -217,7 +213,6 @@ mod tests {
         assert_eq!(record.get("cq_zone"), Some("25"));
     }
 
-    /// Everything the answer says about contacts is left where it is.
     #[test]
     fn what_the_logger_knows_about_contacts_is_not_taken_up() {
         let server = FakeWavelog::spawn(&[(200, FULL_ANSWER)]);
@@ -288,8 +283,6 @@ mod tests {
 
     #[test]
     fn an_instance_that_is_not_listening_names_the_host_and_not_the_key() {
-        // Port zero is never listening, and the client is built by hand because
-        // there is no server to take the address from.
         let client = Wavelog::new("http://127.0.0.1:1", "secret", Duration::from_millis(200)).expect("a client");
         let error = client.look_up("JA1ABC").expect_err("a failure");
 

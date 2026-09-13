@@ -749,9 +749,6 @@ fn auto_stop_is_a_terminal_event_and_outcome() {
     assert!(matches!(decoder.finish(), RxOutcome::Stopped { .. }));
 }
 
-/// A signal that stops arriving cannot be ended by AutoStop, which only
-/// scores lines that actually arrive. The caller ends it instead, and the
-/// rows decoded up to that point are the whole value of what is left.
 #[test]
 fn an_externally_stopped_reception_keeps_its_decoded_rows() {
     let (frequency, sync) = sampled_body(Mode::Martin2, 311);
@@ -812,8 +809,6 @@ fn an_externally_stopped_reception_keeps_its_decoded_rows() {
     assert!(matches!(decoder.finish(), RxOutcome::Stopped { .. }));
 }
 
-/// Stopping a reception that already finished would rewrite a complete
-/// image as a partial one.
 #[test]
 fn stopping_a_finished_reception_leaves_it_complete() {
     let (frequency, sync) = sampled_body(Mode::Martin2, 311);
@@ -1086,10 +1081,6 @@ fn live_tracking_corrects_a_mistimed_raster_before_completion() {
     );
 }
 
-/// A decoder can be armed on a false detection and then hear nothing but
-/// noise. What acquisition passes over is retained by neither the working
-/// window nor staging, so waiting must never exhaust the staging capacity a
-/// real reception would then need.
 #[test]
 fn unacquirable_noise_does_not_exhaust_staging() {
     let mode = Mode::Martin2;
@@ -1166,7 +1157,6 @@ fn a_reception_starts_on_the_configured_sample_rate() {
     assert_eq!(decoder.effective_sample_rate_hz(), Some(f64::from(SAMPLE_RATE)));
 }
 
-/// Tracking must not disturb a reception whose clock already matches.
 #[test]
 fn a_matched_raster_is_left_alone() {
     let mode = Mode::Martin2;

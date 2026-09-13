@@ -17,10 +17,8 @@ jiff.workspace = true
 toml_edit.workspace = true
 unic-langid.workspace = true
 
-# The same split the applications make: muda drives the platform menu bar,
-# which needs a native window handle it can own, and only Windows has one this
-# crate can take.
 [target.'cfg(target_os = "windows")'.dependencies]
+muda.workspace = true
 raw-window-handle.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
@@ -35,4 +33,5 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+egui_kittest.workspace = true
 rstest.workspace = true

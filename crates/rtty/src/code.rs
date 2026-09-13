@@ -15,7 +15,6 @@ pub const FIGS: u8 = 0b11011;
 const S_BELL_CODE: u8 = 0b10100;
 /// The code for the apostrophe in the S-BELL convention, FIGS-J.
 const S_APOSTROPHE_CODE: u8 = 0b11010;
-/// The bell character itself.
 const BELL: char = '\u{7}';
 
 /// The shift case a decoder is reading in.
@@ -360,8 +359,6 @@ mod tests {
         assert_eq!(decoder.case(), Case::Figures);
     }
 
-    /// Every encodable character survives encoding and decoding, in both
-    /// code sets, which also exercises every table entry in both directions.
     #[rstest]
     #[case(CodeSet::SBell)]
     #[case(CodeSet::JBell)]

@@ -31,7 +31,7 @@ use crate::{
     worker::{
         Waker,
         audio::{AudioState, TxState},
-        contact::{ContactPaths, ContactSnapshot, ContactWorker},
+        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         receive::{ColumnSnapshot, DecodePath, WorkerSettings},
         transmit::{TxPhase, TxWorker},
     },
@@ -50,7 +50,6 @@ pub const MARK_STEP_HZ: f64 = 5.0;
 /// One second of playback queue at the preferred rate.
 const PLAYBACK_CAPACITY_SAMPLES: usize = 48_000;
 
-/// The two lists of messages, as their files were read.
 #[derive(Default)]
 struct Library {
     macros: Vec<Macro>,
@@ -236,8 +235,6 @@ impl App {
     ) -> Self {
         let session = audio.session();
         let shared = common.settings();
-        // A window that was open when the application last closed is opened
-        // again, and the tap it is drawn from with it.
         audio.set_scope(settings.scope);
         let mut scope = Scope::default();
         scope.set_open(settings.scope);
@@ -263,7 +260,7 @@ impl App {
             templates: library.templates,
             custom_variables: settings.custom_variables.clone(),
             contact_settings: settings.contact.clone(),
-            contact_directory: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
+            contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
             contact_draft: Vec::new(),
@@ -375,8 +372,6 @@ impl App {
         self.poll_transmit();
         self.poll_contact();
 
-        // A watch that is printing keeps the machine awake, and so does one
-        // that is sending; a watch listening to an empty band does not.
         let activity = if self.is_transmitting() {
             Activity::Transmitting
         } else if self.is_printing() {
@@ -643,9 +638,6 @@ impl App {
     pub fn apply_macro(&mut self, index: usize, insert_at: usize) -> Option<usize> {
         let text = match self.expand_macro(index)? {
             Ok(text) => text,
-            // A macro that names something this application cannot fill in is
-            // reported rather than written half finished: what it would put in
-            // the field is a message with a gap where a callsign belongs.
             Err(error) => {
                 self.report(&error);
                 return None;
@@ -858,7 +850,7 @@ impl App {
         }
         self.contact_settings.lookup = lookup;
         self.contact_directory =
-            ContactWorker::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+            contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
         self.contact_snapshot = ContactSnapshot::default();
         self.contact_requested.clear();
         self.look_up_contact();
@@ -894,7 +886,6 @@ impl App {
         }
     }
 
-    /// Takes up what the directory answered.
     fn poll_contact(&mut self) {
         let latest = self.contact_directory.latest();
         let changed = latest.fields != self.contact_snapshot.fields;
@@ -1014,7 +1005,6 @@ impl App {
         Some(self.transmit.sending()?.progress(self.tx.played_samples()))
     }
 
-    /// Drives the message on the air, and starts the next one.
     fn poll_transmit(&mut self) {
         if self.tx.is_running() {
             let played = self.tx.played_samples();
@@ -1052,8 +1042,6 @@ impl App {
                 self.notice = Some(self.i18n.text("error-underrun"));
             }
             if self.tx.is_started() && self.tx.is_drained() {
-                // Whatever is left is text the device never played, which for
-                // a transmission that ran to its end is nothing.
                 let played = self.tx.played_samples();
                 if let Some(sending) = self.transmit.sending_mut()
                     && let Some(echo) = sending.take_echo(played)
@@ -1103,7 +1091,6 @@ impl App {
         Ok((playback, TxWorker::spawn(writer, codes, config), schedule))
     }
 
-    /// Prints what has been sent alongside what was received.
     fn echo_sent(&mut self, text: &str) {
         for column in &mut self.columns {
             column.push_sent(text);
@@ -1168,7 +1155,6 @@ impl App {
     }
 }
 
-/// Trims a field in place, and says whether anything was taken off it.
 fn trim_in_place(text: &mut String) -> bool {
     let trimmed = text.trim();
     if trimmed.len() == text.len() {

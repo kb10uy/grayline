@@ -265,9 +265,6 @@ mod tests {
 
     use super::*;
 
-    /// A reroute and an overrun leave the stream running, so neither may be
-    /// reported as a fault: the interface would tell the operator the device
-    /// was lost while it was still delivering samples.
     #[rstest]
     #[case(cpal::ErrorKind::DeviceChanged, None)]
     #[case(cpal::ErrorKind::Xrun, None)]
@@ -292,8 +289,6 @@ mod tests {
         assert!(faults.take().is_none(), "the report should be taken once");
     }
 
-    /// A failing stream keeps failing; the first report is the one that says
-    /// why, so a later one must not push it out.
     #[test]
     fn the_first_report_is_the_one_kept() {
         let faults = FaultSlot::default();
@@ -305,8 +300,6 @@ mod tests {
         assert_eq!(faults.take().map(|fault| fault.kind), Some(FaultKind::Disconnected));
     }
 
-    /// An error the stream survives must leave nothing behind for the
-    /// interface to find later.
     #[test]
     fn a_survivable_error_records_nothing() {
         let faults = FaultSlot::default();

@@ -31,9 +31,6 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
         let width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
         for (index, label) in labels.iter().enumerate() {
             let id = Id::new(["station-callsign", "station-name", "station-qth", "station-grid"][index]);
-            // The same filter every field whose contents reach the air runs:
-            // what is typed here is typed to be sent, through the macros that
-            // read it.
             crate::ui::input::sanitize(ui.ctx(), id);
             let target = match index {
                 0 => &mut app.station.callsign,
@@ -182,9 +179,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let mut done = false;
     let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
-        // The callsign is what a record is filed under rather than something
-        // filed in it, so it is shown rather than offered for editing; the
-        // panel behind this window is where it is typed.
         ui.heading(format!("{title} — {callsign}"));
         ui.add_space(4.0);
         if let Some(state) = &state {
@@ -217,9 +211,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
                     });
                     continue;
                 }
-                // What the settings asked for leads, in the order it was
-                // written. Anything else the directory happens to hold follows
-                // with its name laid open, because nothing here chose it.
                 if !headed {
                     headed = true;
                     ui.add_space(8.0);
@@ -251,8 +242,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             adding = ui.button(add).clicked();
-            // Absent rather than disabled when there is nobody to ask: a
-            // station with no logger configured has no "again" to press.
             if refreshable {
                 refreshing = ui.button(refresh).clicked();
             }
@@ -285,7 +274,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// What the directory is doing, in words, when it is worth saying.
 fn contact_state(app: &App) -> Option<String> {
     if let Some(error) = &app.contact_snapshot.error {
         return Some(app.i18n.text_with(

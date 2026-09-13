@@ -29,7 +29,6 @@ const START_TRIGGER_SECONDS: f64 = 0.015;
 /// Dominance dropout a trigger run survives.
 const START_DROPOUT_SECONDS: f64 = 0.002;
 
-/// How long one VIS bit is held.
 const CELL_SECONDS: f64 = 0.030;
 
 /// Accumulated leader-dominant time the strict gate requires.
@@ -331,8 +330,6 @@ mod tests {
         let mut decoder = VisDecoder::new(RATE);
         assert_eq!(feed(&mut decoder, 1_200.0, 0.030), None);
         assert_eq!(feed(&mut decoder, frequency_hz, 0.040), None);
-        // Searching resumed at the failed cell rather than at the end of the
-        // ten, so the header that follows is read from its own start bit.
         assert_eq!(feed_vis_bits(&mut decoder, 0xac), Some(Mode::Martin1));
     }
 

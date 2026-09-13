@@ -274,10 +274,6 @@ pub fn values(context: &MacroContext<'_>) -> Variables {
         VariableValue::Text(env!("CARGO_PKG_VERSION").to_owned()),
     );
     values.insert("greeting", VariableValue::Text(greeting(now).to_owned()));
-    // Offered in both the zone the operator reads and the one the log is kept
-    // in, so a macro chooses rather than converts. They are timestamps rather
-    // than preformatted text, so `${tx.timestamp.utc:%H%M}` says the time and
-    // `${tx.timestamp.utc:%Y-%m-%d}` the date out of the one name.
     values.insert("tx.timestamp.local", VariableValue::Timestamp((*now).clone()));
     values.insert(
         "tx.timestamp.utc",
@@ -364,8 +360,6 @@ mod tests {
         }
     }
 
-    /// A directory that answered nothing, which is what a station nobody has
-    /// looked up yet has.
     fn no_directory() -> &'static BTreeMap<String, String> {
         static EMPTY: OnceLock<BTreeMap<String, String>> = OnceLock::new();
         EMPTY.get_or_init(BTreeMap::new)
@@ -384,8 +378,6 @@ mod tests {
         );
     }
 
-    /// The names are the SSTV templates', so one message says the same thing
-    /// in both places.
     #[rstest]
     #[case("${station.callsign}", "JL1HIS")]
     #[case("${station.qth}", "TOKYO")]
@@ -399,7 +391,6 @@ mod tests {
         assert_eq!(written(written_as), expected);
     }
 
-    /// A contact whose name was never asked for is still greeted.
     #[test]
     fn an_unknown_name_falls_back_to_the_customary_one() {
         let mut contact = contact();
@@ -424,9 +415,6 @@ mod tests {
         assert_eq!(expanded, "RST 599");
     }
 
-    /// An empty callsign expands to nothing rather than to a stand-in: a
-    /// message addressed to a station not yet identified should read as
-    /// unfinished, which is what the operator has to fix.
     #[test]
     fn an_unset_callsign_expands_to_nothing() {
         let expanded = expand(
@@ -437,8 +425,6 @@ mod tests {
         assert_eq!(expanded, "[]");
     }
 
-    /// A misspelled name is refused rather than left in the message, which is
-    /// what a template does with one.
     #[test]
     fn an_unknown_name_is_refused() {
         let error = expand(
@@ -459,15 +445,12 @@ mod tests {
         assert_eq!(error, VariableError::Unterminated);
     }
 
-    /// A dollar sign is doubled to say one, exactly as a template says one.
     #[test]
     fn a_doubled_dollar_is_one_dollar() {
         assert_eq!(written("$$5"), "$5");
         assert_eq!(written("$$${station.callsign}"), "$JL1HIS");
     }
 
-    /// A dollar that opens nothing is a dollar, so a price in a message needs
-    /// no thought from the operator.
     #[test]
     fn a_dollar_that_opens_nothing_is_left_alone() {
         assert_eq!(written("5 $ EACH"), "5 $ EACH");
@@ -499,8 +482,6 @@ mod tests {
         assert_eq!(expanded, expected);
     }
 
-    /// The clock is one name written whichever way the macro asks for, rather
-    /// than a name per format.
     #[test]
     fn the_clock_takes_the_format_the_macro_asks_for() {
         let now = date(2026, 9, 13)
@@ -516,14 +497,11 @@ mod tests {
         assert_eq!(expand("${tx.timestamp.local:%H%M}", &context).unwrap(), "0105");
     }
 
-    /// Written without a format, a timestamp says what a template says.
     #[test]
     fn a_clock_with_no_format_reads_as_it_does_in_a_template() {
         assert_eq!(written("${tx.timestamp.utc}"), "2026-09-13 09:34");
     }
 
-    /// Only a timestamp takes a format, which is the template renderer's own
-    /// rule and worth the same refusal here.
     #[test]
     fn text_refuses_a_format() {
         let error = expand(
@@ -534,8 +512,6 @@ mod tests {
         assert!(matches!(error, VariableError::Format { .. }), "{error:?}");
     }
 
-    /// A field the operator invented is reached under the prefix, so their
-    /// own names and the built-in ones cannot collide.
     #[test]
     fn an_operator_field_is_reached_through_the_prefix() {
         let custom = BTreeMap::from([("club".to_owned(), "JARL".to_owned())]);
@@ -547,8 +523,6 @@ mod tests {
         assert_eq!(expanded, "GRID PM95UQ CLUB JARL");
     }
 
-    /// A field named after a built-in one is still reached under the prefix,
-    /// so it cannot take that name out from under a macro already using it.
     #[test]
     fn an_operator_field_cannot_shadow_a_built_in_name() {
         let custom = BTreeMap::from([("station.callsign".to_owned(), "WRONG".to_owned())]);
@@ -570,8 +544,6 @@ mod tests {
         assert_eq!(error, VariableError::Missing("custom.club".to_owned()));
     }
 
-    /// Every macro that ships has to be sendable once it is filled in, or the
-    /// first button a new operator presses is one that cannot be used.
     #[test]
     fn the_macros_that_ship_are_sendable_once_they_are_written() {
         for shipped in default_macros() {
@@ -585,9 +557,6 @@ mod tests {
         }
     }
 
-    /// The same of the set messages: one picked out of the list in the middle
-    /// of a contact has to be sendable, or it is picked at the worst moment to
-    /// find out that it is not.
     #[test]
     fn the_set_messages_that_ship_are_sendable_once_they_are_written() {
         for shipped in default_templates() {
@@ -601,8 +570,6 @@ mod tests {
         }
     }
 
-    /// A station that has filled nothing in still gets text it could send,
-    /// rather than a message that will not expand at all.
     #[test]
     fn the_macros_that_ship_are_sendable_before_anything_is_filled_in() {
         let empty = Station::default();
@@ -626,8 +593,6 @@ mod tests {
         }
     }
 
-    /// Every name the table carries has to be one a macro can actually use,
-    /// or the documentation written from it would name one that does nothing.
     #[rstest]
     #[case("station.callsign")]
     #[case("station.name")]
@@ -665,9 +630,6 @@ mod tests {
         assert_eq!(valid_variable_name(name), expected);
     }
 
-    /// What the directory filed is reached under the same prefix the panel's
-    /// own fields are, so a macro naming a grid square does not care which of
-    /// the two answered.
     #[test]
     fn a_filed_field_is_reached_under_the_contact_prefix() {
         let directory = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
@@ -685,8 +647,6 @@ mod tests {
         assert_eq!(expanded, "GRID PM95UQ");
     }
 
-    /// The panel is what the operator heard on the air, so it wins over what
-    /// somebody wrote down once.
     #[test]
     fn the_panel_wins_over_what_the_directory_filed() {
         let directory = BTreeMap::from([("name".to_owned(), "FILED".to_owned())]);
@@ -704,8 +664,6 @@ mod tests {
         assert_eq!(expanded, "TARO");
     }
 
-    /// Which fields a station has is that station's business, so a macro that
-    /// prints one is written whether or not this contact has it.
     #[test]
     fn a_field_nothing_filed_expands_to_nothing() {
         let expanded = expand(

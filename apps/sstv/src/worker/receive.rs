@@ -156,7 +156,6 @@ impl Visible {
     }
 }
 
-/// Rounds a `0.0..=1.0` reading to the steps it can be seen to move in.
 fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 128.0) as u8
 }
@@ -172,7 +171,6 @@ pub(super) struct Mailbox {
     waker: Waker,
 }
 
-/// The pending snapshot, and what the interface was last woken for.
 #[derive(Debug, Default)]
 struct Slot {
     pending: Option<RxSnapshot>,
@@ -280,9 +278,6 @@ impl RxWorker {
                 })
                 .ok()
         };
-        // A worker that could not start would otherwise look like a live
-        // reception that never hears anything, so the failure is published
-        // where every other receive failure is shown.
         if join.is_none() {
             mailbox.publish(RxSnapshot {
                 error: Some(AppError::WorkerUnavailable("reception")),
@@ -450,8 +445,6 @@ mod tests {
         assert_eq!(mailbox.take().unwrap().history, Some(history));
     }
 
-    /// A block of audio that moved the scan boundary by less than the canvas
-    /// can show says what the one before it said, so it must not cost a frame.
     #[test]
     fn a_negligible_change_looks_the_same() {
         let earlier = RxSnapshot {
@@ -480,8 +473,6 @@ mod tests {
         assert_ne!(Visible::of(&snapshot), Visible::of(&RxSnapshot::default()));
     }
 
-    /// Nothing has been observed yet when the interface first draws, so an
-    /// idle worker's first snapshot must not read as a change.
     #[test]
     fn an_empty_snapshot_looks_like_what_the_interface_starts_with() {
         assert_eq!(Visible::of(&RxSnapshot::default()), Visible::default());
@@ -610,7 +601,6 @@ mod pipeline_tests {
         (snapshot, frame)
     }
 
-    /// Pushes `source` through the capture queue as fast as the worker takes it.
     fn push_all(
         feed: &mut CaptureWriter,
         worker: &RxWorker,
@@ -630,7 +620,6 @@ mod pipeline_tests {
         }
     }
 
-    /// Waits for the worker to take everything the queue still holds.
     fn drain(feed: &mut CaptureWriter, worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) {
         let deadline = Instant::now() + Duration::from_secs(30);
         while feed.vacant() < (1 << 16) && Instant::now() < deadline {
@@ -653,10 +642,6 @@ mod pipeline_tests {
         }
     }
 
-    /// A transmitting station hears its own signal come back off the antenna,
-    /// so nothing that arrives while the worker is muted may become a
-    /// reception. What arrives after it is released still does: the mute
-    /// stops the pipeline rather than wedging it.
     #[test]
     fn a_muted_worker_decodes_nothing_until_it_is_released() {
         let mode = Mode::Robot36;
@@ -687,9 +672,6 @@ mod pipeline_tests {
         assert!(error < 40.0, "the released reception scored {error}");
     }
 
-    /// A reception far enough along is still worth keeping when a transmission
-    /// cuts it short, the same as one the signal itself cut short, and what was
-    /// decoded of it stays on the canvas.
     #[test]
     fn muting_keeps_the_reception_it_interrupts() {
         let mode = Mode::Robot36;
@@ -740,10 +722,6 @@ mod pipeline_tests {
         assert!((0.65..1.0).contains(&snapshot.display_fraction), "{snapshot:?}");
     }
 
-    /// A station that notices a mistake stops and sends again a few seconds
-    /// later. Its new header arrives while the abandoned picture is still being
-    /// decoded, so the reception only starts over if the header is still being
-    /// listened for.
     #[test]
     fn a_station_sending_again_is_received_from_its_new_header() {
         let mode = Mode::Scottie1;
@@ -766,13 +744,6 @@ mod pipeline_tests {
         assert_eq!(history.mode, mode);
     }
 
-    /// The operator does not have to wait the receiver out.
-    ///
-    /// Automatic stop needs synchronization to fail, and the stall timeout
-    /// needs twenty seconds of nothing, so a reception that is visibly wrong
-    /// can hold the receiver for a long time. A reset ends it where it stands,
-    /// keeps what was decoded on the same terms as any other reception cut
-    /// short, and leaves the search running for the next signal.
     #[test]
     fn a_reset_ends_the_reception_and_leaves_the_search_running() {
         let mode = Mode::Robot36;
@@ -797,8 +768,6 @@ mod pipeline_tests {
         let history = snapshot.history.take().expect("the reception the reset ended");
         assert_eq!(history.mode, mode);
 
-        // The next transmission is received whole, so the reset left a search
-        // behind it rather than a stopped worker.
         push_all(&mut feed, &worker, &pcm, &mut snapshot, &mut frame);
         let silence = vec![0.0_f32; RATE as usize * 3];
         push_all(&mut feed, &worker, &silence, &mut snapshot, &mut frame);

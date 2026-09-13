@@ -15,11 +15,8 @@ pub const URL_VARIABLE: &str = "GRAYLINE_WAVELOG_URL";
 /// The environment variable that carries the key, for the same reason.
 pub const KEY_VARIABLE: &str = "GRAYLINE_WAVELOG_KEY";
 
-/// The section the credentials file keeps them under.
 const SECTION: &str = "wavelog";
 
-/// What a fresh credentials file says, so that the operator opening it finds
-/// the shape rather than an empty file.
 const TEMPLATE: &str = "\
 # Credentials for the Grayline contact directory.
 #
@@ -93,8 +90,6 @@ impl Credentials {
 
         let mut document: DocumentMut = TEMPLATE.parse().expect("the template is valid TOML");
         document[SECTION]["key"] = value(key.trim());
-        // A file that names no instance still carries the entry, so the
-        // operator has somewhere to put one.
         if let Some(url) = url {
             document[SECTION]["url"] = value(url.trim().trim_end_matches('/'));
         }

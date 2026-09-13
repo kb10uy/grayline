@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 
 use grayline_sstv::signal::SYNC_HZ;
 
-/// Sync-envelope strength a pulse has to reach before it is measured.
 const SYNC_THRESHOLD: f64 = 0.58;
 
 /// How far from the expected sync frequency a measurement may sit.
@@ -14,10 +13,8 @@ const MEASUREMENT_WINDOW_HZ: f64 = 100.0;
 /// How long a run above the threshold has to last to count as a sync pulse.
 const RUN_SECONDS: core::ops::RangeInclusive<f64> = 0.003..=0.050;
 
-/// Measurements one run needs before its average is trusted.
 const RUN_MEASUREMENTS: usize = 2;
 
-/// The largest correction a single run may propose.
 const MAX_OFFSET_HZ: f64 = 150.0;
 
 /// How many runs the offset is smoothed over.
@@ -27,7 +24,6 @@ const MAX_OFFSET_HZ: f64 = 150.0;
 /// the first measurement.
 const HISTORY: usize = 15;
 
-/// How long after an update the next one is held off.
 const INHIBIT_SECONDS: f64 = 0.1;
 
 pub(crate) struct Afc {
@@ -124,8 +120,6 @@ impl Afc {
 mod tests {
     use super::*;
 
-    /// A station tuning up sends the sync frequency for as long as it likes,
-    /// and the receiver has to survive that on a fixed amount of memory.
     #[test]
     fn a_persistent_tone_does_not_grow_the_measurement_buffer() {
         let rate = 8_000.0;

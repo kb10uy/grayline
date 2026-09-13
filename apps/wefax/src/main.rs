@@ -129,9 +129,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         viewport,
         ..Default::default()
     };
-    // A recording named on the command line is decoded instead of the device,
-    // which is how a file reaches the application from a file manager's "open
-    // with" as well as from a shell.
     let recording = std::env::args_os().nth(1).map(PathBuf::from);
     eframe::run_native(
         &format!("{} {}", identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION")),
@@ -141,7 +138,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// The eframe entry point, holding the application and its menu bar.
 struct Interface {
     app: App,
     menu: Option<menu::MenuHost>,
@@ -232,8 +228,6 @@ impl eframe::App for Interface {
         }
         self.app.poll_workers(ui.ctx());
 
-        // The zoom shortcuts and the menu both change the scale; whichever
-        // route the operator took, the result is one value that gets persisted.
         self.app.set_ui_scale(ui.ctx().zoom_factor());
 
         let model = menu::model(&self.app);
@@ -275,7 +269,6 @@ impl eframe::App for Interface {
 mod tests {
     use super::*;
 
-    /// A system with none of the wanted families still has to render text.
     #[test]
     fn an_empty_database_leaves_the_bundled_fonts_usable() {
         let definitions = font_definitions(&fontdb::Database::new());

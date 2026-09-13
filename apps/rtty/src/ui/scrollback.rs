@@ -84,7 +84,6 @@ impl Scrollback {
         }
     }
 
-    /// Records a run as sent, extending the last one where it continues.
     fn mark_sent(&mut self, range: Range<usize>) {
         match self.sent.last_mut() {
             Some(last) if last.end == range.start => last.end = range.end,
@@ -136,7 +135,6 @@ impl Scrollback {
         self.text.is_empty()
     }
 
-    /// The transcript split into runs, each marked with whether it was sent.
     fn runs(&self) -> Vec<(bool, &str)> {
         let mut runs = Vec::new();
         let mut position = 0;
@@ -202,8 +200,6 @@ pub fn pane(ui: &mut Ui, scrollback: &Scrollback, hint: &str) -> Option<String> 
                     ui.label(egui::RichText::new(hint).weak());
                     return None;
                 }
-                // Selectable, because the whole point of a received callsign
-                // is that it gets copied somewhere else.
                 ui.style_mut().interaction.selectable_labels = true;
                 let mut job = LayoutJob::default();
                 let font = FontId::monospace(size);
@@ -257,8 +253,6 @@ mod tests {
         assert_eq!(scrollback.text(), "CQ\nDE\nJL1HIS");
     }
 
-    /// A break arriving at the end of a transmission must not leave the pane
-    /// scrolled past the last line it printed.
     #[test]
     fn a_break_with_nothing_after_it_is_not_printed_yet() {
         let mut scrollback = Scrollback::default();
@@ -268,8 +262,6 @@ mod tests {
         assert_eq!(scrollback.text(), "RY\nRY");
     }
 
-    /// The bell is a sound, and a pane that printed U+0007 would put a box in
-    /// the middle of a callsign.
     #[test]
     fn the_bell_is_not_printed() {
         let mut scrollback = Scrollback::default();
@@ -277,8 +269,6 @@ mod tests {
         assert_eq!(scrollback.text(), "AB");
     }
 
-    /// The transcript is one exchange, and which half each part of it came
-    /// from is what the colours say.
     #[test]
     fn sent_and_received_text_are_kept_apart_in_one_transcript() {
         let mut scrollback = Scrollback::default();
@@ -297,8 +287,6 @@ mod tests {
         );
     }
 
-    /// The echo arrives a character or two at a time as the audio plays, and
-    /// a run per arrival would cost a format for every character sent.
     #[test]
     fn text_sent_in_pieces_is_one_run() {
         let mut scrollback = Scrollback::default();
@@ -315,8 +303,6 @@ mod tests {
         assert_eq!(scrollback.runs(), [(false, "RYRY")]);
     }
 
-    /// The ranges index the text, so dropping the oldest lines has to move
-    /// them with it or the colours would land on the wrong characters.
     #[test]
     fn sent_runs_follow_the_text_when_the_oldest_lines_are_dropped() {
         let mut scrollback = Scrollback::default();
@@ -352,8 +338,6 @@ mod tests {
         assert_eq!(marked, printed);
     }
 
-    /// A callsign is one word of a received line, and the stroke a portable
-    /// station signs with is part of it rather than a break in it.
     #[rstest]
     #[case(0, Some("CQ"))]
     #[case(1, Some("CQ"))]
@@ -373,8 +357,6 @@ mod tests {
         assert_eq!(word_at("CQ", 99), None);
     }
 
-    /// A line break ends a word: the callsign at the end of one line and the
-    /// word at the start of the next are two words.
     #[test]
     fn a_line_break_ends_a_word() {
         assert_eq!(word_at("JA1ZZZ\nDE", 0), Some("JA1ZZZ"));
@@ -388,12 +370,10 @@ mod tests {
         scrollback.clear();
         assert!(scrollback.is_empty());
 
-        // The break the clear threw away must not print on the next line.
         scrollback.push_str("AGAIN");
         assert_eq!(scrollback.text(), "AGAIN");
     }
 
-    /// A watch left running overnight must not grow without bound.
     #[test]
     fn the_oldest_lines_are_dropped_once_the_pane_is_full() {
         let mut scrollback = Scrollback::default();
@@ -405,8 +385,6 @@ mod tests {
         let lines: Vec<&str> = scrollback.text().lines().collect();
         assert!(lines.len() <= LINE_LIMIT, "kept {} lines", lines.len());
         assert_eq!(lines[lines.len() - 1], "last");
-        // Whole lines are dropped, so what is left starts at the beginning of
-        // one rather than in the middle of a callsign.
         assert!(
             lines[0].parse::<usize>().is_ok(),
             "the first line was cut: {:?}",

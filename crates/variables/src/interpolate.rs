@@ -84,7 +84,6 @@ impl<'a> Iterator for References<'a> {
     }
 }
 
-/// One `${name}` or `${name:format}` expression.
 struct Reference<'a> {
     name: &'a str,
     format: Option<&'a str>,
@@ -192,8 +191,6 @@ mod tests {
         );
     }
 
-    /// A timestamp is still worth writing without a format, so a template that
-    /// only wants the date and time does not have to spell one out.
     #[test]
     fn writes_a_timestamp_without_a_format() {
         let mut variables = Variables::new();

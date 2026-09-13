@@ -79,8 +79,6 @@ impl AudioState {
                     .filter(|device| output_devices.contains(device))
             })
             .or_else(|| output_devices.first().cloned());
-        // Both halves of the host failing at once says the same thing twice,
-        // so the first answer stands for the pair.
         let error = input_error.or(output_error);
         let mut state = Self {
             host,
@@ -177,8 +175,6 @@ impl AudioState {
                     self.sync_start,
                     self.waker.clone(),
                 );
-                // A device opened while the station is transmitting is muted
-                // exactly like the one it replaces.
                 worker.set_muted_for_transmit(self.muted_for_transmit);
                 self.worker = Some(worker);
                 self.capture = Some(capture);

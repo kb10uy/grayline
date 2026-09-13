@@ -14,7 +14,6 @@ use crate::{
     },
 };
 
-/// Where one image layer lands, independent of which layer supplied it.
 #[derive(Clone, Copy)]
 struct ImagePlacement {
     position: Position,

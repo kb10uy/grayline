@@ -36,7 +36,6 @@ const DETECTORS: [(f64, f64); 5] = [
     (FskTxTone::Space.frequency_hz() as f64, 100.0),
 ];
 const FSK_MINIMUM_CONTRAST: f64 = 0.125;
-/// Cutoff of the tone detectors' envelope filters, in hertz.
 const DETECTOR_ENVELOPE_CUTOFF_HZ: f64 = 50.0;
 
 /// What identified the mode of a reception.

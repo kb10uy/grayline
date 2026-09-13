@@ -13,7 +13,6 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 
 use crate::app::macros::{Macro, Template, default_macros, default_templates};
 
-/// The key the buttons are written under, and the one the list is.
 const MACROS_KEY: &str = "macros";
 const TEMPLATES_KEY: &str = "templates";
 
@@ -65,7 +64,6 @@ fn load<T>(
     }
 }
 
-/// Writes the file the operator will edit from here on.
 fn create<T>(path: &Path, key: &str, entries: &[T], write: fn(&T, &mut Table)) {
     let mut document = DocumentMut::new();
     let mut array = ArrayOfTables::new();
@@ -135,8 +133,6 @@ mod tests {
     use super::*;
     use crate::test_util::TempDir;
 
-    /// A station that has never edited either list gets one it can edit, so
-    /// the file the File menu opens is never an empty one.
     #[test]
     fn a_missing_file_is_written_with_what_ships() {
         let root = TempDir::new();
@@ -157,8 +153,6 @@ mod tests {
         assert_eq!(load_templates(&path), default_templates());
     }
 
-    /// What an operator wrote in the file is what the window draws, whatever
-    /// ships with the application.
     #[test]
     fn the_file_is_what_the_buttons_are_read_from() {
         let root = TempDir::new();
@@ -183,8 +177,6 @@ send = true
         );
     }
 
-    /// An emptied file is an operator who wanted no buttons, and is not
-    /// answered by handing them back the ones they deleted.
     #[test]
     fn a_file_with_no_list_in_it_is_an_empty_list() {
         let root = TempDir::new();
@@ -194,8 +186,6 @@ send = true
         assert!(load_macros(&path).is_empty());
     }
 
-    /// A file that could not be parsed is left alone and the station starts on
-    /// what ships, the way an unreadable configuration is treated.
     #[test]
     fn a_file_that_cannot_be_read_is_not_written_over() {
         let root = TempDir::new();
@@ -206,7 +196,6 @@ send = true
         assert!(fs::read_to_string(&path).unwrap().starts_with("[[templates]"));
     }
 
-    /// Half an entry is dropped rather than drawn as a nameless row.
     #[test]
     fn an_entry_missing_a_half_is_dropped() {
         let root = TempDir::new();

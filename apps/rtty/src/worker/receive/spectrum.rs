@@ -141,8 +141,6 @@ mod tests {
         assert!(!spectrum.magnitudes().is_empty());
     }
 
-    /// The history is what was heard last, so a block longer than it is kept
-    /// by its tail rather than by its head.
     #[test]
     fn a_block_longer_than_the_transform_keeps_its_newest_samples() {
         let mut spectrum = Spectrum::new(RATE).unwrap();
@@ -155,7 +153,6 @@ mod tests {
         assert!((peak - 2_000.0).abs() <= spectrum.bin_hz(), "peaked at {peak} Hz");
     }
 
-    /// Nothing above the ceiling is drawn, so nothing above it is published.
     #[test]
     fn the_published_band_stops_at_the_ceiling() {
         let mut spectrum = Spectrum::new(48_000).unwrap();
@@ -165,9 +162,6 @@ mod tests {
         assert!(top < CEILING_HZ as f32 + 3.0 * spectrum.bin_hz(), "and not overshot");
     }
 
-    /// A rate whose Nyquist is below the ceiling has fewer bins than the
-    /// ceiling asks for, and asking for them anyway would read past the
-    /// transform.
     #[test]
     fn a_narrow_band_publishes_what_it_has() {
         let mut spectrum = Spectrum::new(6_000).unwrap();

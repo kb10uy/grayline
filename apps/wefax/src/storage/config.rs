@@ -221,8 +221,6 @@ mod tests {
         assert_eq!(read_back, wanted);
     }
 
-    /// A comment beside a key the application does not own has to survive a
-    /// save, or editing the file by hand is pointless.
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
         let root = TempDir::new();
@@ -238,8 +236,6 @@ mod tests {
         assert!(written.contains("unknown = 7"));
     }
 
-    /// Overwriting a file that could not be parsed would throw away whatever
-    /// the operator had written in it.
     #[test]
     fn an_unparsable_file_is_never_written_over() {
         let root = TempDir::new();

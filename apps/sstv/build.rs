@@ -95,7 +95,6 @@ END
         )
     }
 
-    /// The four-part version Windows records in the resource.
     struct Version {
         major: String,
         minor: String,

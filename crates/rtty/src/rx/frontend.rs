@@ -43,7 +43,6 @@ impl Integrator {
     }
 }
 
-/// One tone channel: resonator, rectifier, integrator, and optional ATC.
 struct Channel {
     resonator: Resonator,
     integrator: Integrator,

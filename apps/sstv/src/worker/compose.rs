@@ -100,8 +100,6 @@ impl Composer {
     }
 
     pub fn request(&self, request: ComposeRequest) {
-        // A request no worker will ever pick up is answered here, so the
-        // interface hears a failure instead of waiting for a frame forever.
         if self.thread.is_none() {
             *self.result.lock().unwrap_or_else(PoisonError::into_inner) = Some(ComposeResult {
                 generation: request.generation,
@@ -341,7 +339,6 @@ const PLACEHOLDER_FREQUENCY_MHZ: f64 = 7.178;
 const PLACEHOLDER_BAND: &str = "40m";
 const PLACEHOLDER_CALLSIGN: &str = "Callsign";
 
-/// What every variable the contact directory fills in is named under.
 const CONTACT_PREFIX: &str = "contact.";
 
 /// What the radio variables say, from the rig when there is one to ask.
@@ -406,9 +403,6 @@ fn variables(request: &ComposeRequest) -> Variables {
         VariableValue::Text(env!("CARGO_PKG_VERSION").to_owned()),
     );
     variables.insert("radio.frequency", VariableValue::Decimal(frequency_mhz));
-    // An operator-defined name cannot collide with a built-in one: it only
-    // ever appears under `custom.`, and the interface refuses a name no
-    // template could reference.
     for (name, value) in &request.custom {
         variables.insert(format!("custom.{name}"), VariableValue::Text(value.clone()));
     }
@@ -580,9 +574,6 @@ mod tests {
         .expect("the template is well formed")
     }
 
-    /// A missing variable fails the whole render, so a template naming a key
-    /// this station has nothing filed under would put an error on the transmit
-    /// tab instead of a picture.
     #[test]
     fn a_contact_key_the_directory_has_nothing_for_is_answered_with_nothing() {
         let template = text_template("${contact.name} of ${contact.club}");
@@ -602,9 +593,6 @@ mod tests {
         }
     }
 
-    /// The operator names their own variables in a dialog that already refuses
-    /// unusable ones, so a name that resolves to nothing there is a typo worth
-    /// reporting rather than a gap worth filling.
     #[test]
     fn a_name_outside_the_contact_domain_is_left_to_fail() {
         let template = text_template("${custom.clbu}");
@@ -628,8 +616,6 @@ mod tests {
         );
     }
 
-    /// The typed callsign is what the operator is working, so a directory
-    /// entry that happened to be filed under that key must not displace it.
     #[test]
     fn a_stored_callsign_key_does_not_displace_the_one_that_was_typed() {
         let variables = variables(&ComposeRequest {
@@ -643,8 +629,6 @@ mod tests {
         );
     }
 
-    /// Whatever the directory holds is readable under its own name, so a key
-    /// the operator invented needs no change here to be printable.
     #[test]
     fn a_key_this_application_knows_nothing_about_still_reaches_the_template() {
         let variables = variables(&ComposeRequest {
@@ -658,9 +642,6 @@ mod tests {
         );
     }
 
-    /// A template draws a line for a callsign whether or not one has been
-    /// entered, so an unset one is composed as the word rather than as the
-    /// empty string that would leave the line blank.
     #[rstest]
     #[case("")]
     #[case("   ")]
@@ -682,7 +663,6 @@ mod tests {
         }
     }
 
-    /// The composition is what a callsign means, not what was typed around it.
     #[test]
     fn a_callsign_reaches_the_template_trimmed() {
         let request = ComposeRequest {
@@ -696,8 +676,6 @@ mod tests {
         );
     }
 
-    /// A transmit tab has to compose before there is a rig to ask, so the
-    /// radio variables stand in for one rather than being absent.
     #[test]
     fn the_radio_variables_fall_back_on_a_placeholder_without_a_rig() {
         let variables = variables(&request());
@@ -729,8 +707,6 @@ mod tests {
         );
     }
 
-    /// The frequency beside it is real, so a band that contradicted it would
-    /// be worse than none at all.
     #[test]
     fn a_rig_tuned_between_the_bands_names_no_band() {
         let variables = variables(&ComposeRequest {
@@ -746,8 +722,6 @@ mod tests {
         assert_eq!(variables.get("radio.band"), Some(&VariableValue::Text(String::new())));
     }
 
-    /// A reception is timed once, and a template chooses the zone it prints
-    /// rather than converting one itself.
     #[test]
     fn a_reception_is_offered_in_both_zones() {
         let variables = variables(&request());
@@ -853,8 +827,6 @@ mod tests {
         assert_ne!(cache.prepare(&path, Mode::Robot36, 1).unwrap(), &first);
     }
 
-    /// The prepared image is cropped to the mode, so the mode is part of what
-    /// the cache is keyed on.
     #[test]
     fn another_mode_prepares_the_background_again() {
         let directory = crate::test_util::TempDir::new();

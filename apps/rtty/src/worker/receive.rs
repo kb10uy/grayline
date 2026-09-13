@@ -154,7 +154,6 @@ impl Visible {
     }
 }
 
-/// Rounds a reading to the steps a meter can be seen to move in.
 fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 64.0) as u8
 }
@@ -217,9 +216,6 @@ fn merge(snapshot: &mut RxSnapshot, previous: RxSnapshot) {
     if let (Some(frame), Some(earlier)) = (snapshot.scope.as_mut(), previous.scope) {
         merge_scope(frame, earlier);
     }
-    // Two snapshots with different column counts cannot be lined up against
-    // each other, and nothing changes the count while a worker runs, so this
-    // is the shape of the check rather than a case that happens.
     if snapshot.columns.len() != previous.columns.len() {
         return;
     }
@@ -359,9 +355,6 @@ impl RxWorker {
                 .spawn(move || run(reader, &mailbox, &stop, &controls))
                 .ok()
         };
-        // A worker that could not start would otherwise look like a live
-        // receiver that never hears anything, so the failure is published
-        // where every other receive failure is shown.
         if join.is_none() {
             mailbox.publish(RxSnapshot {
                 error: Some(AppError::WorkerUnavailable("reception")),
@@ -433,9 +426,6 @@ mod tests {
         }
     }
 
-    /// Characters are the one payload nothing will say again, so two blocks
-    /// that arrive between frames have to reach the interface as one run of
-    /// text in the order they were decoded.
     #[test]
     fn uncollected_text_stays_in_front_of_what_follows_it() {
         let mailbox = Mailbox::new(Waker::default());
@@ -473,8 +463,6 @@ mod tests {
         assert!(mailbox.take().is_none());
     }
 
-    /// A block of audio that moved nothing the interface draws says what the
-    /// one before it said, so it must not cost a frame.
     #[test]
     fn a_negligible_change_looks_the_same() {
         let earlier = snapshot(vec![ColumnSnapshot {
@@ -502,8 +490,6 @@ mod tests {
         );
     }
 
-    /// Which tone is being heard reads on the header, and mark and space are
-    /// the same magnitude apart from the sign.
     #[test]
     fn the_two_tones_do_not_look_alike() {
         let mark = snapshot(vec![ColumnSnapshot {
@@ -517,9 +503,6 @@ mod tests {
         assert_ne!(Visible::of(&mark), Visible::of(&space));
     }
 
-    /// A scope frame is a picture rather than a reading: one that looks like
-    /// the last one is still a new picture, and the window has to be woken
-    /// for it.
     #[test]
     fn every_scope_frame_is_worth_a_frame_of_the_interface() {
         let frame = |sequence| RxSnapshot {
@@ -533,8 +516,6 @@ mod tests {
         assert_ne!(Visible::of(&frame(1)), Visible::of(&RxSnapshot::default()));
     }
 
-    /// The trace is read as one line, so pairs that arrived between two draws
-    /// belong to it in the order they were tapped.
     #[test]
     fn uncollected_pairs_stay_in_front_of_the_ones_that_follow_them() {
         let frame = |mark: f64| RxSnapshot {
@@ -553,8 +534,6 @@ mod tests {
         assert_eq!(points.iter().map(|pair| pair.mark).collect::<Vec<_>>(), [1.0, 2.0]);
     }
 
-    /// An interface that stopped drawing is one whose window stopped being
-    /// looked at, and what it wants when it comes back is the signal now.
     #[test]
     fn a_trace_nobody_collected_does_not_grow_without_end() {
         let mailbox = Mailbox::new(Waker::default());
@@ -597,8 +576,6 @@ mod tests {
         assert!(config.atc.is_some());
     }
 
-    /// The controls are what a settings change travels through, and a worker
-    /// that read a half-written set would build a receiver from neither.
     #[test]
     fn the_settings_round_trip_through_the_controls() {
         let controls = Controls::new(WorkerSettings::default());

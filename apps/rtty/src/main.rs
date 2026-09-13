@@ -59,7 +59,6 @@ fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
     definitions
 }
 
-/// Loads whichever of `families` the machine has, and names those it loaded.
 fn install_faces(definitions: &mut FontDefinitions, database: &fontdb::Database, families: &[&str]) -> Vec<String> {
     let mut installed = Vec::new();
     for family in families {
@@ -79,7 +78,6 @@ fn install_faces(definitions: &mut FontDefinitions, database: &fontdb::Database,
     installed
 }
 
-/// Puts `families` at the front of `target`, keeping the order they are in.
 fn prefer(definitions: &mut FontDefinitions, target: FontFamily, families: &[String]) {
     let installed = definitions.families.entry(target).or_default();
     for family in families.iter().rev() {
@@ -147,9 +145,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         viewport,
         ..Default::default()
     };
-    // A recording named on the command line is decoded instead of the device,
-    // which is how a file reaches the application from a file manager's "open
-    // with" as well as from a shell.
     let recording = std::env::args_os().nth(1).map(PathBuf::from);
     eframe::run_native(
         &format!("{} {}", identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION")),
@@ -159,7 +154,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// The eframe entry point, holding the application and its menu bar.
 struct Interface {
     app: App,
     menu: Option<menu::MenuHost>,
@@ -250,8 +244,6 @@ impl eframe::App for Interface {
         }
         self.app.poll_workers();
 
-        // The zoom shortcuts and the menu both change the scale; whichever
-        // route the operator took, the result is one value that gets persisted.
         self.app.set_ui_scale(ui.ctx().zoom_factor());
 
         let model = menu::model(&self.app);
@@ -293,7 +285,6 @@ impl eframe::App for Interface {
 mod tests {
     use super::*;
 
-    /// A system with none of the wanted families still has to render text.
     #[test]
     fn an_empty_database_leaves_the_bundled_fonts_usable() {
         let definitions = font_definitions(&fontdb::Database::new());
@@ -302,8 +293,6 @@ mod tests {
         }
     }
 
-    /// The first family the machine has of a list, or `None` when it has none
-    /// of them and there is nothing to check against here.
     fn first_available(database: &fontdb::Database, families: &[&str]) -> Option<String> {
         families
             .iter()
@@ -334,9 +323,6 @@ mod tests {
         );
     }
 
-    /// RTTY is read as columns, so the coding font has to be reached before the
-    /// proportional UI face, which would otherwise answer for every character
-    /// it has and leave the received text unaligned.
     #[test]
     fn the_monospaced_family_is_led_by_a_coding_font() {
         let database = system_database();
@@ -358,8 +344,6 @@ mod tests {
         }
     }
 
-    /// The interface is drawn in the platform's own UI face, which a coding
-    /// font must not displace.
     #[test]
     fn the_proportional_family_is_not_led_by_a_coding_font() {
         let database = system_database();

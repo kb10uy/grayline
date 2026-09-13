@@ -146,14 +146,10 @@ fn state(app: &App) -> String {
             _ => app.i18n.text("state-transmit-not-ready"),
         },
         Tab::Receive => {
-            // Nothing is being listened for while the station transmits, so the
-            // line says so rather than reporting a wait that is not happening.
             if app.audio.is_muted_for_transmit() {
                 return app.i18n.text("state-rx-muted");
             }
             let progress = app.audio.snapshot().progress;
-            // A stopped reception leaves a partial image on the canvas, so it
-            // has to read differently from having nothing at all.
             if progress == RxProgress::Stopped {
                 return app.i18n.text("state-stopped");
             }
@@ -227,10 +223,6 @@ fn transmit_button(ui: &mut Ui, app: &mut App, width: f32, height: f32) {
         "action-transmit"
     });
     let size = egui::vec2(width, height);
-    // Stopping stays available for as long as something is being sent.
-    // Starting does not: with anything missing the button is disabled and says
-    // what, rather than taking the press and reporting the same thing as an
-    // error afterwards.
     let problem = (!active).then(|| app.transmit_problem()).flatten();
     let button = egui::Button::new(RichText::new(label).size(SMALL)).fill(colors::TX_BUTTON);
     let mut response = ui

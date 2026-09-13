@@ -83,9 +83,6 @@ mod tests {
 
     #[test]
     fn a_fractional_line_length_does_not_accumulate() {
-        // 5512.5 samples is 11 025 Hz at 120 lines per minute. Multiplying
-        // from the epoch keeps line 4000 exact; adding the length four
-        // thousand times would not.
         let clock = LineClock::new(0.0, 5_512.5).unwrap();
         assert_eq!(clock.position_at(4_000, 0.0), 22_050_000.0);
     }

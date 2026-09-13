@@ -27,7 +27,6 @@ use grayline_shell::i18n::{I18n, Locale};
 
 use crate::worker::receive::{FULL_SCALE, ScopeFrame};
 
-/// What keeps this one window across frames.
 const VIEWPORT: &str = "grayline-rtty-scope";
 
 const WINDOW_SIZE: [f32; 2] = [420.0, 540.0];
@@ -58,7 +57,6 @@ const MINIMUM_TRACE_SCALE: f32 = 0.25;
 const SPECTRUM_SHARE: f32 = 0.45;
 const MINIMUM_PANE: f32 = 60.0;
 
-/// Where the frequency scale is marked, in hertz.
 const TICK_HZ: f32 = 1_000.0;
 
 /// The strip along the bottom of the band that the scale is written on.
@@ -67,7 +65,6 @@ const TICK_HZ: f32 = 1_000.0;
 /// on top of the noise floor is one nobody can read.
 const SCALE_HEIGHT: f32 = 13.0;
 
-/// How much room one figure on that strip wants either side of its mark.
 const SCALE_LABEL_ROOM: f32 = 12.0;
 
 /// Room left around the trace, so that it is read as a shape inside the box
@@ -234,8 +231,6 @@ pub fn window(ctx: &egui::Context, scope: &Scope) {
         .with_title(scope.view().labels.title.clone())
         .with_inner_size(WINDOW_SIZE)
         .with_min_inner_size(MINIMUM_WINDOW_SIZE)
-        // Above the main window, because it is read while the panel behind it
-        // is worked.
         .with_always_on_top();
 
     ctx.show_viewport_deferred(id, builder, move |ui, _class| {
@@ -253,7 +248,6 @@ pub fn window(ctx: &egui::Context, scope: &Scope) {
     }
 }
 
-/// The band over the two channels, each under its own heading.
 fn contents(ui: &mut Ui, view: &View) {
     ui.style_mut().interaction.selectable_labels = false;
     let spacing = ui.spacing().item_spacing.y;
@@ -267,7 +261,6 @@ fn contents(ui: &mut Ui, view: &View) {
     channels(ui, view);
 }
 
-/// The band, with the pair the receiver is listening for marked on it.
 fn spectrum(ui: &mut Ui, view: &View, height: f32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
     let painter = ui.painter_at(rect);
@@ -315,7 +308,6 @@ fn spectrum(ui: &mut Ui, view: &View, height: f32) {
     }
 }
 
-/// The first bin a column covers.
 fn bin_at(column: usize, columns: usize, bins: usize) -> usize {
     (column * bins / columns).min(bins - 1)
 }
@@ -329,12 +321,10 @@ fn level(magnitude: f32) -> f32 {
     ((db + FLOOR_DB) / FLOOR_DB).clamp(0.0, 1.0)
 }
 
-/// Where a frequency falls across the band.
 fn x_of(rect: Rect, span_hz: f32, frequency_hz: f32) -> f32 {
     rect.left() + rect.width() * (frequency_hz / span_hz).clamp(0.0, 1.0)
 }
 
-/// The frequency scale, marked every [`TICK_HZ`].
 fn ticks(painter: &Painter, band: Rect, scale: Rect, span_hz: f32) {
     let mut frequency_hz = TICK_HZ;
     while frequency_hz < span_hz {
@@ -343,8 +333,6 @@ fn ticks(painter: &Painter, band: Rect, scale: Rect, span_hz: f32) {
             [egui::pos2(x, band.top()), egui::pos2(x, band.bottom())],
             Stroke::new(1.0, AXIS),
         );
-        // A figure that would run off the end is left off: the line itself
-        // says where the mark is, and a clipped one says nothing.
         if x - SCALE_LABEL_ROOM > scale.left() && x + SCALE_LABEL_ROOM < scale.right() {
             painter.text(
                 egui::pos2(x, scale.center().y),
@@ -428,7 +416,6 @@ fn point(rect: Rect, levels: ChannelLevels, scale: f32) -> Pos2 {
     egui::pos2(rect.left() + rect.width() * mark, rect.bottom() - rect.height() * space)
 }
 
-/// Says why a box is empty, which an empty box does not.
 fn say_nothing(painter: &Painter, rect: Rect, text: &str) {
     painter.text(
         rect.center(),

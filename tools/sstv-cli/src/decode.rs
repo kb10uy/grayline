@@ -106,7 +106,6 @@ struct PipelineResult {
     report: DecodeReport,
 }
 
-/// Maps what the shared pipeline reports into this command's own report.
 fn finish_pipeline(pipeline: ReceivePipeline) -> Result<PipelineResult> {
     let outcome = pipeline.finish()?;
     let (image, status) = match outcome.outcome {

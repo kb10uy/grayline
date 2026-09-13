@@ -223,7 +223,6 @@ impl ScriptHost {
         self.module.get::<Option<Function>>(entry.name()).ok()?
     }
 
-    /// Builds the table a call is handed, fresh each time.
     fn context(&self, frequency_hz: Option<u64>) -> mlua::Result<Table> {
         let context = self.lua.create_table()?;
         context.set("ports", self.ports.clone())?;
@@ -315,7 +314,6 @@ fn call_error(entry: Entry, error: &mlua::Error) -> ScriptError {
     }
 }
 
-/// A `rigctld` connection as the script reaches it.
 struct RigctldPort {
     rig: Rigctld,
     broken: Rc<Cell<bool>>,

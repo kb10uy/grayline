@@ -331,7 +331,6 @@ mod tests {
         }
     }
 
-    /// Counts positive-going zero crossings over each expected bit window.
     fn crossings_per_bit(samples: &[f32], bits: usize) -> Vec<f64> {
         let per_bit = samples.len() / bits;
         (0..bits)
@@ -434,8 +433,6 @@ mod tests {
         assert_eq!(samples[0], 0.0);
         assert!(samples[samples.len() - 1].abs() < 1.0e-2);
 
-        // Peaks inside the character body all reach full amplitude: the
-        // mark-space transitions are not amplitude-shaped.
         let lead = (0.05 * f64::from(RATE)) as usize;
         let body = &samples[lead..samples.len() - lead];
         let cycle = RATE as usize / 2_000;

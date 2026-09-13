@@ -7,8 +7,7 @@
 //! even if the answer is to do nothing.
 //!
 //! The menu bar is the one deliberate exception. It stays with the
-//! application, because its platform split is between two renderers of a
-//! shared model rather than between operating systems.
+//! sibling [`crate::menu`] module, which renders application-defined models.
 
 use std::{
     ffi::OsStr,
@@ -240,7 +239,6 @@ impl FileLock {
     pub fn publish_window(&self, _cc: &eframe::CreationContext<'_>) {}
 }
 
-/// Takes an exclusive lock on a file named after the application.
 #[cfg(not(target_os = "windows"))]
 fn lock_file_claim(identity: &Identity) -> Option<FileLock> {
     use std::fs::OpenOptions;

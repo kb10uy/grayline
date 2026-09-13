@@ -305,8 +305,6 @@ mod tests {
         settled_estimate(&mut discriminator, rate, 1_500.0);
         discriminator.reset();
         assert_eq!(discriminator.held_frequency, 1_900.0);
-        // Every stage was cleared with it, so the reset instance reads exactly
-        // what one built a moment ago reads.
         let mut fresh = HilbertDiscriminator::new(design(f64::from(rate))).unwrap();
         assert_eq!(discriminator.process_sample(0.25), fresh.process_sample(0.25));
     }

@@ -408,7 +408,6 @@ impl WefaxDecoder {
 
     fn consume(&mut self, frequency_hz: f64, sample: u64) -> Result<(), WefaxError> {
         match self.state {
-            // Nothing before the phasing signal contributes to a picture.
             RxState::Idle | RxState::Starting { .. } => Ok(()),
             RxState::Phasing => {
                 self.fold(frequency_hz, sample);
@@ -744,7 +743,6 @@ mod tests {
     ) {
         let format = Format { ioc, lines_per_minute };
         let band = WefaxBand::WIDE;
-        // Black on the left, white on the right, with the edge in the middle.
         let columns: Vec<u8> = (0..64).map(|index| if index < 32 { 0 } else { u8::MAX }).collect();
         let samples = stream(rate, format, band, 3.0, &columns, 30);
         let decoder = decode(rate, format, &samples, config());
@@ -929,8 +927,6 @@ mod tests {
             expected.rotate_left(40);
             assert_eq!(after.row(row).unwrap(), expected.as_slice());
         }
-        // What the fold found is a record of the fold, so a later shift does
-        // not rewrite it; the live clock is what moved.
         assert_eq!(decoder.phasing().unwrap().epoch_samples, epoch);
     }
 
@@ -953,7 +949,6 @@ mod tests {
         ));
     }
 
-    /// Fine random texture, which is what a correlation has to work on.
     fn texture(width: usize) -> Vec<u8> {
         let mut state = 0x2545_F491_4F6C_DD1D_u64;
         (0..width)
@@ -1041,7 +1036,6 @@ mod tests {
         };
         let columns = texture(format.pixels_per_line());
         let samples = stream_at(rate, format, WefaxBand::WIDE, 3.0, &columns, 200, rate_error_ppm);
-        // Slant tracking off, so the whole error is left for the refinement.
         let mut decoder = decode(
             rate,
             format,
@@ -1094,8 +1088,6 @@ mod tests {
         assert_eq!(decoder.raster().unwrap().row(0), original.row(0));
     }
 
-    /// The operator's own nudge is theirs to keep, so it is not part of the
-    /// walk the refinement puts back.
     #[test]
     fn refining_keeps_a_shift_the_operator_asked_for() {
         let rate = 11_025;
@@ -1128,8 +1120,6 @@ mod tests {
         assert_eq!(decoder.refine().unwrap(), None);
     }
 
-    /// A finished chart is worked from its top: the operator lines the first
-    /// row up by hand and then straightens the rest against it.
     #[test]
     fn a_correction_after_the_reception_pivots_on_the_first_line() {
         let rate = 11_025;
@@ -1148,7 +1138,6 @@ mod tests {
         assert_ne!(after.row(last), before.row(last));
     }
 
-    /// The picture is still the operator's to correct once it has arrived.
     #[test]
     fn the_phase_can_still_be_moved_after_the_reception() {
         let rate = 11_025;
@@ -1225,7 +1214,6 @@ mod tests {
             phasing_fallback: PhasingFallback::Stop,
             ..RxConfig::default()
         };
-        // Mid-gray throughout: no pulse to fold onto.
         let samples = vec![WefaxBand::WIDE.center_hz as f32; rate as usize * 3];
         let decoder = decode(rate, format, &samples, config);
         assert_eq!(

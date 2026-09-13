@@ -22,13 +22,10 @@ use crate::{
     worker::receive::{Frame, HistoryCandidate, Mailbox, RxProgress, RxSnapshot},
 };
 
-/// Samples drained from the capture queue per pass.
 const READ_SAMPLES: usize = 4_096;
 
-/// Idle wait when the device has produced nothing yet.
 const IDLE_POLL: Duration = Duration::from_millis(2);
 
-/// Shortest interval between published image frames.
 const FRAME_INTERVAL: Duration = Duration::from_millis(33);
 
 /// Trailing audio staged between staged-refinement attempts, in milliseconds.
@@ -116,7 +113,6 @@ enum Refinement {
     Failed(AppError),
 }
 
-/// Owns the protocol state for one worker thread.
 struct Session {
     demodulator: Demodulator,
     decoder: Option<RxDecoder>,
@@ -168,7 +164,6 @@ impl Session {
         })
     }
 
-    /// Adopts a new sync-start scope, for this reception and later ones.
     fn set_sync_start(&mut self, scope: SyncStart) {
         if self.sync_start == scope {
             return;
@@ -177,8 +172,6 @@ impl Session {
         self.demodulator.set_sync_start(scope);
     }
 
-    /// Chooses whether a VIS header may start a reception over, for this
-    /// reception and later ones.
     fn set_vis_restart(&mut self, enabled: bool) {
         if self.vis_restart == enabled {
             return;
@@ -187,8 +180,6 @@ impl Session {
         self.demodulator.set_header_restart(enabled);
     }
 
-    /// Chooses whether a VIS detection requires leader tone, for this
-    /// reception and later ones.
     fn set_vis_strict(&mut self, enabled: bool) {
         if self.vis_strict == enabled {
             return;
@@ -348,8 +339,6 @@ impl Session {
         if chunk.frequency_hz().is_empty() {
             return Ok(());
         }
-        // The decoder is moved out so the refinement bookkeeping below can
-        // borrow the session mutably alongside it.
         let Some(mut decoder) = self.decoder.take() else {
             return Ok(());
         };
@@ -428,7 +417,6 @@ impl Session {
         }
     }
 
-    /// Returns a new frame when the decoder image has changed.
     fn frame(&mut self) -> Option<Frame> {
         let decoder = self.decoder.as_ref()?;
         let revision = decoder.image_revision();
@@ -529,10 +517,6 @@ pub(super) fn run(
         // mute began, and nothing was fed to it while the mute lasted.
         muted = false;
 
-        // The operator asking for a reset is the same decision the receiver
-        // makes for itself when synchronization is lost, made without the
-        // wait: the reception is closed out where it stands, kept on the same
-        // terms as any other cut short, and the search starts over.
         if reset.swap(false, Ordering::Relaxed) {
             let closed = match session.suspend() {
                 Ok(closed) => closed,
@@ -761,8 +745,6 @@ mod tests {
         );
     }
 
-    /// The retention follows the mode rather than being one figure for all of
-    /// them, so a short reception does not reserve what the longest needs.
     #[test]
     fn a_short_mode_retains_less_than_a_long_one() {
         assert!(staging_limit(Mode::Robot36, 48_000) < staging_limit(Mode::Pd290, 48_000));

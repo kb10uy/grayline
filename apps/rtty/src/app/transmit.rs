@@ -203,8 +203,6 @@ mod tests {
         assert_eq!(transmit.queued().collect::<Vec<_>>(), ["CQ DE JL1HIS"]);
     }
 
-    /// Pressing send on nothing must not key the rig, and must not clear a
-    /// field that only held the newline that got there by accident.
     #[test]
     fn an_empty_draft_queues_nothing() {
         let mut transmit = Transmit::default();
@@ -214,8 +212,6 @@ mod tests {
         assert_eq!(transmit.queued().len(), 0);
     }
 
-    /// The trailing newline is what the Enter key leaves behind, and sending
-    /// it would put a blank line on the air at the end of every message.
     #[test]
     fn a_trailing_line_ending_is_not_part_of_the_message() {
         let mut transmit = Transmit {
@@ -251,8 +247,6 @@ mod tests {
         assert_eq!(transmit.queued().collect::<Vec<_>>(), ["second"]);
     }
 
-    /// What the operator gets back is what never left, so it can be edited and
-    /// sent again.
     #[test]
     fn abandoning_returns_the_part_that_was_never_played() {
         let text = "RYRYRY";
@@ -266,8 +260,6 @@ mod tests {
 
         let returned = transmit.abandon(third);
 
-        // Three characters had finished, so what comes back starts at the
-        // fourth and carries the queue behind it.
         assert_eq!(returned, "YRY\nQUEUED");
         assert!(!transmit.is_busy());
     }
@@ -279,7 +271,6 @@ mod tests {
         assert_eq!(transmit.abandon(0), "CQ");
     }
 
-    /// The echo prints what has been played, and prints each character once.
     #[test]
     fn the_echo_hands_over_each_character_exactly_once() {
         let text = "RYRY";
@@ -311,8 +302,6 @@ mod tests {
         assert_eq!(sending.remaining_samples(u64::MAX), 0);
     }
 
-    /// A message is only busy while there is something to send, which is what
-    /// the stop button and the transmit indicator are drawn from.
     #[test]
     fn nothing_queued_and_nothing_sending_is_not_busy() {
         let mut transmit = Transmit::default();

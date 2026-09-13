@@ -42,7 +42,6 @@ const session = {
 
 await init();
 
-/** Reads a status snapshot and releases the object wasm-bindgen handed over. */
 function readStatus() {
   const status = session.receiver.status();
   try {

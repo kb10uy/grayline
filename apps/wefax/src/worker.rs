@@ -5,7 +5,6 @@
 
 pub mod audio;
 pub mod receive;
-pub mod wav;
 
 /// Asks the interface to draw a frame it has no other reason to draw.
 ///

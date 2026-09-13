@@ -421,8 +421,6 @@ mod tests {
         assert_eq!(decode_number(&symbols[..JL1HIS.len() + number.len()], 8_000), None);
     }
 
-    /// A transmission that sends no contest number is the ordinary case, and
-    /// the silence after the identifier must not produce one.
     #[test]
     fn an_identifier_alone_yields_no_contest_number() {
         assert_eq!(decode_number(&JL1HIS, 8_000), None);

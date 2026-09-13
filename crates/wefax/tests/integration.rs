@@ -105,7 +105,6 @@ fn config() -> RxConfig {
     }
 }
 
-/// A bar pattern: alternating black and white bands across the line.
 fn bars(count: usize) -> Vec<u8> {
     (0..count)
         .map(|index| if index.is_multiple_of(2) { 0 } else { u8::MAX })
@@ -227,7 +226,6 @@ fn a_configured_geometry_skips_the_start_tone_entirely() {
     let format = Format::MARINE;
     let columns = bars(8);
     let mut transmitter = Transmitter::new(rate, WefaxBand::WIDE);
-    // Joined after the start tone, which is what tuning in late looks like.
     transmitter.phasing(format, 6.0, 0.3, 0.0);
     transmitter.picture(format, &columns, 12, 0.0);
 

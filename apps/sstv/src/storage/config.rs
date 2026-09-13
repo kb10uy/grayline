@@ -234,8 +234,6 @@ impl Default for Settings {
             // reception wants; strictness is the opt-in.
             vis_strict: false,
             send_fskid: true,
-            // A station that is not in a contest has no number to give, and
-            // one that is says so once.
             contest_mode: false,
             tx_volume: DEFAULT_TX_VOLUME,
             auto_history: true,
@@ -768,8 +766,6 @@ mod tests {
         assert_eq!(Config::load(&config_path(&root)).settings(), settings);
     }
 
-    /// A field list is written as keys and groups, so both have to survive a
-    /// reload as written rather than as what they expand to.
     #[test]
     fn a_field_list_is_stored_the_way_it_was_written() {
         let root = TempDir::new();
@@ -784,8 +780,6 @@ mod tests {
         );
     }
 
-    /// An operator who asked for no fields wants a dialog holding only what the
-    /// station already has; handing the default back would argue with them.
     #[test]
     fn an_empty_field_list_is_taken_as_written() {
         let root = TempDir::new();
@@ -811,9 +805,6 @@ fields = []
         );
     }
 
-    /// A store key is read as `${contact.<key>}`, so a key holding anything a
-    /// variable name cannot is one no template could ever print. The directory
-    /// crate keeps its own copy of that rule; this is where the two meet.
     #[test]
     fn every_well_known_contact_key_is_a_name_a_template_can_read() {
         for key in grayline_qso::WELL_KNOWN_KEYS {
@@ -821,8 +812,6 @@ fields = []
         }
     }
 
-    /// The instance is edited in this file, so the key has to be there to be
-    /// edited even before the operator has anything to put in it.
     #[test]
     fn the_qso_section_names_its_instance_even_while_it_is_empty() {
         let root = TempDir::new();
@@ -834,7 +823,6 @@ fields = []
         assert!(written.contains("url"), "{written}");
     }
 
-    /// The credential is the one thing this file must never learn.
     #[test]
     fn the_qso_section_carries_no_key() {
         let root = TempDir::new();
@@ -925,8 +913,6 @@ fields = []
         assert_eq!(config.settings(), Settings::default());
     }
 
-    /// The ports are what the operator edits, so they have to be in the file
-    /// before they are changed rather than only after.
     #[test]
     fn the_default_port_is_written_out_under_the_name_the_script_reaches_it_by() {
         let root = TempDir::new();
@@ -938,8 +924,6 @@ fields = []
         assert!(stored.contains(r#"address = "127.0.0.1:4532""#), "{stored}");
     }
 
-    /// A station reaching two rigs names them, and the script reaches each by
-    /// the name it was written under.
     #[test]
     fn every_named_port_is_read_back() {
         let root = TempDir::new();
@@ -973,9 +957,6 @@ fields = []
         );
     }
 
-    /// A section that is present is taken as written, and an entry that is not
-    /// a section is not a port. Handing back the default would put the script
-    /// on a rig the operator did not ask for.
     #[test]
     fn an_entry_that_is_not_a_section_is_not_a_port() {
         let root = TempDir::new();
@@ -984,8 +965,6 @@ fields = []
         assert!(Config::load(&config_path(&root)).settings().rig.ports.is_empty());
     }
 
-    /// A key the file does not define is left where the operator put it, so a
-    /// hand-written note beside a port survives being stored back.
     #[test]
     fn an_unrecognized_port_key_is_left_alone() {
         let root = TempDir::new();
@@ -1010,8 +989,6 @@ fields = []
         assert!(stored.contains("192.168.0.8:4532"), "{stored}");
     }
 
-    /// A section that is not a section says nothing about the ports, which is
-    /// how every other unusable value in this file is treated.
     #[test]
     fn a_ports_key_that_is_not_a_section_leaves_the_default_port() {
         let root = TempDir::new();

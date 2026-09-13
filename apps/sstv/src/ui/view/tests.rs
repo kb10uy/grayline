@@ -53,9 +53,6 @@ fn every_locale_renders(#[case] locale: Locale) {
     harness.get_by_label(&receive);
 }
 
-/// Every row of the variable dialog carries the same three widgets, which
-/// is exactly the shape egui panics over if they are not given ids of
-/// their own.
 #[test]
 fn the_variable_dialog_renders_a_row_for_every_name() {
     let mut app = App::headless();
@@ -72,10 +69,6 @@ fn the_variable_dialog_renders_a_row_for_every_name() {
     harness.get_by_label(&title);
 }
 
-/// The contact dialog lays out three kinds of row at once — labelled fields
-/// for what the settings asked for, name-and-value pairs for whatever else the
-/// station has, and the buttons under them — which is exactly the shape egui
-/// panics over if any of them share an id.
 #[test]
 fn the_contact_dialog_renders_every_kind_of_row() {
     let mut app = App::headless();
@@ -101,9 +94,6 @@ fn the_contact_dialog_renders_every_kind_of_row() {
     harness.get_by_label_contains(&title);
 }
 
-/// A station in Japan wants a JCC code and a name RTTY can send; a station
-/// anywhere else wants neither, and which of those an operator is was never
-/// something the application could decide.
 #[test]
 fn the_dialog_offers_the_fields_the_settings_asked_for() {
     let mut app = App::headless();
@@ -121,8 +111,6 @@ fn the_dialog_offers_the_fields_the_settings_asked_for() {
     render(&mut app).get_by_label(&jcc);
 }
 
-/// A key the operator invented is one no catalogue was going to know, so it
-/// stands under its own name rather than under a missing message's id.
 #[test]
 fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
     let mut app = App::headless();
@@ -155,8 +143,6 @@ fn labels_are_inert_inside_a_dialog_as_well_as_behind_it() {
     }
 }
 
-/// The button beside the callsign is what opens that dialog, so a station
-/// that has been named has to have one to press.
 #[test]
 fn the_qso_panel_offers_the_contact_details_button() {
     let mut app = App::headless();
@@ -167,8 +153,6 @@ fn the_qso_panel_offers_the_contact_details_button() {
     harness.get_by_label("…");
 }
 
-/// The panel keeps the same controls in every connection state so its
-/// contents do not move while a connection is established or lost.
 #[test]
 fn the_radio_panel_is_where_the_connection_is_worked() {
     let mut app = App::headless();
@@ -205,8 +189,6 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
         harness.get_by_label(&retry);
     }
 
-    // Reconnecting is offered exactly when there is a failure to recover
-    // from.
     app.rig_snapshot.state = RigState::Failed;
     let failure = AppError::Rig(RigError::Connect {
         address: "127.0.0.1:4532".to_owned(),
@@ -235,8 +217,6 @@ fn the_transmit_tab_keeps_mode_detection_visible_but_inactive() {
     assert_eq!(app.auto_mode, before);
 }
 
-/// The QSO panel reads downwards in the order a contact is worked: who is
-/// being called, what they gave, and what is being given back.
 #[test]
 fn the_qso_panel_reads_from_the_call_down_to_the_report_being_sent() {
     let mut app = App::headless();
@@ -276,8 +256,6 @@ fn the_serial_number_buttons_work_it() {
     assert_eq!(app.qso.number, FIRST_QSO_NUMBER);
 }
 
-/// The serial belongs to a contest, so nothing about it can be worked
-/// until the operator has said they are in one.
 #[test]
 fn the_serial_number_is_inert_outside_contest_mode() {
     let mut app = App::headless();
@@ -295,9 +273,6 @@ fn the_serial_number_is_inert_outside_contest_mode() {
     }
 }
 
-/// The indicator keeps the whole row to itself, because the row is one
-/// widget tall on both tabs and nothing may be added beside it that would
-/// make it taller.
 #[test]
 fn the_receive_indicator_spans_its_row() {
     let mut app = App::headless();
@@ -319,8 +294,6 @@ fn the_receive_indicator_spans_its_row() {
     );
 }
 
-/// A bar carries no sign that it can be clicked, so the hover text is the
-/// whole of the invitation and has to be there to be read.
 #[test]
 fn hovering_the_receive_indicator_offers_the_reset() {
     let mut app = App::headless();
@@ -436,8 +409,6 @@ fn lost_device() -> grayline_audio::StreamFault {
     }
 }
 
-/// A lost device has to name itself: "an audio device stopped" leaves the
-/// operator guessing which of several is unplugged.
 #[test]
 fn a_lost_device_is_named_in_the_report() {
     let mut app = App::headless();
@@ -450,8 +421,6 @@ fn a_lost_device_is_named_in_the_report() {
     harness.get_by_label("Close");
 }
 
-/// Closing the report has to clear it, or it returns on the next frame and
-/// the operator cannot reach the interface behind it.
 #[test]
 fn closing_the_report_clears_it() {
     let mut app = App::headless();
@@ -466,7 +435,6 @@ fn closing_the_report_clears_it() {
     assert!(app.device_fault.is_none());
 }
 
-/// Nothing of the report may be drawn while no device has been lost.
 #[test]
 fn no_report_is_drawn_without_a_fault() {
     let mut app = App::headless();
@@ -476,8 +444,6 @@ fn no_report_is_drawn_without_a_fault() {
     assert!(harness.query_by_label("Retry").is_none());
 }
 
-/// The receive tab has to say why it has gone quiet while the station
-/// transmits: it is not waiting for a signal, it has stopped listening.
 #[test]
 fn the_receive_tab_reports_that_reception_is_muted() {
     let mut app = App::headless();
@@ -494,8 +460,6 @@ fn the_receive_tab_reports_that_reception_is_muted() {
     harness.get_by_label(&muted);
 }
 
-/// A populated library exercises the entry rows, which an interface built
-/// over empty directories never reaches.
 #[test]
 fn a_populated_library_renders() {
     let mut app = App::headless();
@@ -557,8 +521,6 @@ fn clicking_a_row_label_selects_that_row() {
     assert_eq!(app.library.stock, Some(1));
 }
 
-/// The lists decide the image a transmission is sending, so clicking one
-/// while it runs must not change the selection under it.
 #[test]
 fn a_transmission_locks_the_library_lists() {
     let mut app = App::headless();
@@ -582,8 +544,6 @@ fn a_transmission_locks_the_library_lists() {
     assert_eq!(app.library.stock, Some(0));
 }
 
-/// Decibels are the unit the level is heard in, so the readout is what
-/// makes the squared travel legible rather than arbitrary.
 #[test]
 fn the_transmit_level_reads_out_in_decibels() {
     assert_eq!(decibels(1.0), "0.0");
@@ -615,9 +575,6 @@ fn the_library_fits_the_height_it_is_given() {
     assert!(used <= 80.0, "the library insisted on {used} points");
 }
 
-/// The station details are edited in front of the interface and dismissed
-/// from the dialog itself, so opening it must not be a state the operator
-/// is left in.
 #[test]
 fn the_station_dialog_closes_from_its_own_button() {
     let mut app = App::headless();
@@ -648,9 +605,6 @@ fn switching_tabs_does_not_collide_widget_ids() {
     }
 }
 
-/// Pressing TX with nothing to send is refused at the button rather than
-/// reported as an error, so the reason is read from the state line and the
-/// button's own hover text.
 #[test]
 fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     let mut app = App::headless();
@@ -671,8 +625,6 @@ fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     assert_eq!(app.tx_snapshot.phase, TxPhase::Idle);
 }
 
-/// The tone is captioned with its frequency and takes a quarter of the row,
-/// so the trigger beside it stays the button the operator aims for.
 #[test]
 fn the_tune_tone_takes_a_quarter_of_the_transmit_row() {
     let mut app = App::headless();
@@ -695,8 +647,6 @@ fn the_tune_tone_takes_a_quarter_of_the_transmit_row() {
     );
 }
 
-/// The two ways of keying the rig cannot both be taken up, so whichever one
-/// is running refuses the other rather than cutting it off.
 #[test]
 fn the_transmit_trigger_is_refused_while_a_tone_is_being_sent() {
     let mut app = App::headless();
@@ -714,7 +664,6 @@ fn the_transmit_trigger_is_refused_while_a_tone_is_being_sent() {
     assert_eq!(app.tx_error, None);
     assert_eq!(app.transmit_problem(), Some(app.i18n.text("error-tone-active")));
 
-    // The tone's own button is what gives the rig back.
     {
         let mut harness = render(&mut app);
         harness.get_by_label(&caption).click();
@@ -738,8 +687,6 @@ fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
     harness.run();
     assert_eq!(side_panel_width(&harness), Some(SIDE_PANEL_WIDTH));
 
-    // Narrower than the panel asks for, which is the one case it gives way in:
-    // it cannot be wider than the window it is in.
     harness.set_size(egui::vec2(200.0, 700.0));
     harness.run();
     assert!(

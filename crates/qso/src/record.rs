@@ -105,7 +105,6 @@ pub fn expand_fields<'a>(spec: impl IntoIterator<Item = &'a str>) -> Vec<String>
 /// under rather than something filed in one.
 const RESERVED_KEY: &str = "callsign";
 
-/// How short and how long a callsign may be to be taken for one.
 const CALLSIGN_LENGTH: core::ops::RangeInclusive<usize> = 3..=16;
 
 /// What is known about one station, as a table from key to value.
@@ -234,8 +233,6 @@ mod tests {
         }
     }
 
-    /// A group naming a key the crate does not is one an application would
-    /// offer a field for and never be able to label.
     #[test]
     fn every_grouped_key_is_a_well_known_one() {
         for (group, keys) in FIELD_GROUPS {
@@ -258,8 +255,6 @@ mod tests {
         );
     }
 
-    /// `!ja` is offered so the common case is one entry rather than three, so
-    /// it has to stay the same thing those three add up to.
     #[test]
     fn the_japanese_set_is_what_its_parts_come_to() {
         let assembled = expand_fields(["!core", "!latin", "jcc"]);
@@ -271,8 +266,6 @@ mod tests {
         );
     }
 
-    /// The order is the operator's, so a key already placed stays where it was
-    /// rather than moving to wherever it was named again.
     #[test]
     fn a_key_named_twice_appears_once_and_where_it_first_appeared() {
         assert_eq!(expand_fields(["name", "!core", "qth"]), ["name", "qth", "grid"]);

@@ -34,7 +34,6 @@ fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     harness
 }
 
-/// Draws the window at a given size, so what a narrow one does can be checked.
 fn render_sized(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
@@ -67,8 +66,6 @@ fn a_reception_in_progress_draws_its_geometry() {
     assert!(describe(&app.i18n, RxProgress::Imaging { lines: 12 }, &app).contains("IOC 576"));
 }
 
-/// The status line carries the message on one side and the state on the
-/// other, so both have to be drawn on the same row.
 #[test]
 fn the_status_line_shows_a_message_beside_the_state() {
     let mut app = App::headless();
@@ -87,8 +84,6 @@ fn the_line_rate_reads_as_unknown_before_a_reception() {
     harness.get_by_label("\u{2014} ppm");
 }
 
-/// A window too narrow for one row has to put the bar on two, and every
-/// control has to still be there when it does.
 #[test]
 fn a_narrow_window_keeps_every_control() {
     let mut app = App::headless();
@@ -144,8 +139,6 @@ fn every_control_on_a_row_shares_its_centre() {
     }
 }
 
-/// The bar has to settle. A frame is drawn whenever the pointer moves, so a
-/// layout still being measured steps about under the pointer.
 #[test]
 fn the_bar_settles_and_stops_asking_for_frames() {
     let mut app = App::headless();
@@ -155,8 +148,6 @@ fn the_bar_settles_and_stops_asking_for_frames() {
     harness.run();
 }
 
-/// The picture takes whatever the control bar leaves, and drawing it must not
-/// depend on a reception having started.
 #[test]
 fn an_empty_strip_still_draws() {
     let mut app = App::headless();
@@ -179,9 +170,6 @@ fn a_strip_with_columns_draws() {
     assert_eq!(app.strip.lines(), 8);
 }
 
-/// Acquiring is one colour whichever half of it the receiver is in — the
-/// label already says which — but a reception that is drawing, one that
-/// finished, and one that was cut short have to be told apart at a glance.
 #[test]
 fn the_states_worth_telling_apart_have_their_own_colours() {
     let groups = [
@@ -199,8 +187,6 @@ fn the_states_worth_telling_apart_have_their_own_colours() {
     assert_eq!(state_color(RxProgress::Starting), state_color(RxProgress::Phasing));
 }
 
-/// Labels are inert throughout this family, and the setting reaches every
-/// theme so it does not depend on which one the operator is in.
 #[test]
 fn labels_are_inert() {
     let mut app = App::headless();

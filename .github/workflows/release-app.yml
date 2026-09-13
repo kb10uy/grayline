@@ -1,9 +1,5 @@
 name: Release an application
 
-# Called by one workflow per application. Everything an application does not
-# share with the others — which tag names it, what its archives hold, and what
-# its release notes say — is an input, so a third application is a caller
-# rather than a copy of this file.
 on:
   workflow_call:
     inputs:

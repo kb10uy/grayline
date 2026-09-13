@@ -20,7 +20,6 @@ use crate::{error::AppError, worker::update};
 
 const PCM_BLOCK_SIZE: usize = 1_024;
 
-/// How long the worker waits for room when the playback queue is full.
 const BACK_OFF: Duration = Duration::from_millis(2);
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -207,7 +206,6 @@ mod tests {
         TxConfig::default()
     }
 
-    /// Drains a worker to its end, returning everything it keyed.
     fn keyed(worker: &TxWorker, reader: &mut grayline_audio::PlaybackReader) -> Vec<f32> {
         let deadline = Instant::now() + DEADLINE;
         let mut samples = Vec::new();
@@ -225,8 +223,6 @@ mod tests {
         }
     }
 
-    /// What goes out has to be what a receiver reads back, or none of the
-    /// interface above it means anything.
     #[test]
     fn a_transmitted_message_decodes_as_the_text_it_was_given() {
         let text = "CQ CQ DE JL1HIS";
@@ -259,8 +255,6 @@ mod tests {
         assert_eq!(snapshot.generated_samples, samples.len() as u64);
     }
 
-    /// Cancelling is what the stop button does, and it has to stop the thread
-    /// rather than only the sound.
     #[test]
     fn a_cancelled_transmission_stops_generating() {
         let (writer, mut reader) = synthetic_playback(RATE, 1_024).unwrap();
@@ -287,8 +281,6 @@ mod tests {
         assert_eq!(stopped.generated_samples, after);
     }
 
-    /// A configuration the transmitter cannot be built from is reported rather
-    /// than keying silence at the rig.
     #[test]
     fn a_transmitter_that_cannot_be_built_reports_why() {
         let (writer, _reader) = synthetic_playback(RATE, 1_024).unwrap();

@@ -80,7 +80,6 @@ fn set_app_user_model_id(identity: &Identity) -> i32 {
     unsafe { SetCurrentProcessExplicitAppUserModelID(id.as_ptr()) }
 }
 
-/// Encodes `value` as the null-terminated UTF-16 the Win32 API expects.
 fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -204,7 +203,6 @@ unsafe fn raise_running_instance(window_name: &str) {
 }
 
 impl Claim {
-    /// A claim that holds nothing, for when the platform would not say.
     const fn unheld() -> Self {
         Self {
             mutex: ptr::null_mut(),
@@ -471,7 +469,6 @@ mod tests {
     use super::{claim_named, set_app_user_model_id, to_rgba};
     use crate::Identity;
 
-    /// An identity for the checks here, which read only the field each names.
     const TEST_IDENTITY: Identity = Identity {
         app_directory: "test",
         display_name: "Grayline Test",
@@ -521,7 +518,6 @@ mod tests {
         assert_eq!(pixels, vec![3, 2, 1, 4, 7, 6, 5, 8]);
     }
 
-    /// A frame without alpha has to stay visible.
     #[test]
     fn a_fully_transparent_bitmap_is_taken_as_opaque() {
         let pixels = to_rgba(vec![1, 2, 3, 0, 5, 6, 7, 0]);

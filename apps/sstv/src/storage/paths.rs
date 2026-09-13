@@ -245,8 +245,6 @@ mod tests {
         assert_eq!(grayline_qso::FAMILY_DIRECTORY, FAMILY_DIRECTORY);
     }
 
-    /// The log describes one machine's hardware, so it must not be written
-    /// where the account's roaming profile would synchronize it.
     #[test]
     fn the_log_is_kept_apart_from_the_roaming_data_directory() {
         let paths = AppPaths::from_roots(

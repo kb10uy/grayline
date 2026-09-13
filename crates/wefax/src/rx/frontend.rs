@@ -22,10 +22,8 @@ const BAND_ATTENUATION_DB: f64 = 20.0;
 const BAND_REFERENCE_ORDER: f64 = 24.0;
 /// Sampling frequency the reference order is stated at, in hertz.
 const BAND_REFERENCE_RATE_HZ: f64 = 11_025.0;
-/// Smallest band-pass order, for the lowest rates.
 const BAND_MINIMUM_ORDER: usize = 12;
 
-/// Cutoff of the level meter's low-pass, in hertz.
 const LEVEL_CUTOFF_HZ: f64 = 5.0;
 
 /// Cutoff of the discriminator's output filter, in hertz.

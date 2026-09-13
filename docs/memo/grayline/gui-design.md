@@ -15,7 +15,7 @@ assumed and are not restated here. Mode and timing data comes from
 The interface uses [egui](https://github.com/emilk/egui) 0.35 through eframe.
 Its immediate-mode model keeps widget state in the application model while the
 receive, composition, and transmit workers remain explicitly owned. Windows
-and macOS use `muda` for the native menu bar; Linux renders the same menu model
+uses `muda` for the native menu bar; Linux and macOS render the same menu model
 inside the window, and a machine whose native bar fails to install falls back
 to the in-window rendering so every menu action stays reachable. System fonts
 are discovered through `fontdb`, with egui's bundled fonts retained as
@@ -29,6 +29,12 @@ is annotated with: neither Consolas, Courier New, nor Segoe UI has U+21B5, the
 mark a transmit message shows a line ending with, so on a machine without
 Monaspace that mark falls through to one of egui's bundled faces and is drawn
 at the scale that face was tweaked to.
+
+`grayline-shell::menu` owns `Menu<Action>`, `Item<Action>`, the native
+`MenuHost<Action>`, and the egui menu renderer. The three desktop applications
+define their own action types, construct menu contents and apply returned
+actions. `muda` and native window attachment are dependencies of the shell;
+protocol crates have no menu dependencies.
 
 The model is rebuilt from application state every frame and the native menu is
 brought in line with it, so labels and check marks follow the interface without
@@ -70,7 +76,7 @@ the answer is to do nothing. Font family names, revealing a directory in the
 file manager, the window icon, and the Windows dark-mode opt-in are all
 resolved there.
 
-The menu bar is the one deliberate exception and stays in `menu`, because its
+The menu bar is the one deliberate exception and lives in `grayline-shell::menu`, because its
 split is between two renderers of a shared model rather than between operating
 systems.
 
@@ -171,11 +177,18 @@ unreachable. A shared name takes the host's own identifier beside it, which is
 the ALSA PCM name, as in `sof-hda-dsp (hw:CARD=0,DEV=6)`, or the WASAPI
 interface. Namesakes that even that cannot separate are numbered.
 
-`grayline-audio` owns device enumeration, stream formats, and
+`grayline-audio` owns device enumeration, stream formats, WAV input, and
 callback scheduling, and exposes only normalized mono `f32` blocks with sample
 positions. Keeping it separate preserves the rule that platform types must not
 appear in reusable core APIs, and lets the offline `gl-sstv` integrations
 remain unaffected.
+
+RTTY and WEFAX use `grayline-audio::WavSource` to feed recordings through a
+`CaptureReader`. Each application supplies its decoder's minimum sample rate;
+the adapter validates the recording, normalizes its first channel, and waits
+for queue space without dropping samples. Completion is reported only after
+the consumer empties the queue, and dropping the source stops and joins the
+feeder thread.
 
 The interface depends on `grayline-audio`, `grayline-sstv`, `grayline-sstv-rx`,
 `grayline-tone-tx`, `grayline-sstv-fskid`, and `grayline-sstv-template`. No core crate gains

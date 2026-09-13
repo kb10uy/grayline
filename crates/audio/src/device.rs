@@ -239,9 +239,6 @@ mod tests {
         }
     }
 
-    /// ALSA writes "card, PCM" and keeps the separator when the PCM is
-    /// nameless, so the name arrives with punctuation the operator never
-    /// asked to read.
     #[rstest]
     #[case("sof-hda-dsp, ", "sof-hda-dsp")]
     #[case("sof-hda-dsp, HDMI 1", "sof-hda-dsp, HDMI 1")]
@@ -271,8 +268,6 @@ mod tests {
         );
     }
 
-    /// A name nothing else shares is left as the host gave it: the identifier
-    /// would only be noise beside it.
     #[test]
     fn a_name_of_its_own_is_left_alone() {
         let labels = [
@@ -283,8 +278,6 @@ mod tests {
         assert_eq!(distinguish(&labels), ["PipeWire Sound Server", "USB Audio CODEC"]);
     }
 
-    /// A device the host cannot tell apart still has to be reachable, because
-    /// the menu and the saved configuration both choose by name.
     #[test]
     fn devices_beyond_naming_are_numbered() {
         let labels = [
@@ -296,8 +289,6 @@ mod tests {
         assert_eq!(distinguish(&labels), ["Line In #1", "Line In #2", "Line In #3"]);
     }
 
-    /// Numbering is the last resort, so it may not touch the devices an
-    /// identifier already separated.
     #[test]
     fn numbering_reaches_only_what_is_still_shared() {
         let labels = [
@@ -327,9 +318,6 @@ mod tests {
         assert_eq!(bounded_buffer_size(&supported, sample_rate_hz), expected);
     }
 
-    /// CoreAudio refuses a size its hardware cannot hold, and a refusal is an
-    /// operator who cannot transmit, so what the device accepts wins over what
-    /// the crate would rather have.
     #[rstest]
     #[case(SupportedBufferSize::Range { min: 4_096, max: 8_192 }, BufferSize::Fixed(4_096))]
     #[case(SupportedBufferSize::Range { min: 64, max: 512 }, BufferSize::Fixed(512))]
@@ -340,8 +328,6 @@ mod tests {
         assert_eq!(bounded_buffer_size(&supported, 48_000), expected);
     }
 
-    /// A device that reports no range would be sized on a guess, and a guess
-    /// out of range is not a longer buffer but a stream that will not open.
     #[rstest]
     #[case(SupportedBufferSize::Unknown)]
     #[case(SupportedBufferSize::Range { min: 2_048, max: 1_024 })]
@@ -350,8 +336,6 @@ mod tests {
         assert_eq!(bounded_buffer_size(&supported, 48_000), BufferSize::Default);
     }
 
-    /// Two devices may report the same identifier as their name; a name
-    /// repeated inside its own parentheses says nothing.
     #[test]
     fn an_identifier_is_not_repeated_after_the_name_it_matches() {
         let labels = [label("default", Some("default")), label("default", Some("sysdefault"))];

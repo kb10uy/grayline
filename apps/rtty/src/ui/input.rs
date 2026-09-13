@@ -15,7 +15,6 @@ use egui::{Color32, Context, Event, FontId, Galley, Id, ImeEvent, TextFormat, Ui
 
 use grayline_rtty::code::Ita2Encoder;
 
-/// What an unsendable character is drawn in.
 const REFUSED_COLOR: Color32 = Color32::from_rgb(0xD0, 0x40, 0x40);
 
 /// Whether the transmitter has a code for `character`.
@@ -53,7 +52,6 @@ pub fn normalize(text: &str) -> String {
     out
 }
 
-/// Drops what a keystroke cannot put on the air, and upper cases the rest.
 fn typed(text: &str) -> String {
     text.chars()
         .map(|character| character.to_ascii_uppercase())
@@ -121,7 +119,6 @@ pub fn layout(ui: &Ui, text: &str, font: &FontId, wrap_width: f32) -> Arc<Galley
     ui.fonts_mut(|fonts| fonts.layout_job(job))
 }
 
-/// Splits `text` into runs that are all sendable or all not.
 fn runs(text: &str) -> Vec<(bool, &str)> {
     let mut runs = Vec::new();
     let mut start = 0;
@@ -171,8 +168,6 @@ mod tests {
         assert_eq!(is_sendable(character), expected);
     }
 
-    /// A keystroke that cannot go on the air simply does not appear, the way
-    /// a teleprinter with no such key answers.
     #[test]
     fn typing_drops_what_cannot_be_sent_and_upper_cases_the_rest() {
         assert_eq!(typed("cq"), "CQ");
@@ -188,8 +183,6 @@ mod tests {
         assert_eq!(first_unsendable(&normalize("ß")), Some('ß'));
     }
 
-    /// Pasting keeps what it cannot send, because a block that lost part of
-    /// itself silently would be worse than one that shows the problem.
     #[test]
     fn pasting_keeps_what_cannot_be_sent() {
         assert_eq!(normalize("100% copy"), "100% COPY");
@@ -212,8 +205,6 @@ mod tests {
         assert_eq!(first_unsendable("OK % AND *"), Some('%'));
     }
 
-    /// The runs are what the field is drawn from: text with nothing wrong in
-    /// it has to lay out as one, or every message pays for the check.
     #[test]
     fn text_that_can_all_be_sent_is_one_run() {
         assert_eq!(runs("CQ DE"), [(true, "CQ DE")]);
@@ -227,8 +218,6 @@ mod tests {
         assert_eq!(runs("A%"), [(true, "A"), (false, "%")]);
     }
 
-    /// A run is split on a byte index that has to be a character boundary, or
-    /// laying out a message with anything but ASCII in it would panic.
     #[test]
     fn runs_are_split_on_character_boundaries() {
         assert_eq!(runs("あA"), [(false, "あ"), (true, "A")]);

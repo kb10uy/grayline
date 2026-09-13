@@ -18,8 +18,6 @@ const SLIDER_VALUE_WIDTH: f32 = 52.0;
 const MINIMUM_SLIDER_WIDTH: f32 = 32.0;
 
 pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
-    // The sections below can outgrow the panel's height on a small window or
-    // a large font scale; scroll rather than silently clipping the bottom.
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add_space(4.0);
         let tuning_title = app.i18n.text("section-tuning");
@@ -149,8 +147,6 @@ fn squelch_row(ui: &mut Ui, app: &mut App, changed: &mut bool) {
     let hint = app.i18n.text("hint-squelch");
     ui.horizontal(|ui| {
         field_label(ui, &label);
-        // The slider takes the rest of the row less the box its own reading is
-        // written in, so it ends where the fields above it end.
         ui.spacing_mut().slider_width = (ui.available_width() - SLIDER_VALUE_WIDTH).max(MINIMUM_SLIDER_WIDTH);
         let slider = egui::Slider::new(&mut app.squelch_threshold, MINIMUM_SQUELCH..=MAXIMUM_SQUELCH)
             .fixed_decimals(2)
@@ -214,8 +210,6 @@ fn transmit_controls(ui: &mut Ui, app: &mut App) {
     let level_label = app.i18n.text("label-level");
     ui.horizontal(|ui| {
         field_label(ui, &level_label);
-        // The slider is given the rest of the row the way every other field in
-        // the panel is, rather than the fixed width a slider asks for.
         ui.spacing_mut().slider_width = ui.available_width();
         ui.add(
             egui::Slider::new(&mut app.tx_level, MINIMUM_TX_LEVEL..=MAXIMUM_TX_LEVEL)
@@ -255,14 +249,8 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
         ui.horizontal(|ui| {
             field_label(ui, &label);
             let id = Id::new(salt);
-            // The same filter the message field runs: what is typed here is
-            // typed to be sent, through whichever macro reads it.
             crate::ui::input::sanitize(ui.ctx(), id);
             let height = ui.spacing().interact_size.y;
-            // The callsign row gives up the width of the button beside it,
-            // which sits there rather than in a menu: what the directory holds
-            // is about the station on the air right now, and this is where
-            // that station is named.
             let width = if index == 0 { fields - height - gap } else { fields };
             let target = match index {
                 0 => &mut app.contact.callsign,
@@ -274,8 +262,6 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
             let response = ui.add_sized([width, height], egui::TextEdit::singleline(target).id(id));
             finished |= response.lost_focus();
             if index == 0 {
-                // Offered only for text that is a callsign: there is nothing
-                // to look up under half of one.
                 let known = grayline_qso::normalize_callsign(&app.contact.callsign).is_some();
                 opening = ui
                     .add_enabled(known, egui::Button::new("\u{2026}"))
@@ -300,8 +286,6 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
     if pressed {
         app.clear_contact();
     }
-    // Leaving the callsign field is what commits it, which is what asks the
-    // directory about the station.
     if finished {
         app.finish_contact_edit();
     }
@@ -310,8 +294,6 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// Opening the display, throwing away what was printed, and telling the
-/// framing to start again.
 fn actions(ui: &mut Ui, app: &mut App) {
     let scope = app.i18n.text("action-scope");
     let open = app.scope.is_open();

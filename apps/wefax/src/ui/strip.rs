@@ -115,11 +115,7 @@ impl Strip {
         let first = self.lines;
         self.lines += update.lines();
 
-        if self.grow(ctx) {
-            // A new texture holds nothing, so what it shows has to be written
-            // in full rather than continued.
-            self.redraw(ctx);
-        } else if update.replaces_all || update.first_line == 0 {
+        if self.grow(ctx) || update.replaces_all || update.first_line == 0 {
             self.redraw(ctx);
         } else {
             self.upload(ctx, first, self.lines);
@@ -136,8 +132,6 @@ impl Strip {
             return false;
         }
         self.capacity = wanted;
-        // Black rather than transparent: the strip is a picture, and the part
-        // of it that has not arrived is the part that has not been exposed.
         let blank = ColorImage::new(
             [self.capacity, self.width],
             vec![Color32::BLACK; self.capacity * self.width],
@@ -146,7 +140,6 @@ impl Strip {
         true
     }
 
-    /// Writes every column the strip still holds.
     fn redraw(&mut self, ctx: &Context) {
         let first = self.lines.saturating_sub(self.capacity);
         self.upload(ctx, first, self.lines);
@@ -183,7 +176,6 @@ impl Strip {
         let (rect, _) = ui.allocate_exact_size(available, Sense::hover());
         ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
         let (Some(texture), true) = (self.texture.as_ref(), self.width > 0 && self.lines > 0) else {
-            // Nothing has been received, so the space says what it is for.
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
@@ -263,8 +255,6 @@ mod tests {
         assert_eq!(strip.gray().len(), 5 * 8);
     }
 
-    /// A correction rewrites the lines already drawn, so what it carries
-    /// replaces the strip rather than being appended to it.
     #[test]
     fn a_redraw_replaces_everything() {
         let ctx = Context::default();
@@ -275,8 +265,6 @@ mod tests {
         assert_eq!(strip.gray().len(), 2 * 8);
     }
 
-    /// Columns that do not continue from where the last ones ended cannot be
-    /// placed, so they are refused rather than drawn in the wrong column.
     #[test]
     fn a_gap_in_the_columns_is_refused() {
         let ctx = Context::default();
@@ -286,7 +274,6 @@ mod tests {
         assert_eq!(strip.lines(), 3);
     }
 
-    /// A new geometry is a new picture, so nothing of the last one is kept.
     #[test]
     fn a_new_line_length_starts_the_strip_over() {
         let ctx = Context::default();
@@ -320,12 +307,9 @@ mod tests {
     /// mirroring, and a mirrored weather chart cannot be read.
     #[test]
     fn a_line_becomes_a_column_with_its_start_at_the_bottom() {
-        // Two lines of three pixels: 0 1 2 / 3 4 5.
         let gray = [0_u8, 1, 2, 3, 4, 5];
         let image = rotate(&gray, 3, 0, 2);
         assert_eq!(image.size, [2, 3]);
-        // The top row of the image is the last pixel of each line, and the
-        // bottom row is the first, so a line reads bottom to top.
         assert_eq!(image.pixels[0], Color32::from_gray(2));
         assert_eq!(image.pixels[1], Color32::from_gray(5));
         assert_eq!(image.pixels[4], Color32::from_gray(0));

@@ -7,7 +7,6 @@ pub mod audio;
 pub mod contact;
 pub mod receive;
 pub mod transmit;
-pub mod wav;
 
 use std::sync::Mutex;
 

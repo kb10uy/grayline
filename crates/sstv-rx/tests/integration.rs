@@ -57,11 +57,6 @@ fn fsk_id_signal(samples: &mut Vec<f32>, rate: u32, phase: &mut f64) {
     tone(samples, rate, 2_100.0, 0.1, phase);
 }
 
-/// Transmits a vertical edge and checks where the decoded raster puts it.
-///
-/// This is the end-to-end statement of horizontal alignment: the modulated
-/// audio, the demodulator's own group delay, and the decoder's raster phase
-/// all have to agree before a picture stops sliding off one side.
 #[rstest]
 #[case(Mode::Martin1, 48_000)]
 #[case(Mode::Martin2, 48_000)]
@@ -195,9 +190,6 @@ fn raster_epoch_error_ms(mode: Mode, rate: u32) -> f64 {
     error * 1_000.0 / f64::from(rate)
 }
 
-/// A reception that read its header knows the raster phase already, so the
-/// first row has to appear about one line period after the header rather than
-/// after the several periods the headerless startup buffer spans.
 #[rstest]
 #[case(Mode::Martin2, 8_000)]
 #[case(Mode::Scottie2, 8_000)]
@@ -306,9 +298,6 @@ fn strict_detection_requires_the_leaders() {
     assert_eq!(without_leaders.mode(), None);
 }
 
-/// The old detector demanded strict tone dominance on every sample of both
-/// leaders, so channel noise that flipped a single sample lost the header.
-/// Detection now has to survive noise a header remains legible through.
 #[test]
 fn detects_a_header_through_noise() {
     let rate = 8_000;
@@ -325,9 +314,6 @@ fn detects_a_header_through_noise() {
     assert_eq!(output.mode(), Mode::Martin1);
 }
 
-/// A station that starts over sends a second header while the picture it
-/// abandoned is still being decoded. Reading it is the only way the new
-/// mode is known outright, so the front end has to keep listening for one.
 #[test]
 fn a_header_starts_the_reception_over_when_restarts_are_enabled() {
     let rate = 8_000;
@@ -357,8 +343,6 @@ fn a_header_starts_the_reception_over_when_restarts_are_enabled() {
     );
 }
 
-/// An offline decode of one transmission keeps the mode it identified, so
-/// the restart cannot be something a caller gets without asking.
 #[test]
 fn a_second_header_is_ignored_by_default() {
     let rate = 8_000;
@@ -478,8 +462,6 @@ fn detects_trailing_jl1his_fskid() {
     assert_eq!(output.fsk_ids()[0].as_str(), "JL1HIS");
 }
 
-/// The transmit encoder and the receive front end agree about the contest
-/// record as well as about the identifier it follows.
 #[rstest]
 #[case("001")]
 #[case("13H")]

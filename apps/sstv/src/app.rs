@@ -36,7 +36,7 @@ use crate::{
         Waker,
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
-        contact::{ContactPaths, ContactSnapshot, ContactWorker},
+        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         receive::{Frame, RxProgress},
         rig::{Reading, RigSnapshot, RigState, RigWorker, script},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
@@ -49,7 +49,6 @@ use crate::storage::library::{LibraryScan, stock_entries, template_entries};
 
 const PLAYBACK_QUEUE_SAMPLES: usize = 48_000;
 
-/// How often the interface draws while it is showing something that moves.
 const LIVE_INTERVAL: Duration = Duration::from_millis(33);
 
 const COMPOSE_POLL: Duration = Duration::from_millis(100);
@@ -535,7 +534,7 @@ impl App {
             device_fault: None,
             ui_scale: shared.ui_scale,
             rig: settings.rig.clone(),
-            contact: ContactWorker::spawn(&settings.contact, &contact_paths, waker.clone()),
+            contact: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
             contact_draft: Vec::new(),
@@ -905,7 +904,7 @@ impl App {
             return;
         }
         self.contact_settings.lookup = lookup;
-        self.contact = ContactWorker::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+        self.contact = contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
         self.contact_snapshot = ContactSnapshot::default();
         self.contact_requested.clear();
         self.look_up_contact();
@@ -929,7 +928,6 @@ impl App {
         self.report_written(written);
     }
 
-    /// Takes up what the directory answered, composing again when it differs.
     fn poll_contact(&mut self) {
         let latest = self.contact.latest();
         let changed = latest.fields != self.contact_snapshot.fields;
@@ -1159,8 +1157,6 @@ impl App {
         if self.library_scan.is_some() {
             at_most(COMPOSE_POLL);
         }
-        // A composed frame that prints the clock stops being what a
-        // transmission should send as the minute turns.
         if self.composition.shows_clock {
             at_most(Duration::from_secs(
                 60 - Timestamp::now().as_second().rem_euclid(60) as u64,
@@ -1203,8 +1199,6 @@ impl App {
         self.audio.set_vis_restart(self.vis_restart);
         self.audio.set_vis_strict(self.vis_strict);
         self.tx_gain.set_travel(self.tx_volume);
-        // A detected mode only takes over the selection while automatic
-        // detection is on; otherwise it would undo the operator's choice.
         if self.auto_mode
             && let Some(mode) = self.audio.snapshot().mode
         {
@@ -1408,8 +1402,6 @@ impl App {
     /// call, not the one left over from the previous contact. Only an arrival
     /// writes, so the field stays editable between receptions.
     fn adopt_decoded_callsign(&mut self) {
-        // The count is compared before anything is copied: this runs on every
-        // frame, and the list is the same one on almost all of them.
         let decoded = self.audio.snapshot().callsigns.len();
         if decoded == self.adopted_callsigns {
             return;
@@ -1540,8 +1532,6 @@ impl App {
         match self.tab {
             Tab::Receive => self.audio.snapshot().display_fraction,
             Tab::Transmit => {
-                // A tone sends no picture, so the one on the tab is not being
-                // drawn out and stays whole while it goes out.
                 if self.tx_snapshot.phase.is_active() && !self.is_tuning() {
                     self.tx_progress().fraction()
                 } else {
@@ -1722,9 +1712,6 @@ impl App {
     }
 
     pub fn transmit_problem(&self) -> Option<String> {
-        // The tone holds the stream and the rig, so a picture cannot start over
-        // one; it is reported ahead of everything else because it is the only
-        // problem here the operator ends by pressing the button beside it.
         if self.is_tuning() {
             return Some(self.i18n.text("error-tone-active"));
         }
@@ -1744,8 +1731,6 @@ impl App {
         if self.audio.output_device.is_none() {
             return Some(self.i18n.text("error-no-output-device"));
         }
-        // Reported last, because it is the only problem here the operator can
-        // decide not to have: switching rig control off transmits anyway.
         self.rig_problem()
     }
 
@@ -1914,8 +1899,6 @@ impl App {
         self.tune_until = None;
         self.unkey_rig();
         self.tx_snapshot.phase = phase;
-        // Whatever was chosen while the transmission was running takes effect
-        // now that nothing is being sent.
         if self.composition.deferred {
             self.composition.deferred = false;
             self.request_composition();

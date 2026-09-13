@@ -411,8 +411,6 @@ mod tests {
 
     use super::*;
 
-    /// The window a mode's rows occupy is narrower than the transmission, so
-    /// the same played position means different things at either edge.
     #[rstest]
     #[case(0, TxProgress::Leader)]
     #[case(99, TxProgress::Leader)]
@@ -445,9 +443,6 @@ mod tests {
         assert_eq!(progress.fraction(), expected);
     }
 
-    /// A fader that scaled amplitude directly would spend its top half on
-    /// levels that all sound alike, so half travel has to be an audible step
-    /// down rather than half as loud.
     #[rstest]
     #[case(-1.0, 0.0)]
     #[case(0.0, 0.0)]
@@ -468,8 +463,6 @@ mod tests {
         assert_eq!(gain.get(), 0.25);
     }
 
-    /// The level scales what actually leaves for the sound card, rather than
-    /// only the bar the operator drags.
     #[test]
     fn the_transmit_level_scales_the_generated_audio() {
         let mode = Mode::Robot36;
@@ -497,8 +490,6 @@ mod tests {
         assert_eq!(gain.get(), 0.0);
     }
 
-    /// The tone is the frequency the button is captioned with, and it keeps
-    /// coming rather than running out the way a picture does.
     #[test]
     fn the_tune_worker_sends_a_steady_tone_at_the_frequency_it_was_given() {
         let sample_rate_hz = 8_000;
@@ -555,7 +546,6 @@ mod tests {
                 assert_eq!(snapshot.generated_samples, snapshot.total_samples);
                 let raster = snapshot.raster;
                 assert_eq!(raster.rows, usize::from(mode.spec().active_rows()));
-                // The leader precedes the window and the identifier follows it.
                 assert!(raster.start_samples > 0);
                 assert!(raster.start_samples + raster.samples < snapshot.total_samples);
                 break;

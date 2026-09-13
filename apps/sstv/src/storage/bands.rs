@@ -37,8 +37,6 @@ impl BandValue {
             Value::Integer(number) => Some(Self::Integer(*number.value())),
             Value::Float(number) => Some(Self::Decimal(*number.value())),
             Value::Boolean(flag) => Some(Self::Flag(*flag.value())),
-            // An array or an inline table has no shape the script has been
-            // promised, so it is dropped rather than guessed at.
             _ => None,
         }
     }
@@ -205,7 +203,6 @@ mod tests {
     #[case(7_000_000, Some("40m"))]
     #[case(7_300_000, Some("40m"))]
     #[case(14_230_000, Some("20m"))]
-    // Between the bands, which is where a rig tuned to a broadcast sits.
     #[case(6_000_000, None)]
     #[case(0, None)]
     fn a_frequency_names_the_band_it_sits_in(#[case] frequency_hz: u64, #[case] expected: Option<&str>) {
@@ -216,8 +213,6 @@ mod tests {
         );
     }
 
-    /// What to do on a band is the script's, so a setting this module
-    /// understood would be one the script could not add to.
     #[test]
     fn every_setting_but_the_range_is_carried_through_untouched() {
         let plan = BandPlan::parse(concat!(
@@ -242,7 +237,6 @@ mod tests {
         );
         assert_eq!(band.settings.get("monitor-gain"), Some(&BandValue::Decimal(0.15)));
         assert_eq!(band.settings.get("amplifier"), Some(&BandValue::Flag(true)));
-        // The range is the application's and is not repeated as a setting.
         assert!(!band.settings.contains_key("low"));
         assert!(!band.settings.contains_key("name"));
     }
@@ -264,7 +258,6 @@ mod tests {
         assert!(BandPlan::parse("[[bands]\n").is_err());
     }
 
-    /// The buttons move by whole hertz, so a step of nothing is no step.
     #[rstest]
     #[case("step = 1000", Some(1_000))]
     #[case("step = 0", None)]
