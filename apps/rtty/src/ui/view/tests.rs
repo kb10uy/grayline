@@ -207,10 +207,8 @@ fn the_message_on_the_air_and_the_queue_are_both_drawn() {
 #[test]
 fn sent_text_is_printed_with_the_received_text() {
     let mut app = App::headless();
-    app.columns[0].push_str("CQ DE JA1ZZZ K
-");
+    app.columns[0].push_str("CQ DE JA1ZZZ K\r\n");
     app.columns[0].push_sent("JA1ZZZ DE JL1HIS");
     let harness = render(&mut app);
-    harness.get_by_label("CQ DE JA1ZZZ K
-JA1ZZZ DE JL1HIS");
+    harness.get_by_label("CQ DE JA1ZZZ K\nJA1ZZZ DE JL1HIS");
 }

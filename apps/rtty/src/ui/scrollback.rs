@@ -282,35 +282,17 @@ mod tests {
     #[test]
     fn sent_and_received_text_are_kept_apart_in_one_transcript() {
         let mut scrollback = Scrollback::default();
-        scrollback.push_str(
-            "CQ DE JA1ZZZ K
-",
-        );
-        scrollback.push_sent(
-            "JA1ZZZ DE JL1HIS
-",
-        );
+        scrollback.push_str("CQ DE JA1ZZZ K\n");
+        scrollback.push_sent("JA1ZZZ DE JL1HIS\n");
         scrollback.push_str("R R");
 
-        assert_eq!(
-            scrollback.text(),
-            "CQ DE JA1ZZZ K
-JA1ZZZ DE JL1HIS
-R R"
-        );
+        assert_eq!(scrollback.text(), "CQ DE JA1ZZZ K\nJA1ZZZ DE JL1HIS\nR R");
         assert_eq!(
             scrollback.runs(),
             [
-                (
-                    false,
-                    "CQ DE JA1ZZZ K
-"
-                ),
+                (false, "CQ DE JA1ZZZ K\n"),
                 (true, "JA1ZZZ DE JL1HIS"),
-                (
-                    false, "
-R R"
-                ),
+                (false, "\nR R"),
             ]
         );
     }
@@ -339,10 +321,7 @@ R R"
     fn sent_runs_follow_the_text_when_the_oldest_lines_are_dropped() {
         let mut scrollback = Scrollback::default();
         for line in 0..LINE_LIMIT * 2 {
-            scrollback.push_str(&format!(
-                "{line}
-"
-            ));
+            scrollback.push_str(&format!("{line}\n"));
         }
         scrollback.push_sent("DE JL1HIS");
 
@@ -361,10 +340,7 @@ R R"
     fn sent_text_stays_marked_through_a_trim() {
         let mut scrollback = Scrollback::default();
         for line in 0..LINE_LIMIT * 2 {
-            scrollback.push_sent(&format!(
-                "{line}
-"
-            ));
+            scrollback.push_sent(&format!("{line}\n"));
         }
         let printed = scrollback.text().replace('\n', "");
         let marked: String = scrollback
@@ -401,22 +377,8 @@ R R"
     /// word at the start of the next are two words.
     #[test]
     fn a_line_break_ends_a_word() {
-        assert_eq!(
-            word_at(
-                "JA1ZZZ
-DE",
-                0
-            ),
-            Some("JA1ZZZ")
-        );
-        assert_eq!(
-            word_at(
-                "JA1ZZZ
-DE",
-                7
-            ),
-            Some("DE")
-        );
+        assert_eq!(word_at("JA1ZZZ\nDE", 0), Some("JA1ZZZ"));
+        assert_eq!(word_at("JA1ZZZ\nDE", 7), Some("DE"));
     }
 
     #[test]

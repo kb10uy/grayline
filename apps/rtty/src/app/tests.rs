@@ -285,9 +285,7 @@ fn a_message_holding_an_unsendable_character_cannot_be_sent() {
 fn an_empty_draft_is_nothing_to_send() {
     let mut app = App::headless();
     assert!(!app.can_send());
-    app.transmit.draft = "   
-"
-    .to_owned();
+    app.transmit.draft = "   \n".to_owned();
     assert!(!app.can_send());
 }
 
@@ -314,12 +312,7 @@ fn stopping_returns_queued_messages_to_the_draft() {
 
     app.abort_transmission();
 
-    assert_eq!(
-        app.transmit.draft,
-        "FIRST
-SECOND
-TYPING"
-    );
+    assert_eq!(app.transmit.draft, "FIRST\nSECOND\nTYPING");
     assert!(!app.transmit.is_busy());
 }
 
@@ -409,9 +402,7 @@ fn a_sending_macro_does_not_disturb_the_draft() {
     let mut app = App::headless();
     app.macros = vec![crate::app::macros::Macro {
         label: "RY".to_owned(),
-        text: "RYRY
-"
-        .to_owned(),
+        text: "RYRY\n".to_owned(),
         send: true,
     }];
     app.transmit.draft = "HALF WRITTEN".to_owned();
@@ -432,19 +423,11 @@ fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
     app.station.callsign = "jl1his".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CQ".to_owned(),
-        text: "cq de ${station.callsign}
-"
-        .to_owned(),
+        text: "cq de ${station.callsign}\n".to_owned(),
         send: false,
     }];
 
-    assert_eq!(
-        app.expand_macro(0).as_deref(),
-        Some(
-            "CQ DE JL1HIS
-"
-        )
-    );
+    assert_eq!(app.expand_macro(0).as_deref(), Some("CQ DE JL1HIS\n"));
 }
 
 #[test]
@@ -487,10 +470,6 @@ fn a_message_that_cannot_be_started_is_given_back() {
     app.poll_workers();
 
     assert!(!app.transmit.is_busy());
-    assert_eq!(
-        app.transmit.draft,
-        "FIRST
-SECOND"
-    );
+    assert_eq!(app.transmit.draft, "FIRST\nSECOND");
     assert!(app.notice.is_some());
 }
