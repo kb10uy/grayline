@@ -13,6 +13,7 @@ menu-language = 言語
 menu-manual = マニュアル
 
 input-device = 入力デバイス
+output-device = 出力デバイス
 
 section-tuning = 同調
 section-squelch = スケルチ
@@ -38,6 +39,7 @@ case-figures = 数字
 
 status-audio = { $rate } Hz
 status-no-audio = 入力デバイスなし
+status-no-output = 出力デバイスなし
 status-dropped = { $samples } サンプル欠落
 status-reading = 読み込み中
 
@@ -49,3 +51,20 @@ error-device-lost = 入力デバイスが停止しました
 error-open-folder = フォルダーを開けませんでした
 error-open-manual = マニュアルをブラウザーで開けませんでした
 error-wav = 録音を読み込めませんでした
+
+label-on-air = 送信中
+label-queued = 送信待ち
+label-level = 出力
+
+action-send = 送信
+action-stop = 中止
+
+status-remaining = 残り { $seconds } 秒
+
+hint-draft = ここに本文を入力します。Enter で改行、Ctrl+Enter で送信します。
+hint-stop = 送信を中止し、送り終えていない部分を本文に戻します
+hint-drop-queued = この本文を送信待ちから外します
+hint-unsendable = { $character } はボドー符号にありません。取り除いてから送信してください。
+
+error-no-output = 出力デバイスが選択されていません
+error-underrun = サウンドカードへの供給が間に合わず、送信内容に欠落が生じました

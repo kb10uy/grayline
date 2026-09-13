@@ -251,3 +251,118 @@ fn a_settings_change_is_persisted_once() {
     app.persist();
     assert_eq!(app.saved.baud, 50.0);
 }
+
+/// Nothing may key a rig that has nowhere to key into, and the operator is
+/// told why rather than left pressing a button that does nothing.
+#[test]
+fn a_message_cannot_be_sent_without_an_output_device() {
+    let mut app = App::headless();
+    app.transmit.draft = "CQ DE JL1HIS".to_owned();
+    assert!(app.audio.output_device.is_none());
+
+    assert!(!app.can_send());
+    app.send_draft();
+
+    assert_eq!(app.transmit.queued().len(), 0);
+    assert!(app.notice.is_some());
+}
+
+/// A character that came in by paste holds the send button until it is gone,
+/// rather than being dropped on its way to the air.
+#[test]
+fn a_message_holding_an_unsendable_character_cannot_be_sent() {
+    let mut app = App::headless();
+    app.transmit.draft = "100% COPY".to_owned();
+
+    assert_eq!(app.unsendable_character(), Some('%'));
+    assert!(!app.can_send());
+
+    app.transmit.draft = "100 PERCENT COPY".to_owned();
+    assert_eq!(app.unsendable_character(), None);
+}
+
+#[test]
+fn an_empty_draft_is_nothing_to_send() {
+    let mut app = App::headless();
+    assert!(!app.can_send());
+    app.transmit.draft = "   
+"
+    .to_owned();
+    assert!(!app.can_send());
+}
+
+/// Stopping when nothing is going out must not disturb what the operator is
+/// in the middle of writing.
+#[test]
+fn stopping_with_nothing_on_the_air_leaves_the_draft_alone() {
+    let mut app = App::headless();
+    app.transmit.draft = "HALF WRITTEN".to_owned();
+
+    app.abort_transmission();
+
+    assert_eq!(app.transmit.draft, "HALF WRITTEN");
+}
+
+/// What was queued but never keyed comes back in front of whatever the
+/// operator had started writing since.
+#[test]
+fn stopping_returns_queued_messages_to_the_draft() {
+    let mut app = App::headless();
+    app.transmit.queue("FIRST".to_owned());
+    app.transmit.queue("SECOND".to_owned());
+    app.transmit.draft = "TYPING".to_owned();
+
+    app.abort_transmission();
+
+    assert_eq!(
+        app.transmit.draft,
+        "FIRST
+SECOND
+TYPING"
+    );
+    assert!(!app.transmit.is_busy());
+}
+
+/// The transmitter is built from the panel the receiver is tuned with, so a
+/// station worked on one frequency is answered on it.
+#[test]
+fn the_transmitter_follows_the_tuning_panel() {
+    let mut app = App::headless();
+    app.mark_hz = 1_275.0;
+    app.shift_hz = 170.0;
+    app.baud = 75.0;
+    app.reverse = true;
+
+    let config = app.tx_config();
+
+    assert_eq!(config.tones, app.tones());
+    assert_eq!(config.framing.baud.bits_per_second(), 75.0);
+    assert!(config.reverse);
+    assert!(config.tx_unshift_on_space);
+}
+
+/// A level at the bottom of its travel is a quiet transmitter rather than one
+/// that cannot be built at all.
+#[rstest]
+#[case(0.0)]
+#[case(0.5)]
+#[case(1.0)]
+fn every_level_produces_a_transmitter_that_can_be_built(#[case] level: f64) {
+    let mut app = App::headless();
+    app.tx_level = level;
+    let config = app.tx_config();
+    assert!(config.amplitude > 0.0);
+    assert!(grayline_rtty::Transmitter::new(core::iter::empty(), 48_000, config).is_ok());
+}
+
+#[test]
+fn the_transmit_level_is_stored_and_read_back() {
+    let mut app = App::headless();
+    app.tx_level = 0.25;
+    app.tx_unshift_on_space = false;
+
+    let settings = app.settings();
+
+    assert_eq!(settings.tx_level, 0.25);
+    assert!(!settings.tx_unshift_on_space);
+}

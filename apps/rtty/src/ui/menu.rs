@@ -31,6 +31,7 @@ pub use in_window::MenuHost;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
     SelectDevice(String),
+    SelectOutputDevice(String),
     SelectLocale(Locale),
     ToggleUnshiftOnSpace,
     ToggleAtc,
@@ -106,6 +107,10 @@ pub fn model(app: &App) -> Vec<Menu> {
                     label: text("input-device"),
                     items: device_items(app),
                 },
+                Item::Submenu {
+                    label: text("output-device"),
+                    items: output_device_items(app),
+                },
                 Item::Separator,
                 // What is set once and left alone. Everything worked while
                 // listening is on the panel instead.
@@ -177,6 +182,22 @@ fn device_items(app: &App) -> Vec<Item> {
         .collect()
 }
 
+fn output_device_items(app: &App) -> Vec<Item> {
+    if app.audio.output_devices.is_empty() {
+        return vec![Item::Pending(app.i18n.text("status-no-output"))];
+    }
+    let selected = app.audio.output_device.as_ref().map(|device| device.name());
+    app.audio
+        .output_devices
+        .iter()
+        .map(|device| Item::Check {
+            label: device.name().to_owned(),
+            checked: selected == Some(device.name()),
+            action: Action::SelectOutputDevice(device.name().to_owned()),
+        })
+        .collect()
+}
+
 fn locale_items(app: &App) -> Vec<Item> {
     Locale::ALL
         .into_iter()
@@ -194,6 +215,7 @@ fn locale_items(app: &App) -> Vec<Item> {
 pub fn apply(app: &mut App, action: Action) -> bool {
     match action {
         Action::SelectDevice(name) => app.select_device_named(&name),
+        Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),
         Action::ToggleUnshiftOnSpace => {
             app.unshift_on_space = !app.unshift_on_space;

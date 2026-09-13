@@ -30,6 +30,10 @@ pub const BAUD_RATES: [f64; 5] = [45.45, 50.0, 56.88, 75.0, 100.0];
 pub const MINIMUM_SQUELCH: f64 = 0.0;
 pub const MAXIMUM_SQUELCH: f64 = 1.0;
 
+/// Bounds on the transmit level, as fader travel.
+pub const MINIMUM_TX_LEVEL: f64 = 0.0;
+pub const MAXIMUM_TX_LEVEL: f64 = 1.0;
+
 /// Everything the application remembers between sessions.
 ///
 /// The language and the interface scale are not here: they are the same in
@@ -38,6 +42,8 @@ pub const MAXIMUM_SQUELCH: f64 = 1.0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub device: Option<String>,
+    /// Where a transmission is played out.
+    pub output_device: Option<String>,
     /// The tone a mark is heard at; space sits `shift_hz` above it.
     pub mark_hz: f64,
     pub shift_hz: f64,
@@ -49,12 +55,17 @@ pub struct Settings {
     pub squelch_threshold: f64,
     pub unshift_on_space: bool,
     pub atc: bool,
+    /// Whether a transmission re-announces figures after a space.
+    pub tx_unshift_on_space: bool,
+    /// Transmit level, as fader travel in `0..=1`.
+    pub tx_level: f64,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             device: None,
+            output_device: None,
             mark_hz: 2_125.0,
             shift_hz: 170.0,
             baud: 45.45,
@@ -72,6 +83,12 @@ impl Default for Settings {
             squelch_threshold: 0.25,
             unshift_on_space: true,
             atc: false,
+            // On, unlike the receive setting's counterpart in MMTTY, because
+            // this one is about the station being sent to: a receiver running
+            // unshift-on-space prints a figures group after a space as
+            // letters unless the transmission says otherwise.
+            tx_unshift_on_space: true,
+            tx_level: 0.95,
         }
     }
 }
@@ -86,6 +103,11 @@ impl Settings {
         self.shift_hz = self.shift_hz.clamp(SHIFTS_HZ[0], SHIFTS_HZ[SHIFTS_HZ.len() - 1]);
         self.baud = self.baud.clamp(BAUD_RATES[0], BAUD_RATES[BAUD_RATES.len() - 1]);
         self.squelch_threshold = self.squelch_threshold.clamp(MINIMUM_SQUELCH, MAXIMUM_SQUELCH);
+        self.tx_level = if self.tx_level.is_finite() {
+            self.tx_level.clamp(MINIMUM_TX_LEVEL, MAXIMUM_TX_LEVEL)
+        } else {
+            Self::default().tx_level
+        };
         self
     }
 }
@@ -168,10 +190,12 @@ impl Config {
             return;
         }
         let table = self.document.as_table_mut();
-        match &settings.device {
-            Some(device) => table["device"] = value(device.as_str()),
-            None => {
-                table.remove("device");
+        for (key, name) in [("device", &settings.device), ("output_device", &settings.output_device)] {
+            match name {
+                Some(name) => table[key] = value(name.as_str()),
+                None => {
+                    table.remove(key);
+                }
             }
         }
         table["mark_hz"] = value(settings.mark_hz);
@@ -183,6 +207,8 @@ impl Config {
         table["squelch_threshold"] = value(settings.squelch_threshold);
         table["unshift_on_space"] = value(settings.unshift_on_space);
         table["atc"] = value(settings.atc);
+        table["tx_unshift_on_space"] = value(settings.tx_unshift_on_space);
+        table["tx_level"] = value(settings.tx_level);
 
         if let Err(error) = fs::write(&path, self.document.to_string()) {
             log::note(&format!("could not save {}: {error}", path.display()));
@@ -200,8 +226,13 @@ fn read(document: &DocumentMut) -> Settings {
     let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
-    if let Some(device) = get("device").and_then(|value| value.as_str()) {
-        settings.device = Some(device.to_owned());
+    for (key, target) in [
+        ("device", &mut settings.device),
+        ("output_device", &mut settings.output_device),
+    ] {
+        if let Some(name) = get(key).and_then(|value| value.as_str()) {
+            *target = Some(name.to_owned());
+        }
     }
     // Written as floats, because a shift and a speed are: read as either, so
     // a hand-edited `shift_hz = 170` is not thrown away for having no point
@@ -211,6 +242,7 @@ fn read(document: &DocumentMut) -> Settings {
         ("shift_hz", &mut settings.shift_hz),
         ("baud", &mut settings.baud),
         ("squelch_threshold", &mut settings.squelch_threshold),
+        ("tx_level", &mut settings.tx_level),
     ] {
         if let Some(number) = get(key).and_then(number) {
             *target = number;
@@ -222,6 +254,7 @@ fn read(document: &DocumentMut) -> Settings {
         ("squelch", &mut settings.squelch),
         ("unshift_on_space", &mut settings.unshift_on_space),
         ("atc", &mut settings.atc),
+        ("tx_unshift_on_space", &mut settings.tx_unshift_on_space),
     ] {
         if let Some(flag) = get(key).and_then(|value| value.as_bool()) {
             *target = flag;
@@ -262,6 +295,7 @@ mod tests {
         let path = root.path().join("config.toml");
         let wanted = Settings {
             device: Some("Line In".to_owned()),
+            output_device: Some("Line Out".to_owned()),
             mark_hz: 1_275.0,
             shift_hz: 850.0,
             baud: 75.0,
@@ -271,6 +305,8 @@ mod tests {
             squelch_threshold: 0.4,
             unshift_on_space: false,
             atc: true,
+            tx_unshift_on_space: false,
+            tx_level: 0.5,
         };
         Config::load(path.clone()).0.save(&wanted);
 

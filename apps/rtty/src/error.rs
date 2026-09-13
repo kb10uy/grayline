@@ -23,6 +23,12 @@ pub enum AppError {
     },
     #[error("reception could not be restarted after a capture overrun")]
     CaptureRestartFailed,
+    /// There is nothing to play a transmission out of.
+    #[error("no output device is available")]
+    NoOutputDevice,
+    /// A transmission was asked to start on a stream that is no longer open.
+    #[error("the playback stream is closed")]
+    PlaybackClosed,
     /// A recording could not be opened or read.
     #[error("{0}")]
     Wav(String),

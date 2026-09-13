@@ -3,11 +3,10 @@
 //!
 //! The panels are claimed in the order egui makes load-bearing: the status bar
 //! first so it runs the full width, then the settings panel so it runs the
-//! full height above it, and the text last, taking whatever is left. The
-//! transmit area will be claimed between the two, which is why the settings
-//! panel is not the last fixed one.
+//! full height above it, then the transmit area along the bottom of what is
+//! left, and the received text last, taking the rest.
 
-use egui::{Align, Color32, ComboBox, Id, Layout, Panel, RichText, Ui};
+use egui::{Align, Color32, ComboBox, Id, Layout, Panel, RichText, TextStyle, Ui};
 
 use grayline_rtty::code::Case;
 
@@ -22,9 +21,11 @@ use crate::{
 
 mod panels;
 mod status_bar;
+mod transmit;
 
 use panels::side_panel;
 use status_bar::status_bar;
+use transmit::transmit_panel;
 
 /// Fixed and exact, for the reason recorded beside the SSTV application's own
 /// side panel: everything in it is laid out from the width it is given, and a
@@ -57,6 +58,13 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
         .resizable(false)
         .exact_size(SIDE_PANEL_WIDTH)
         .show(ui, |ui| side_panel(ui, app));
+    // Claimed after the side panel so the settings run the full height beside
+    // it, and before the central panel so the text takes what is left.
+    Panel::bottom(Id::new("transmit-panel"))
+        .resizable(true)
+        .default_size(transmit::DEFAULT_HEIGHT)
+        .min_size(transmit::MINIMUM_HEIGHT)
+        .show(ui, |ui| transmit_panel(ui, app));
     egui::CentralPanel::default().show(ui, |ui| columns(ui, app));
     activated
 }

@@ -1,6 +1,13 @@
-//! The received text, and the pane it is printed in.
+//! The text of a contact, and the pane it is printed in.
+//!
+//! What was sent is printed here beside what was received, in a colour of its
+//! own. A contact is one exchange rather than two, and reading it back from a
+//! pane that held only half of it would mean reading it against a transmit
+//! window that had already been cleared for the next message.
 
-use egui::{Align, FontId, Layout, RichText, ScrollArea, TextStyle, Ui};
+use core::ops::Range;
+
+use egui::{Align, Color32, FontId, Layout, ScrollArea, TextFormat, TextStyle, Ui, Visuals, text::LayoutJob};
 
 /// How many lines one decode path keeps.
 ///
@@ -19,6 +26,12 @@ pub const LINE_LIMIT: usize = 500;
 #[derive(Clone, Debug, Default)]
 pub struct Scrollback {
     text: String,
+    /// Where the text this station sent sits, as byte ranges into `text`.
+    ///
+    /// Ranges rather than a second buffer, because the pane draws one
+    /// paragraph: a transcript assembled from pieces on every frame would be
+    /// laid out again every frame.
+    sent: Vec<Range<usize>>,
     /// Whether the characters seen since the last printable one asked for a
     /// new line.
     ///
@@ -33,11 +46,21 @@ impl Scrollback {
     /// Prints what a decode path decoded.
     pub fn push_str(&mut self, text: &str) {
         for character in text.chars() {
-            self.push(character);
+            self.push(character, false);
         }
     }
 
-    fn push(&mut self, character: char) {
+    /// Prints what this station has actually put on the air.
+    ///
+    /// Fed from the played position rather than from the message, so the
+    /// transcript reads in the order the band heard it.
+    pub fn push_sent(&mut self, text: &str) {
+        for character in text.chars() {
+            self.push(character, true);
+        }
+    }
+
+    fn push(&mut self, character: char, sent: bool) {
         match character {
             '\r' | '\n' => {
                 self.pending_break = true;
@@ -54,7 +77,19 @@ impl Scrollback {
             self.text.push('\n');
             self.trim();
         }
+        let start = self.text.len();
         self.text.push(character);
+        if sent {
+            self.mark_sent(start..self.text.len());
+        }
+    }
+
+    /// Records a run as sent, extending the last one where it continues.
+    fn mark_sent(&mut self, range: Range<usize>) {
+        match self.sent.last_mut() {
+            Some(last) if last.end == range.start => last.end = range.end,
+            _ => self.sent.push(range),
+        }
     }
 
     /// Drops the oldest lines once the pane is holding more than it keeps.
@@ -77,19 +112,58 @@ impl Scrollback {
             return;
         };
         self.text.drain(..cut);
+        self.sent.retain_mut(|range| {
+            if range.end <= cut {
+                return false;
+            }
+            *range = range.start.saturating_sub(cut)..range.end - cut;
+            true
+        });
     }
 
     pub fn clear(&mut self) {
         self.text.clear();
+        self.sent.clear();
         self.pending_break = false;
     }
 
+    #[cfg(test)]
     pub fn text(&self) -> &str {
         &self.text
     }
 
     pub fn is_empty(&self) -> bool {
         self.text.is_empty()
+    }
+
+    /// The transcript split into runs, each marked with whether it was sent.
+    fn runs(&self) -> Vec<(bool, &str)> {
+        let mut runs = Vec::new();
+        let mut position = 0;
+        for range in &self.sent {
+            if range.start > position {
+                runs.push((false, &self.text[position..range.start]));
+            }
+            runs.push((true, &self.text[range.clone()]));
+            position = range.end;
+        }
+        if position < self.text.len() {
+            runs.push((false, &self.text[position..]));
+        }
+        runs
+    }
+}
+
+/// What this station's own text is printed in.
+///
+/// Defined for each theme rather than taken from the palette, because what it
+/// has to be is legible and unmistakably not the received text; the built-in
+/// roles are either the same weight as body text or reserved for faults.
+pub fn sent_color(visuals: &Visuals) -> Color32 {
+    if visuals.dark_mode {
+        Color32::from_rgb(0x7A, 0xC4, 0xF2)
+    } else {
+        Color32::from_rgb(0x17, 0x5C, 0x99)
     }
 }
 
@@ -106,13 +180,31 @@ pub fn pane(ui: &mut Ui, scrollback: &Scrollback, hint: &str) {
             ui.with_layout(Layout::top_down(Align::Min), |ui| {
                 if scrollback.is_empty() {
                     ui.add_space(4.0);
-                    ui.label(RichText::new(hint).weak());
+                    ui.label(egui::RichText::new(hint).weak());
                     return;
                 }
                 // Selectable, because the whole point of a received callsign
                 // is that it gets copied somewhere else.
                 ui.style_mut().interaction.selectable_labels = true;
-                ui.add(egui::Label::new(RichText::new(scrollback.text()).font(FontId::monospace(size))).wrap());
+                let mut job = LayoutJob::default();
+                let font = FontId::monospace(size);
+                for (sent, run) in scrollback.runs() {
+                    job.append(
+                        run,
+                        0.0,
+                        TextFormat {
+                            font_id: font.clone(),
+                            color: if sent {
+                                sent_color(ui.visuals())
+                            } else {
+                                ui.visuals().text_color()
+                            },
+                            ..TextFormat::default()
+                        },
+                    );
+                }
+                job.wrap.max_width = ui.available_width();
+                ui.add(egui::Label::new(job).wrap());
             });
         });
 }
@@ -146,6 +238,105 @@ mod tests {
         let mut scrollback = Scrollback::default();
         scrollback.push_str("A\u{7}B");
         assert_eq!(scrollback.text(), "AB");
+    }
+
+    /// The transcript is one exchange, and which half each part of it came
+    /// from is what the colours say.
+    #[test]
+    fn sent_and_received_text_are_kept_apart_in_one_transcript() {
+        let mut scrollback = Scrollback::default();
+        scrollback.push_str(
+            "CQ DE JA1ZZZ K
+",
+        );
+        scrollback.push_sent(
+            "JA1ZZZ DE JL1HIS
+",
+        );
+        scrollback.push_str("R R");
+
+        assert_eq!(
+            scrollback.text(),
+            "CQ DE JA1ZZZ K
+JA1ZZZ DE JL1HIS
+R R"
+        );
+        assert_eq!(
+            scrollback.runs(),
+            [
+                (
+                    false,
+                    "CQ DE JA1ZZZ K
+"
+                ),
+                (true, "JA1ZZZ DE JL1HIS"),
+                (
+                    false, "
+R R"
+                ),
+            ]
+        );
+    }
+
+    /// The echo arrives a character or two at a time as the audio plays, and
+    /// a run per arrival would cost a format for every character sent.
+    #[test]
+    fn text_sent_in_pieces_is_one_run() {
+        let mut scrollback = Scrollback::default();
+        for piece in ["CQ", " ", "DE"] {
+            scrollback.push_sent(piece);
+        }
+        assert_eq!(scrollback.runs(), [(true, "CQ DE")]);
+    }
+
+    #[test]
+    fn a_transcript_with_nothing_sent_in_it_is_one_run() {
+        let mut scrollback = Scrollback::default();
+        scrollback.push_str("RYRY");
+        assert_eq!(scrollback.runs(), [(false, "RYRY")]);
+    }
+
+    /// The ranges index the text, so dropping the oldest lines has to move
+    /// them with it or the colours would land on the wrong characters.
+    #[test]
+    fn sent_runs_follow_the_text_when_the_oldest_lines_are_dropped() {
+        let mut scrollback = Scrollback::default();
+        for line in 0..LINE_LIMIT * 2 {
+            scrollback.push_str(&format!(
+                "{line}
+"
+            ));
+        }
+        scrollback.push_sent("DE JL1HIS");
+
+        let runs = scrollback.runs();
+        assert_eq!(runs.last(), Some(&(true, "DE JL1HIS")));
+        let marked: String = runs.iter().filter(|(sent, _)| *sent).map(|(_, run)| *run).collect();
+        assert_eq!(marked, "DE JL1HIS");
+    }
+
+    /// A long transmission outlives the trim, and every printed character of
+    /// it stays marked as this station's own.
+    ///
+    /// The breaks between the lines are not marked: one is inserted when the
+    /// character after it arrives, and it carries no glyph to colour.
+    #[test]
+    fn sent_text_stays_marked_through_a_trim() {
+        let mut scrollback = Scrollback::default();
+        for line in 0..LINE_LIMIT * 2 {
+            scrollback.push_sent(&format!(
+                "{line}
+"
+            ));
+        }
+        let printed = scrollback.text().replace('\n', "");
+        let marked: String = scrollback
+            .runs()
+            .iter()
+            .filter(|(sent, _)| *sent)
+            .map(|(_, run)| *run)
+            .collect();
+        assert_eq!(marked, printed);
     }
 
     #[test]

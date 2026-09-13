@@ -13,6 +13,7 @@ menu-language = Language
 menu-manual = Manual
 
 input-device = Input device
+output-device = Output device
 
 section-tuning = Tuning
 section-squelch = Squelch
@@ -38,6 +39,7 @@ case-figures = FIGS
 
 status-audio = { $rate } Hz
 status-no-audio = No input device
+status-no-output = No output device
 status-dropped = { $samples } samples dropped
 status-reading = Reading
 
@@ -49,3 +51,20 @@ error-device-lost = The capture device stopped
 error-open-folder = The folder could not be opened
 error-open-manual = The manual could not be opened in a browser
 error-wav = The recording could not be read
+
+label-on-air = Sending
+label-queued = Queued
+label-level = Level
+
+action-send = Send
+action-stop = Stop
+
+status-remaining = { $seconds } s left
+
+hint-draft = Write a message here. Enter starts a new line; Ctrl+Enter sends.
+hint-stop = Stop sending and put whatever did not go out back in the message
+hint-drop-queued = Drop this message from the queue
+hint-unsendable = { $character } has no Baudot code. Remove it before sending.
+
+error-no-output = No output device is selected
+error-underrun = The sound card ran out of audio; the message that went out has a gap in it

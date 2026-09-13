@@ -86,6 +86,15 @@ mod tests {
 
         fn collect(source: &str, keys: &mut BTreeSet<String>) {
             for (index, _) in source.match_indices("text(").chain(source.match_indices("text_with(")) {
+                // `encode_text("RY")` is not a lookup, and the only thing
+                // separating it from one is what precedes the name.
+                if source[..index]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|character| character.is_alphanumeric() || character == '_')
+                {
+                    continue;
+                }
                 let rest = &source[index..];
                 let Some(open) = rest.find('(') else { continue };
                 let Some(quoted) = rest[open + 1..].strip_prefix('"') else {

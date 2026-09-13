@@ -5,7 +5,18 @@
 
 pub mod audio;
 pub mod receive;
+pub mod transmit;
 pub mod wav;
+
+use std::sync::Mutex;
+
+/// Applies a change to a published snapshot, leaving it alone if the worker
+/// that owns it panicked while holding the lock.
+pub(crate) fn update<T>(snapshot: &Mutex<T>, update: impl FnOnce(&mut T)) {
+    if let Ok(mut state) = snapshot.lock() {
+        update(&mut state);
+    }
+}
 
 /// Asks the interface to draw a frame it has no other reason to draw.
 ///
