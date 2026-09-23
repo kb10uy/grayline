@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-audio"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cpal",
  "hound",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-dsp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "libm",
@@ -2026,7 +2026,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-qso"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "directories",
  "encoding_rs",
@@ -2041,7 +2041,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-qso-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2051,7 +2051,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rig"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "rstest",
  "thiserror 2.0.20",
@@ -2059,7 +2059,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rtty"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rtty-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2095,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rtty-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2106,7 +2106,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-shell"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2125,7 +2125,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "grayline-sstv-fskid",
@@ -2137,7 +2137,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-app"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "directories",
  "eframe",
@@ -2172,7 +2172,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2189,7 +2189,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-fskid"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "rstest",
  "thiserror 2.0.20",
@@ -2197,7 +2197,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-rx"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2210,7 +2210,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-template"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "grayline-sstv",
  "grayline-variables",
@@ -2225,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-tone-tx"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2236,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-variables"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "jiff",
  "rstest",
@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-web-demo"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "console_error_panic_hook",
  "grayline-sstv",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax-app"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "directories",
  "eframe",
@@ -2290,7 +2290,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "clap",
