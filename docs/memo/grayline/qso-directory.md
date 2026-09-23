@@ -82,9 +82,9 @@ without anything here changing.
 
 Everything an upstream source says about *contacts* is dropped on the way in.
 From Wavelog that is `call_worked`, `call_confirmed`, `dxcc_confirmed` and
-`lotw_member`; from ADIF it is `BAND`, `MODE`, `FREQ`, the reports and the QSL
-fields. `bearing`, `dxcc_lat` and `dxcc_long` are dropped for a different
-reason: the bearing is computed from the asking station's own grid rather than
+`lotw_member`, and v2's `workedBefore`; from ADIF it is `BAND`, `MODE`, `FREQ`,
+the reports and the QSL fields. `bearing`, `dxcc_lat` and `dxcc_long` are
+dropped for a different reason: the bearing is computed from the asking station's own grid rather than
 being a property of the station asked about, and the latitude and longitude give
 the DXCC entity's centroid, which would contradict a real QTH printed beside
 them. The operator's own side of a logged contact — `OPERATOR`,
@@ -208,16 +208,41 @@ the next attempt should not be held off.
 
 ### Wavelog
 
-`POST /api/private_lookup`, with the API key in the JSON body. Installations
-differ on whether `index.php` is in the path, so the client tries
-`{base}/api/private_lookup`, retries once on a 404 with
-`{base}/index.php/api/private_lookup`, and remembers which answered.
+Wavelog has two APIs, and both are spoken. Which one a request uses is not a
+setting: the key already says, and a version the operator had to name as well
+would only be a second place to get it wrong — one whose wrong answer looks
+exactly like a bad key.
 
-`band` and `mode` are left out of the request. They decide only the worked and
-confirmed flags, and this reads none of them.
+| | v1 | v2 |
+| --- | --- | --- |
+| Wavelog | 1.8.6 on | 3.1.0 on |
+| Request | `POST /api/private_lookup` | `GET /api/v2/lookup?callsign=…&detail=basic` |
+| Key | `key` in the JSON body | `Authorization: Bearer …` |
+| Key form | any | prefixed `wl2_` |
+| Permission | a read key | the `lookup:read` scope |
+| Answer | the fields themselves | `{"data": …, "meta": …}` |
+| Refusal | as the endpoint sees fit | `{"error": {"code", "message", "details"}}` |
 
-The answer is read field by field out of a `serde_json::Value` rather than into
-a derived type. The rule this project actually keeps is that *its own* persisted
+Wavelog refuses a v1 key on the v2 endpoints and a v2 token on the v1 ones, so
+the prefix is not a guess that a mistake could leave undetected: a key sorted
+wrongly could only be a key that would not have worked either way.
+
+Installations differ on whether `index.php` is in the path, so the client tries
+the direct path for its API, retries once on a 404 with the `index.php` one, and
+remembers which answered.
+
+`band` and `mode` are left out of both requests. They decide only the worked and
+confirmed flags, and this reads none of them. So is the callbook, which both
+APIs answer in a nested `callbook` object this does not read and which sets the
+instance off on an external lookup of its own to fill. For the same reason v2 is
+asked for `detail=basic` rather than `full`: everything `full` adds is a fact
+about a contact, and it is the per-band confirmation queries that produce it.
+
+Both APIs spell the fields the same, so one table maps them; v2's answer is
+taken out of the `data` envelope first, and a 200 arriving without one is
+reported as unreadable rather than read as a station the instance knows nothing
+about. The answer is read field by field out of a `serde_json::Value` rather
+than into a derived type. The rule this project actually keeps is that *its own* persisted
 formats are hand-mapped so a hand-edited file survives a save, which is why the
 settings walk a `toml_edit` document key by key. Wavelog's answer is a foreign
 document, read once, never written back, and with its unknown keys deliberately
@@ -230,8 +255,10 @@ empty, so "found" means the mapped record holds something rather than that the
 request succeeded.
 
 An error carries the status and the host and never the request or the body: the
-body holds the API key, and an error quoting the exchange would put it wherever
-the interface prints errors.
+key rides in the body on v1 and in a header on v2, and an error quoting the
+exchange would put it wherever the interface prints errors. It is kept out of
+the v2 query string for the same reason — a URL is what a proxy and an access
+log keep.
 
 ### Cloudlog is not supported, and that is a decision
 

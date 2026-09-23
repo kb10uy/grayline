@@ -27,6 +27,10 @@ const TEMPLATE: &str = "\
 #
 # Both entries may be given in the environment instead, as
 # GRAYLINE_WAVELOG_URL and GRAYLINE_WAVELOG_KEY, which take precedence.
+#
+# Either API is accepted, and the key says which: an API v2 token, which
+# Wavelog issues under the wl2_ prefix and which needs the lookup:read scope,
+# or a v1 API key, which needs read access. There is nothing else to set.
 
 [wavelog]
 url = \"\"
