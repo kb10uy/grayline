@@ -329,6 +329,7 @@ fn credential(command: CredentialCommand) -> Result<ExitCode> {
             // Read from standard input rather than from an argument: an
             // argument lands in the shell history and in the process list.
             eprintln!("Paste the Wavelog API key and press Enter.");
+            eprintln!("A v2 token (wl2_…) needs the lookup:read scope; a v1 key needs read access.");
             let mut key = String::new();
             io::stdin()
                 .lock()

@@ -50,6 +50,26 @@ impl Drop for TempDir {
     }
 }
 
+/// One request the stand-in served.
+#[derive(Clone, Debug)]
+pub struct Asked {
+    /// The request target, query string and all.
+    pub path: String,
+    /// The request body, which is empty for a GET.
+    pub body: String,
+    headers: Vec<(String, String)>,
+}
+
+impl Asked {
+    /// One header, found however the client happened to capitalize it.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(sent, _)| sent.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+}
+
 /// A stand-in for a Wavelog installation, over plain HTTP.
 ///
 /// Plain HTTP because what is under test is the request, the paths and the
@@ -58,7 +78,7 @@ impl Drop for TempDir {
 pub struct FakeWavelog {
     address: SocketAddr,
     base: String,
-    requested: Arc<Mutex<Vec<(String, String)>>>,
+    requested: Arc<Mutex<Vec<Asked>>>,
     stopping: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -90,10 +110,10 @@ impl FakeWavelog {
                 if stopped.load(Ordering::Relaxed) {
                     return;
                 }
-                let Some((path, sent)) = read_request(&stream) else {
+                let Some(asked) = read_request(&stream) else {
                     return;
                 };
-                recorder.lock().expect("the recorder").push((path, sent));
+                recorder.lock().expect("the recorder").push(asked);
 
                 let answer = format!(
                     "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -113,12 +133,19 @@ impl FakeWavelog {
         }
     }
 
+    /// A client holding a v1 key, which is what most installations answer.
     pub fn client(&self) -> Wavelog {
-        Wavelog::new(&self.base, "secret", TEST_TIMEOUT).expect("a client")
+        self.client_with_key("secret")
     }
 
-    /// Every request served so far, as its path and its body.
-    pub fn requested(&self) -> Vec<(String, String)> {
+    /// A client holding whatever key the test wants, which is how it chooses
+    /// between the two APIs.
+    pub fn client_with_key(&self, key: &str) -> Wavelog {
+        Wavelog::new(&self.base, key, TEST_TIMEOUT).expect("a client")
+    }
+
+    /// Every request served so far.
+    pub fn requested(&self) -> Vec<Asked> {
         self.requested.lock().expect("the recorder").clone()
     }
 }
@@ -135,21 +162,27 @@ impl Drop for FakeWavelog {
     }
 }
 
-fn read_request(stream: &std::net::TcpStream) -> Option<(String, String)> {
+fn read_request(stream: &std::net::TcpStream) -> Option<Asked> {
     let mut reader = BufReader::new(stream.try_clone().ok()?);
     let mut start = String::new();
     reader.read_line(&mut start).ok()?;
     let path = start.split(' ').nth(1).unwrap_or_default().to_owned();
 
+    let mut headers = Vec::new();
     let mut length = 0;
     loop {
         let mut header = String::new();
         if reader.read_line(&mut header).is_err() || header.trim().is_empty() {
             break;
         }
-        if let Some(value) = header.to_ascii_lowercase().strip_prefix("content-length:") {
-            length = value.trim().parse().unwrap_or(0);
+        let Some((name, value)) = header.split_once(':') else {
+            continue;
+        };
+        let (name, value) = (name.trim().to_owned(), value.trim().to_owned());
+        if name.eq_ignore_ascii_case("content-length") {
+            length = value.parse().unwrap_or(0);
         }
+        headers.push((name, value));
     }
 
     let mut body = vec![0; length];
@@ -157,5 +190,5 @@ fn read_request(stream: &std::net::TcpStream) -> Option<(String, String)> {
         Ok(()) => String::from_utf8_lossy(&body).into_owned(),
         Err(_) => String::new(),
     };
-    Some((path, body))
+    Some(Asked { path, body, headers })
 }
