@@ -48,6 +48,7 @@ status-no-audio = No input device
 status-no-output = No output device
 status-dropped = { $samples } samples dropped
 status-reading = Reading
+status-rig = Rig: { $state }
 
 hint-listening = Nothing printed yet. Tune a receiver in, or drop a WAV recording here.
 hint-resync = Start the framing again, for a line that has lost its place
@@ -76,6 +77,7 @@ hint-templates = Write one of the messages kept in templates.toml into the field
 hint-unsendable = { $character } has no Baudot code. Remove it before sending.
 
 error-no-output = No output device is selected
+error-rig-unavailable = Rig control is not ready: { $error }
 error-underrun = The sound card ran out of audio; the message that went out has a gap in it
 
 section-contact = Contact
@@ -138,3 +140,9 @@ contact-email = Email
 contact-note = Note
 
 error-credentials = The credentials file could not be written
+
+rig-state-disconnected = Not connected
+rig-state-connecting = Connecting…
+rig-state-receiving = Connected
+rig-state-transmitting = Keyed
+rig-state-failed = Failed

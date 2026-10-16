@@ -308,7 +308,10 @@ a file never exercises and were left out.
 
 The lead-in and tail (0.5 s of mark each, by default) are what a real
 transmission sounds like, and the receive integrators need the lead-in to
-settle before the first start bit.
+settle before the first start bit. They are not the rig's keying delays: a
+station keying through rig control waits `lead-in` for the rig to switch over
+*and then* sends this mark idle, because the first is time the rig swallows and
+the second is time the other end needs ([rig-control.md](rig-control.md)).
 
 **`TxSchedule` says where each character of a message goes out**, in output
 samples, for a caller holding a playback position and wanting to know what of
@@ -324,6 +327,16 @@ character carries its trailing gap, and a gap comes to `char_gap_bits`
 whether whole diddle characters fill it or mark idle does. A test asserts the
 scheduled length against the length the transmitter actually produces, across
 gap, parity, stop, and lead-in variations.
+
+**Keying the rig is the application's, not the core's.** `Transmitter` produces
+PCM and nothing else; PTT runs through `grayline-rig-control`, which the
+application calls on either side of a transmission. The queue is why the two
+are not one call each: the rig stays keyed while messages are still waiting, so
+what unkeys is an empty queue rather than the end of a stream
+([rig-control.md](rig-control.md)). Serial FSK keying, where the rig is handed
+bits instead of audio, is still deferred: it would replace the modulator rather
+than sit beside it, and the schedule a sent-text display reads has no
+counterpart once a UART owns the timing.
 
 ## Consequences an operator sees
 

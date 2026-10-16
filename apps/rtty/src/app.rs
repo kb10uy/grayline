@@ -4,13 +4,14 @@
 //! draws. Keeping the two apart is what lets the whole of the state be driven
 //! from a test without a window.
 
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use grayline_audio::Playback;
+use grayline_rig_control::{RigControlError, RigSettings, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
-    i18n::{I18n, Locale},
+    i18n::{I18n, Locale, owned},
     log,
     platform::{Activity, Platform},
 };
@@ -124,6 +125,8 @@ pub struct App {
     pub custom_variables: BTreeMap<String, String>,
     /// Where the contact directory looks a callsign up.
     pub contact_settings: ContactSettings,
+    /// How the rig is keyed, read from the file and not edited here.
+    pub rig: RigSettings,
     /// The thread that reads and writes the contact directory.
     pub contact_directory: ContactWorker,
     /// What it last found, read once per frame.
@@ -172,6 +175,17 @@ pub struct App {
     activity: Activity,
     /// The playback stream and worker the message on the air is running on.
     tx: TxState,
+    /// The thread that keys the rig, once the file has asked for one.
+    rig_worker: Option<RigWorker>,
+    /// What rig control last published, read once per frame.
+    pub rig_snapshot: RigSnapshot,
+    /// Whether the rig has been asked to key and not yet asked to stop.
+    ///
+    /// One transmission is not one message: the queue keeps the rig keyed
+    /// across the messages behind the one on the air, because unkeying between
+    /// them would drop the carrier in the middle of what the other station is
+    /// reading as one transmission.
+    rig_keyed: bool,
     /// The session an underrun was last reported for, so one gap in the
     /// audio is one notice rather than one per frame.
     underran: Option<u64>,
@@ -260,6 +274,7 @@ impl App {
             templates: library.templates,
             custom_variables: settings.custom_variables.clone(),
             contact_settings: settings.contact.clone(),
+            rig: settings.rig.clone(),
             contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
@@ -279,6 +294,9 @@ impl App {
             platform,
             activity: Activity::Idle,
             tx: TxState::default(),
+            rig_worker: None,
+            rig_snapshot: RigSnapshot::default(),
+            rig_keyed: false,
             underran: None,
         }
     }
@@ -369,6 +387,7 @@ impl App {
             self.report(&error);
         }
 
+        self.poll_rig();
         self.poll_transmit();
         self.poll_contact();
 
@@ -461,6 +480,7 @@ impl App {
             station: self.station.clone(),
             custom_variables: self.custom_variables.clone(),
             contact: self.contact_settings.clone(),
+            rig: self.rig.clone(),
             scope: self.scope.is_open(),
         }
         .clamped()
@@ -940,6 +960,7 @@ impl App {
         !self.transmit.draft.trim().is_empty()
             && self.unsendable_character().is_none()
             && self.audio.output_device.is_some()
+            && self.rig_problem().is_none()
     }
 
     /// Queues the draft.
@@ -951,6 +972,8 @@ impl App {
             if self.audio.output_device.is_none() {
                 let message = self.i18n.text("error-no-output");
                 self.notice = Some(message);
+            } else if let Some(problem) = self.rig_problem() {
+                self.notice = Some(problem);
             }
             return;
         }
@@ -1005,7 +1028,90 @@ impl App {
         Some(self.transmit.sending()?.progress(self.tx.played_samples()))
     }
 
+    /// Starts rig control if the file asked for it, and reads what it says.
+    ///
+    /// The worker is started here rather than at construction because nothing
+    /// in a test asks for a rig: the setting is off by default, and a station
+    /// that switched it on gets its transports opened on the first frame.
+    fn poll_rig(&mut self) {
+        if self.rig.enabled && self.rig_worker.is_none() {
+            let (plan, problem) = BandPlan::load(self.paths.config_dir());
+            // Logged rather than shown: nothing here draws a band, so a plan
+            // that would not parse costs the script its `ctx.band` and costs
+            // the operator nothing they are looking at.
+            if let Some(problem) = problem {
+                log::note(&problem);
+            }
+            self.rig_worker = Some(RigWorker::spawn(
+                &self.rig,
+                self.paths.config_dir(),
+                Arc::new(plan),
+                log::note,
+            ));
+        }
+        if let Some(worker) = self.rig_worker.as_ref() {
+            self.rig_snapshot = worker.latest();
+        }
+        if self.should_unkey() {
+            if let Some(worker) = self.rig_worker.as_ref() {
+                worker.receive();
+            }
+            self.rig_keyed = false;
+        }
+    }
+
+    /// Whether the audio may start.
+    ///
+    /// A transmission that keyed the rig waits for the rig to say it is
+    /// transmitting, because the lead-in the rig needs to switch over is time
+    /// anything sent into it is simply lost. The transmitter's own mark lead-in
+    /// is generated either way: it is there for the receiving station's
+    /// integrators, which is a different half-second from this one.
+    pub(crate) const fn rig_ready_to_send(&self) -> bool {
+        !self.rig_keyed || matches!(self.rig_snapshot.state, RigState::Transmitting)
+    }
+
+    /// Whether the rig has nothing left to send and may be unkeyed.
+    ///
+    /// The queue counts as well as the stream: a message waiting behind the
+    /// one that just ended keeps the carrier up, because unkeying between the
+    /// two would drop it in the middle of what the other station reads as one
+    /// transmission.
+    pub(crate) fn should_unkey(&self) -> bool {
+        self.rig_keyed && !self.tx.is_running() && !self.transmit.is_busy()
+    }
+
+    /// Reports why the rig could not be handed a transmission, if it could not.
+    ///
+    /// A rig that was asked to key and did not leaves a message nobody hears,
+    /// so it holds the send button rather than being let through quietly.
+    pub fn rig_problem(&self) -> Option<String> {
+        if !self.rig.enabled || self.rig_snapshot.state.is_ready() {
+            return None;
+        }
+        let detail = self.rig_snapshot.error.as_ref().map_or_else(
+            || self.i18n.text(self.rig_snapshot.state.label_key()),
+            RigControlError::to_string,
+        );
+        Some(
+            self.i18n
+                .text_with("error-rig-unavailable", &[("error", owned(detail))]),
+        )
+    }
+
     fn poll_transmit(&mut self) {
+        // A rig that refused one of the operator's commands has not been
+        // keyed, so the message it was keyed for cannot go out. The unsent
+        // text goes back to the draft rather than being dropped, as it does
+        // when the operator stops a transmission themselves.
+        if self.tx.is_running()
+            && self.rig_keyed
+            && let Some(error) = self.rig_snapshot.error.clone()
+        {
+            self.abort_transmission();
+            self.notice = Some(error.to_string());
+            return;
+        }
         if self.tx.is_running() {
             let played = self.tx.played_samples();
             if let Some(sending) = self.transmit.sending_mut()
@@ -1023,8 +1129,10 @@ impl App {
                     }
                 }
                 // The device is told to start once the queue has something in
-                // it, so the lead-in is not the thing that underruns.
-                _ if !self.tx.is_started() && snapshot.phase != TxPhase::Priming => {
+                // it, so the lead-in is not the thing that underruns. A keyed
+                // rig is waited for first: audio sent while it is still
+                // switching over is lost.
+                _ if !self.tx.is_started() && snapshot.phase != TxPhase::Priming && self.rig_ready_to_send() => {
                     if let Err(error) = self.tx.start_playback() {
                         self.tx.stop();
                         self.transmit.finish();
@@ -1065,6 +1173,17 @@ impl App {
     /// rather than the one that was asked for, because that is the rate the
     /// audio is generated at and so the one the played position counts in.
     fn start_transmission(&mut self, text: String) {
+        // Asked for before the audio is generated, so the lead-in the rig
+        // needs runs alongside filling the queue rather than after it. The
+        // transmitter's own mark lead-in is a separate half-second, and the
+        // two add up: it is there for the receiving integrators rather than
+        // for the rig, which is why neither replaces the other.
+        if let Some(worker) = self.rig_worker.as_ref()
+            && !self.rig_keyed
+        {
+            worker.transmit();
+            self.rig_keyed = true;
+        }
         match self.open_transmission(&text) {
             Ok((playback, worker, schedule)) => {
                 self.tx.begin(playback, worker);

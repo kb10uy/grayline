@@ -6,6 +6,8 @@ use grayline_sstv_template::valid_variable_name;
 
 use grayline_shell::i18n::{arg, number, owned};
 
+use grayline_rig_control::{RigControlError, RigState};
+
 use crate::{
     app::{App, Dsp, Entry, Tab},
     error::AppError,
@@ -14,7 +16,6 @@ use crate::{
     worker::{
         contact::ContactState,
         receive::RxProgress,
-        rig::RigState,
         transmit::{TUNE_FREQUENCY_HZ, TxGain, TxPhase, TxProgress},
     },
 };

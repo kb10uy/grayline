@@ -11,6 +11,7 @@ use grayline_sstv::image::Rgb8;
 use rstest::rstest;
 
 use super::*;
+use crate::test_util::refused_port;
 use crate::{
     test_util::TempDir,
     worker::{
@@ -18,7 +19,6 @@ use crate::{
         receive::{Frame, HistoryCandidate, RxSnapshot},
     },
 };
-use grayline_rig::RigError;
 
 fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     let config = Config::load(paths.config_file());
@@ -447,10 +447,7 @@ fn a_rig_failure_is_reported_in_the_rig_s_own_words() {
     let mut app = App::headless();
     app.rig.enabled = true;
     app.rig_snapshot.state = RigState::Failed;
-    app.rig_snapshot.error = Some(AppError::Rig(RigError::Connect {
-        address: "127.0.0.1:4532".to_owned(),
-        detail: "connection refused".to_owned(),
-    }));
+    app.rig_snapshot.error = Some(refused_port());
 
     let problem = app.rig_problem().unwrap();
 

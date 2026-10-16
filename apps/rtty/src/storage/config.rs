@@ -1,10 +1,19 @@
 use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
 use grayline_qso::DEFAULT_FIELDS;
+use grayline_rig_control::DEFAULT_ADDRESS;
 use grayline_shell::log;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::app::macros::{Station, valid_variable_name};
+
+/// What the `[rig]` section holds, and the names its ports are reached by.
+///
+/// Re-exported rather than defined here: the file is the application's, while
+/// what the settings in it mean belongs to rig control. The section is spelled
+/// as the SSTV application spells it, so a station that keys both can copy one
+/// block between the two files.
+pub use grayline_rig_control::{PortSettings, RigSettings};
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -37,6 +46,15 @@ pub const MAXIMUM_SQUELCH: f64 = 1.0;
 pub const MINIMUM_TX_LEVEL: f64 = 0.0;
 pub const MAXIMUM_TX_LEVEL: f64 = 1.0;
 
+/// The longest either side of a transmission may be padded by, in seconds.
+pub const KEYING_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=5.0;
+/// How far apart frequency reads may be asked to be, in seconds.
+///
+/// Zero turns reading off, which is what this application starts on: nothing
+/// here shows a frequency yet, so asking for one would put CAT traffic on the
+/// wire for a reading nobody sees.
+pub const POLL_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=60.0;
+
 /// Everything the application remembers between sessions.
 ///
 /// The language and the interface scale are not here: they are the same in
@@ -68,6 +86,8 @@ pub struct Settings {
     pub custom_variables: BTreeMap<String, String>,
     /// Where the contact directory looks a callsign up.
     pub contact: ContactSettings,
+    /// How the station's rig is keyed, if it is keyed at all.
+    pub rig: RigSettings,
     /// Whether the scope window was open.
     ///
     /// A display rather than a receiver setting, and remembered for the same
@@ -157,6 +177,12 @@ impl Default for Settings {
             station: Station::default(),
             custom_variables: BTreeMap::new(),
             contact: ContactSettings::default(),
+            rig: RigSettings {
+                // Nothing here reads a frequency back yet, so the poll starts
+                // off rather than at the interval the SSTV application uses.
+                poll_seconds: 0.0,
+                ..RigSettings::default()
+            },
             scope: false,
         }
     }
@@ -294,6 +320,7 @@ impl Config {
         // every save would reformat what the operator had written in it.
         store_custom_variables(table, &settings.custom_variables);
         store_contact(table, &settings.contact);
+        store_rig(table, &settings.rig);
 
         self.write();
     }
@@ -371,7 +398,65 @@ fn read(document: &DocumentMut) -> Settings {
     }
     settings.custom_variables = read_custom_variables(table);
     settings.contact = read_contact(table);
+    settings.rig = read_rig(table);
     settings.clamped()
+}
+
+/// Reads the `[rig]` section, which is the whole of rig control's settings.
+///
+/// There is no editor for these: keying is wired once for a station and then
+/// left alone, so the file is where it is set up, and the application only
+/// reads it.
+fn read_rig(table: &Table) -> RigSettings {
+    let defaults = Settings::default().rig;
+    let Some(rig) = table.get("rig").and_then(Item::as_table) else {
+        return defaults;
+    };
+    let seconds = |key: &str, range: &core::ops::RangeInclusive<f32>, default: f32| {
+        rig.get(key)
+            .and_then(Item::as_value)
+            .and_then(number)
+            .map(|seconds| (seconds as f32).clamp(*range.start(), *range.end()))
+            .unwrap_or(default)
+    };
+    RigSettings {
+        enabled: rig
+            .get("enabled")
+            .and_then(Item::as_value)
+            .and_then(|flag| flag.as_bool())
+            .unwrap_or(defaults.enabled),
+        ports: read_ports(rig).unwrap_or(defaults.ports),
+        poll_seconds: seconds("poll-interval", &POLL_SECONDS_RANGE, defaults.poll_seconds),
+        lead_in_seconds: seconds("lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
+        tail_seconds: seconds("tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
+    }
+}
+
+/// Reads the ports to connect to, or nothing when the file names none.
+///
+/// A section that is present is taken as written: an entry that is not a
+/// section is dropped, and a section that leaves nothing behind leaves the
+/// script with no port to reach rather than being quietly given the default
+/// one back.
+fn read_ports(rig: &Table) -> Option<BTreeMap<String, PortSettings>> {
+    let ports = rig.get("ports")?.as_table()?;
+    Some(
+        ports
+            .iter()
+            .filter_map(|(name, item)| {
+                let address = item
+                    .as_table()?
+                    .get("address")
+                    .and_then(Item::as_value)
+                    .and_then(|address| address.as_str())
+                    .map(str::trim)
+                    .filter(|address| !address.is_empty())
+                    .unwrap_or(DEFAULT_ADDRESS)
+                    .to_owned();
+                Some((name.to_owned(), PortSettings { address }))
+            })
+            .collect(),
+    )
 }
 
 fn read_contact(table: &Table) -> ContactSettings {
@@ -480,6 +565,45 @@ fn store_custom_variables(table: &mut Table, variables: &BTreeMap<String, String
     }
 }
 
+/// Writes the rig section back, ports and all.
+///
+/// Written even at its defaults, and even though nothing here edits it: the
+/// file is the only place keying is set up, so an operator who had to invent
+/// the keys before they could change them would have no way to learn the keys
+/// exist.
+fn store_rig(table: &mut Table, rig: &RigSettings) {
+    let section = table
+        .entry("rig")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut();
+    let Some(section) = section else { return };
+    section["enabled"] = value(rig.enabled);
+    for (key, seconds) in [
+        ("poll-interval", rig.poll_seconds),
+        ("lead-in", rig.lead_in_seconds),
+        ("tail", rig.tail_seconds),
+    ] {
+        // Rounded to the millisecond on the way out, so a widened f32 does not
+        // write 0.20000000298023224 into a file meant to be read.
+        section[key] = value((f64::from(seconds) * 1_000.0).round() / 1_000.0);
+    }
+    let ports = section
+        .entry("ports")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut();
+    let Some(ports) = ports else { return };
+    ports.retain(|name, _| rig.ports.contains_key(name));
+    for (name, port) in &rig.ports {
+        let entry = ports
+            .entry(name.as_str())
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut();
+        if let Some(entry) = entry {
+            entry["address"] = value(port.address.as_str());
+        }
+    }
+}
+
 /// Reads a TOML number however it was written, ignoring one that is not
 /// finite: a decoder built from a NaN would fail on every sample.
 fn number(item: &toml_edit::Value) -> Option<f64> {
@@ -535,12 +659,88 @@ mod tests {
                 wavelog_url: "https://log.example/".to_owned(),
                 fields: vec!["!ja".to_owned(), "note".to_owned()],
             },
+            rig: RigSettings {
+                enabled: true,
+                ports: BTreeMap::from([
+                    (
+                        "rig".to_owned(),
+                        PortSettings {
+                            address: "127.0.0.1:4532".to_owned(),
+                        },
+                    ),
+                    (
+                        "amplifier".to_owned(),
+                        PortSettings {
+                            address: "192.168.0.8:4532".to_owned(),
+                        },
+                    ),
+                ]),
+                poll_seconds: 0.0,
+                lead_in_seconds: 0.4,
+                tail_seconds: 0.1,
+            },
             scope: true,
         };
         Config::load(path.clone()).0.save(&wanted);
 
         let (_, read_back) = Config::load(path);
         assert_eq!(read_back, wanted);
+    }
+
+    #[test]
+    fn the_rig_section_is_read_as_the_sstv_application_writes_it() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        fs::write(
+            &path,
+            concat!(
+                "[rig]
+",
+                "enabled = true
+",
+                "lead-in = 99
+",
+                "tail = 0.08
+",
+                "poll-interval = 2
+",
+                "[rig.ports.rig]
+",
+                "address = \"192.168.0.8:4532\"
+",
+            ),
+        )
+        .unwrap();
+
+        let rig = Config::load(path).1.rig;
+
+        assert!(rig.enabled);
+        // Clamped where it is read, as every other hand-edited figure is.
+        assert_eq!(rig.lead_in_seconds, *KEYING_SECONDS_RANGE.end());
+        assert_eq!(rig.tail_seconds, 0.08);
+        assert_eq!(rig.poll_seconds, 2.0);
+        assert_eq!(
+            rig.ports.get("rig"),
+            Some(&PortSettings {
+                address: "192.168.0.8:4532".to_owned()
+            })
+        );
+    }
+
+    /// The keys have no editor, so the file is where they are set up: a
+    /// station that never touched them should still find them written out.
+    #[test]
+    fn a_first_save_writes_the_keying_settings_out() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        let (mut config, settings) = Config::load(path.clone());
+
+        config.save(&settings);
+
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.contains("[rig]"), "{written}");
+        assert!(written.contains("lead-in = 0.2"), "{written}");
+        assert!(written.contains("[rig.ports.rig]"), "{written}");
     }
 
     #[test]

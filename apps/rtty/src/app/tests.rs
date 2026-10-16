@@ -13,7 +13,7 @@ use grayline_shell::{
 use rstest::rstest;
 
 use super::*;
-use crate::worker::contact::ContactState;
+use crate::{test_util::refused_port, worker::contact::ContactState};
 
 #[derive(Default)]
 struct RecordingPlatform {
@@ -310,6 +310,64 @@ fn a_message_cannot_be_sent_without_an_output_device() {
 
     assert_eq!(app.transmit.queued().len(), 0);
     assert!(app.notice.is_some());
+}
+
+#[test]
+fn a_rig_that_has_not_answered_holds_the_send_button() {
+    use grayline_rig_control::RigState;
+
+    let mut app = App::headless();
+    app.transmit.draft = "CQ DE JL1HIS".to_owned();
+    // A station keying with VOX has no rig to wait for.
+    assert_eq!(app.rig_problem(), None);
+
+    app.rig.enabled = true;
+    app.rig_snapshot.state = RigState::Failed;
+    app.rig_snapshot.error = Some(refused_port());
+    let problem = app.rig_problem().expect("a problem");
+    assert!(problem.contains("connection refused"), "{problem}");
+    assert!(!app.can_send());
+
+    // The headless interface has no output device either, and that is the
+    // problem the operator is told about first, so what is asserted here is
+    // only that nothing was queued.
+    app.send_draft();
+    assert_eq!(app.transmit.queued().len(), 0);
+
+    app.rig_snapshot.state = RigState::Receiving;
+    app.rig_snapshot.error = None;
+    assert_eq!(app.rig_problem(), None);
+}
+
+#[test]
+fn audio_waits_for_a_keyed_rig_to_say_it_is_transmitting() {
+    use grayline_rig_control::RigState;
+
+    let mut app = App::headless();
+    // Nothing was keyed, so there is nothing to wait for.
+    assert!(app.rig_ready_to_send());
+
+    app.rig_keyed = true;
+    app.rig_snapshot.state = RigState::Receiving;
+    assert!(!app.rig_ready_to_send());
+
+    app.rig_snapshot.state = RigState::Transmitting;
+    assert!(app.rig_ready_to_send());
+}
+
+#[test]
+fn a_queued_message_keeps_the_rig_keyed() {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.transmit.queue("RYRY".to_owned());
+
+    assert!(!app.should_unkey(), "the queue still has a message to send");
+
+    app.transmit.take_next().expect("the queued message");
+    assert!(app.should_unkey(), "nothing is left to send");
+
+    app.rig_keyed = false;
+    assert!(!app.should_unkey(), "the rig was never keyed");
 }
 
 #[test]

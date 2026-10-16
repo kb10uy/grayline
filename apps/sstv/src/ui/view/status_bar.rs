@@ -27,14 +27,11 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
             );
             ui.label(RichText::new(dropped).size(LABEL).color(error_color));
         }
-        let reported = [
-            app.audio.error.as_ref(),
-            snapshot.error.as_ref(),
-            app.rig_snapshot.error.as_ref(),
-        ]
-        .into_iter()
-        .flatten()
-        .map(AppError::to_string);
+        let reported = [app.audio.error.as_ref(), snapshot.error.as_ref()]
+            .into_iter()
+            .flatten()
+            .map(AppError::to_string)
+            .chain(app.rig_snapshot.error.as_ref().map(RigControlError::to_string));
         for error in reported.chain(
             [
                 app.tx_error.as_deref(),

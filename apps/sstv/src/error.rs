@@ -17,7 +17,7 @@ use grayline_sstv_template::TemplateError;
 use grayline_tone_tx::ModulatorError;
 use thiserror::Error;
 
-use crate::worker::rig::script::ScriptError;
+use grayline_rig_control::RigControlError;
 
 #[derive(Clone, Debug, Error)]
 pub enum AppError {
@@ -34,7 +34,7 @@ pub enum AppError {
     #[error(transparent)]
     Rig(#[from] RigError),
     #[error(transparent)]
-    Script(#[from] ScriptError),
+    RigControl(#[from] RigControlError),
     /// A template could not be parsed, rendered, or composed.
     ///
     /// Held behind an [`Arc`] because it carries KDL, image, and SVG errors

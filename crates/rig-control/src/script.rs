@@ -1,3 +1,10 @@
+//! The host for the operator's own `rigcontrol.lua`.
+//!
+//! What a rig is told around a transmission is a property of that rig and of
+//! the station around it, so the commands are the operator's and this is only
+//! what calls them: one Lua state, the transports it sends on, and a deadline
+//! so a script that loops cannot take rig control down with it.
+
 use std::{
     cell::Cell,
     collections::BTreeMap,
@@ -12,9 +19,9 @@ use grayline_rig::{RigError, Rigctld};
 use mlua::{Function, HookTriggers, Lua, Table, UserData, UserDataMethods, Value, VmState};
 use thiserror::Error;
 
-use crate::storage::{
+use crate::{
     bands::{BandDefinition, BandPlan, BandValue},
-    config::PortSettings,
+    settings::PortSettings,
 };
 
 /// The file the operator's own script is read from, beside `config.toml`.
@@ -25,7 +32,7 @@ pub const SCRIPT_FILE: &str = "rigcontrol.lua";
 /// Compiled in rather than written out on the first run: a file written once
 /// is a file that never gains a later fix, and most operators never need to
 /// edit it. The menu writes it out for the ones who do.
-pub const DEFAULT_SCRIPT: &str = include_str!("../../../assets/rigcontrol.lua");
+pub const DEFAULT_SCRIPT: &str = include_str!("../assets/rigcontrol.lua");
 
 /// How long one call may run before it is abandoned.
 ///
@@ -37,15 +44,29 @@ const CALL_DEADLINE: Duration = Duration::from_secs(5);
 /// How often the deadline is checked, in Lua instructions.
 const HOOK_INTERVAL: u32 = 10_000;
 
+/// Where a message the script wrote is recorded.
+///
+/// A function pointer rather than a dependency: the log an application keeps
+/// is the application's, and rig control has no business knowing which one it
+/// is.
+pub type Logger = fn(&str);
+
 /// A function the application calls on the operator's script.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Entry {
+    /// Called once the transports are open, before anything else.
     Open,
+    /// Called as rig control is given up.
     Close,
+    /// Called to key the rig.
     Transmit,
+    /// Called to unkey it.
     Receive,
+    /// Called to read back what the rig is tuned to.
     PollFrequency,
+    /// Called to tune the rig.
     SetFrequency,
+    /// Called to move the rig to a band.
     ChangeBand,
 }
 
@@ -64,18 +85,39 @@ impl Entry {
     }
 }
 
+/// What went wrong with the operator's script, or with a transport it sends on.
 #[derive(Clone, Debug, Error)]
 pub enum ScriptError {
+    /// The file is there but could not be read.
     #[error("{path}: {detail}")]
-    Read { path: String, detail: String },
+    Read {
+        /// The file that was being read.
+        path: String,
+        /// What the platform said about it.
+        detail: String,
+    },
+    /// The script does not compile.
     #[error("rigcontrol.lua: {0}")]
     Load(String),
+    /// The script compiled but returned something other than a table.
     #[error("rigcontrol.lua has to return a table of functions")]
     NotAModule,
+    /// A `rigctld` could not be reached.
     #[error("rig port `{name}`: {error}")]
-    Port { name: String, error: RigError },
+    Port {
+        /// The name the script reaches that port by.
+        name: String,
+        /// What the transport said.
+        error: RigError,
+    },
+    /// A call into the script failed, or the script raised.
     #[error("rigcontrol.lua {entry}: {detail}")]
-    Call { entry: &'static str, detail: String },
+    Call {
+        /// The entry point that was called.
+        entry: &'static str,
+        /// What Lua said about it.
+        detail: String,
+    },
 }
 
 /// The operator's script, and the transports it sends over.
@@ -91,6 +133,8 @@ pub struct ScriptHost {
     bands: Arc<BandPlan>,
     /// When the call currently running has to be abandoned by.
     deadline: Rc<Cell<Option<Instant>>>,
+    /// Where a message the script wrote goes.
+    log: Logger,
     /// Set once a transport fails in a way the next command would not survive.
     ///
     /// The script sees every failure as a Lua error and may swallow one with
@@ -120,11 +164,12 @@ impl ScriptHost {
         ports: &BTreeMap<String, PortSettings>,
         bands: Arc<BandPlan>,
         timeout: Duration,
+        log: Logger,
     ) -> Result<Self, ScriptError> {
         let lua = Lua::new();
         let deadline = Rc::new(Cell::new(None));
         let broken = Rc::new(Cell::new(false));
-        install_deadline(&lua, Rc::clone(&deadline));
+        install_deadline(&lua, Rc::clone(&deadline), log);
 
         let table = lua.create_table().map_err(load_error)?;
         for (name, settings) in ports {
@@ -153,6 +198,7 @@ impl ScriptHost {
             module,
             ports: table,
             bands,
+            log,
             deadline,
             broken,
         })
@@ -168,10 +214,12 @@ impl ScriptHost {
     /// A module that omits one is not in error: a station keyed by VOX exports
     /// no `transmit`, and saying so by leaving it out is the whole of what it
     /// has to say.
+    /// Calls `entry`, which is handed the frequency the rig was last read at.
     pub fn call(&self, entry: Entry, frequency_hz: Option<u64>) -> Result<(), ScriptError> {
         self.invoke(entry, frequency_hz, None)
     }
 
+    /// Asks the script to tune the rig to `target_hz`.
     pub fn set_frequency(&self, frequency_hz: Option<u64>, target_hz: u64) -> Result<(), ScriptError> {
         let target = Value::Integer(i64::try_from(target_hz).unwrap_or(i64::MAX));
         self.invoke(Entry::SetFrequency, frequency_hz, Some(target))
@@ -232,13 +280,13 @@ impl ScriptHost {
                 context.set("band", self.band_table(band)?)?;
             }
         }
-        context.set(
-            "log",
-            self.lua.create_function(|_, message: String| {
-                grayline_shell::log::note(&format!("rig script: {message}"));
+        context.set("log", {
+            let log = self.log;
+            self.lua.create_function(move |_, message: String| {
+                log(&format!("rig script: {message}"));
                 Ok(())
-            })?,
-        )?;
+            })?
+        })?;
         Ok(context)
     }
 
@@ -290,7 +338,7 @@ impl core::fmt::Debug for ScriptHost {
 /// long rather than here, because the only thing lost is the bound: a script
 /// that behaves is unaffected either way, and refusing to connect over it
 /// would take rig control away from a station whose script is fine.
-fn install_deadline(lua: &Lua, deadline: Rc<Cell<Option<Instant>>>) {
+fn install_deadline(lua: &Lua, deadline: Rc<Cell<Option<Instant>>>, log: Logger) {
     let installed = lua.set_hook(
         HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
         move |_, _| match deadline.get() {
@@ -299,7 +347,7 @@ fn install_deadline(lua: &Lua, deadline: Rc<Cell<Option<Instant>>>) {
         },
     );
     if let Err(error) = installed {
-        grayline_shell::log::note(&format!("rig script is not bounded by a deadline: {error}"));
+        log(&format!("rig script is not bounded by a deadline: {error}"));
     }
 }
 

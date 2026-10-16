@@ -2058,6 +2058,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-rig-control"
+version = "0.5.1"
+dependencies = [
+ "grayline-rig",
+ "mlua",
+ "rstest",
+ "thiserror 2.0.20",
+ "toml_edit",
+]
+
+[[package]]
 name = "grayline-rtty"
 version = "0.5.1"
 dependencies = [
@@ -2082,6 +2093,7 @@ dependencies = [
  "grayline-audio",
  "grayline-dsp",
  "grayline-qso",
+ "grayline-rig-control",
  "grayline-rtty",
  "grayline-shell",
  "grayline-variables",
@@ -2151,6 +2163,7 @@ dependencies = [
  "grayline-dsp",
  "grayline-qso",
  "grayline-rig",
+ "grayline-rig-control",
  "grayline-shell",
  "grayline-sstv",
  "grayline-sstv-fskid",
@@ -2161,7 +2174,6 @@ dependencies = [
  "image",
  "image-webp",
  "jiff",
- "mlua",
  "png",
  "rstest",
  "thiserror 2.0.20",

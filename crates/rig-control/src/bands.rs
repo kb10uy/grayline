@@ -17,16 +17,22 @@ use std::{
 
 use toml_edit::{DocumentMut, Item, Value};
 
+/// The file the plan is read from, beside `config.toml`.
 pub const BANDS_FILE: &str = "bands.toml";
 
-pub const DEFAULT_PLAN: &str = include_str!("../../assets/bands.toml");
+/// The plan that runs when none has been written.
+pub const DEFAULT_PLAN: &str = include_str!("../assets/bands.toml");
 
 /// A setting the operator attached to a band, as the script will read it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BandValue {
+    /// A string, as written.
     Text(String),
+    /// An integer, which is also how a frequency is written.
     Integer(i64),
+    /// A floating-point number.
     Decimal(f64),
+    /// A boolean.
     Flag(bool),
 }
 
@@ -49,16 +55,21 @@ impl BandValue {
     }
 }
 
+/// One band, as the operator wrote it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BandDefinition {
+    /// What the band is called, which is how everything else names it.
     pub name: String,
+    /// The lowest frequency the band covers.
     pub low_hz: u64,
+    /// The highest frequency the band covers.
     pub high_hz: u64,
     /// Everything else written under the band, keyed as it was written.
     pub settings: BTreeMap<String, BandValue>,
 }
 
 impl BandDefinition {
+    /// Whether `frequency_hz` falls inside this band.
     pub fn contains(&self, frequency_hz: u64) -> bool {
         (self.low_hz..=self.high_hz).contains(&frequency_hz)
     }
@@ -102,10 +113,12 @@ impl BandPlan {
         }
     }
 
+    /// The plan compiled into the application.
     pub fn built_in() -> Self {
         Self::parse(DEFAULT_PLAN).expect("the built-in band plan is well formed")
     }
 
+    /// Reads a plan, reporting what made it unreadable as text.
     pub fn parse(source: &str) -> Result<Self, String> {
         let document: DocumentMut = source
             .parse()
@@ -138,10 +151,12 @@ impl BandPlan {
         Ok(Self { bands })
     }
 
+    /// Every band, in the order the file names them.
     pub fn bands(&self) -> &[BandDefinition] {
         &self.bands
     }
 
+    /// Whether the plan names no band at all.
     pub fn is_empty(&self) -> bool {
         self.bands.is_empty()
     }
@@ -155,6 +170,7 @@ impl BandPlan {
         self.bands.iter().find(|band| band.contains(frequency_hz))
     }
 
+    /// Returns the band of that name, if the plan still has one.
     pub fn by_name(&self, name: &str) -> Option<&BandDefinition> {
         self.bands.iter().find(|band| band.name == name)
     }

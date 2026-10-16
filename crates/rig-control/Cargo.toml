@@ -1,0 +1,17 @@
+[package]
+name = "grayline-rig-control"
+description = "Rig control for Grayline: the keying worker, the operator's script, and the band plan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+grayline-rig = { path = "../rig" }
+mlua.workspace = true
+thiserror.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

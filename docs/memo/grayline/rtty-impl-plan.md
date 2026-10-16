@@ -13,7 +13,10 @@ scope window, the transmit panel with its queue and macros, and the station and
 contact fields, together with the repository work step 2 drags with it. The
 contact directory is wired in as well, which the plan below never named; it is
 described under Macros and Templates and in
-[qso-directory.md](qso-directory.md). Aligned save, the received-text history
+[qso-directory.md](qso-directory.md). Explicit PTT is wired in as well, which
+the plan below deferred: the rig worker and the Lua host moved out of the SSTV
+application into `grayline-rig-control`, and this application keys through it
+([rig-control.md](rig-control.md)). Aligned save, the received-text history
 log, and the rig frequency readout remain unimplemented. The release workflow
 and headless UI, scope, and locale tests are implemented. Where the
 implementation departs from what is described below, the departure is recorded
@@ -280,10 +283,18 @@ beside the SSTV application's own. An underrun is reported once per
 transmission, because a queue that ran dry put a gap in a character that the
 receiving station reads as noise.
 
-PTT is VOX in the first version. That is what avoids the SSTV rig worker lift —
-roughly 1500 lines of application-local Lua host — and keeps the milestone
-small. A rig frequency readout in the status bar needs only a thin read-only
-rigctld client through the shared `crates/rig`, and is deferrable.
+PTT was VOX in the first version. That is what avoided the SSTV rig worker
+lift — roughly 1500 lines of application-local Lua host — and kept the
+milestone small.
+
+**Departure.** It is no longer VOX. Rather than lift that host a second time,
+the worker, the script host, and the band plan moved out of the SSTV
+application into `grayline-rig-control`, which both applications now depend on,
+and this one calls `transmit` and `receive` on either side of a transmission.
+VOX remains what a station gets with `enabled = false`, which is the default.
+Only keying was taken: there is no `[rig]` editor, no band selector, and no
+tuning control here, and the frequency readout is still deferred — it needs the
+poll this application starts with switched off.
 
 ## Macros and Templates
 
