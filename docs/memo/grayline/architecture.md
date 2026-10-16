@@ -377,7 +377,7 @@ The workspace currently contains twenty-two packages:
 | `grayline-variables` | `${name}` interpolation shared by the SSTV templates and the RTTY macros | Implemented |
 | `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
 | `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
-| `grayline-keyer` | Serial-line FSK and PTT keying, as `gl-keyer` | DTR and RTS implemented; described in [keyer.md](keyer.md) |
+| `grayline-keyer` | Serial-line FSK keying, as `gl-keyer` | DTR and RTS implemented; described in [keyer.md](keyer.md) |
 | `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |

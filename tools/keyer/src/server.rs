@@ -107,15 +107,6 @@ pub fn execute(command: &Command, id: ConnectionId, shared: &Shared) -> Reply {
     let done = |result: Result<(), Refusal>| result.map_or_else(refused, |()| Reply::new(name, Vec::new()));
     match command {
         Command::ChkVfo => Reply::new(name, vec!["ChkVFO: 0".to_owned()]),
-        Command::SetPtt(_) | Command::GetPtt if !shared.has_ptt() => Reply::refuse(name, code::NOT_AVAILABLE),
-        Command::SetPtt(keyed) => {
-            shared.update(|session| session.set_ptt(id, *keyed));
-            Reply::new(name, Vec::new())
-        }
-        Command::GetPtt => {
-            let keyed = shared.update(|session| session.ptt());
-            Reply::new(name, vec![format!("PTT: {}", u8::from(keyed))])
-        }
         Command::RttyOpen(config) => done(shared.update(|session| session.open(id, *config))),
         Command::RttySend(codes) => done(shared.update(|session| session.append(id, codes))),
         Command::RttyEnd => done(shared.update(|session| session.end(id))),
@@ -123,7 +114,6 @@ pub fn execute(command: &Command, id: ConnectionId, shared: &Shared) -> Reply {
             let status = shared.update(|session| session.status());
             let mut lines = vec![
                 format!("State: {}", status.phase.name()),
-                format!("PTT: {}", u8::from(status.ptt)),
                 format!("Sent: {}", status.sent),
                 format!("Queued: {}", status.queued),
                 format!("Elapsed: {}", status.progress.elapsed.as_micros()),
@@ -160,7 +150,7 @@ mod tests {
     use super::*;
     use crate::{
         method::LineMethod,
-        player::{self, PttLine},
+        player,
         protocol::{encode_codes, encode_open},
         test_util::{FakeClock, RecordingLine},
     };
@@ -170,32 +160,28 @@ mod tests {
     struct Keyer {
         address: String,
         fsk: RecordingLine,
-        ptt: RecordingLine,
         shared: Arc<Shared>,
         player: Option<JoinHandle<()>>,
     }
 
     impl Keyer {
-        fn start(has_ptt: bool) -> Self {
+        fn start() -> Self {
             let clock = FakeClock::default();
             let fsk = RecordingLine::new(clock.clone(), Duration::ZERO);
-            let ptt = RecordingLine::new(clock.clone(), Duration::ZERO);
-            let shared = Arc::new(Shared::new(has_ptt));
+            let shared = Arc::new(Shared::new());
             let listener = bind("127.0.0.1:0").unwrap();
             let address = listener.local_addr().unwrap().to_string();
             let serving = Arc::clone(&shared);
             thread::spawn(move || serve(listener, serving, |_| {}));
             let playing = Arc::clone(&shared);
-            let (fsk_line, ptt_line) = (fsk.clone(), ptt.clone());
+            let line = fsk.clone();
             let player = thread::spawn(move || {
-                let mut method = LineMethod::new(fsk_line, clock, false).unwrap();
-                let mut ptt = PttLine::new(has_ptt.then_some(ptt_line)).unwrap();
-                player::run(&mut method, &mut ptt, &playing, None, |_| {});
+                let mut method = LineMethod::new(line, clock, false).unwrap();
+                player::run(&mut method, &playing, None, |_| {});
             });
             Self {
                 address,
                 fsk,
-                ptt,
                 shared,
                 player: Some(player),
             }
@@ -245,12 +231,11 @@ mod tests {
 
     #[test]
     fn a_stream_sent_through_a_rigctld_client_keys_the_line_in_order() {
-        let keyer = Keyer::start(true);
+        let keyer = Keyer::start();
         let mut rig = keyer.connect();
         assert!(!rig.requires_vfo());
         let config = TxConfig::default();
         let codes = encode_text("RYRY DE JL1HIS", &config).unwrap();
-        rig.run("T 1").unwrap();
         rig.run(&format!("\\rtty_open {}", encode_open(&config))).unwrap();
         let (first, second) = codes.split_at(5);
         rig.run(&format!("\\rtty_send {}", encode_codes(first))).unwrap();
@@ -259,8 +244,6 @@ mod tests {
         let status = wait_for_state(&mut rig, "completed");
         assert_eq!(field(&status, "Sent"), codes.len().to_string());
         assert_eq!(field(&status, "Queued"), "0");
-        rig.run("T 0").unwrap();
-        assert_eq!(field(&rig.run("t").unwrap(), "PTT"), "0");
 
         let mut framer = Framer::new(1_000_000, &config).unwrap();
         let mut elements = Vec::new();
@@ -272,31 +255,23 @@ mod tests {
         expected.push(false);
         expected.dedup();
         assert_eq!(keyer.fsk.levels(), expected);
-
-        let started = Instant::now();
-        while keyer.ptt.levels() != [false, true, false] {
-            assert!(started.elapsed() < TIMEOUT, "PTT went {:?}", keyer.ptt.levels());
-            thread::sleep(Duration::from_millis(5));
-        }
     }
 
     #[test]
-    fn a_dropped_connection_stops_its_stream_and_unkeys() {
-        let keyer = Keyer::start(true);
+    fn a_dropped_connection_stops_its_stream_at_mark() {
+        let keyer = Keyer::start();
         let mut owner = keyer.connect();
-        owner.run("T 1").unwrap();
         owner.run("\\rtty_open lead_in=0 tail=0").unwrap();
         owner.run("\\rtty_send 0123").unwrap();
         drop(owner);
         let mut watcher = keyer.connect();
-        let status = wait_for_state(&mut watcher, "disconnected");
-        assert_eq!(field(&status, "PTT"), "0");
+        wait_for_state(&mut watcher, "disconnected");
         assert_eq!(keyer.fsk.changes().last().map(|(_, level)| *level), Some(false));
     }
 
     #[test]
     fn a_stream_belongs_to_the_connection_that_opened_it() {
-        let keyer = Keyer::start(true);
+        let keyer = Keyer::start();
         let mut owner = keyer.connect();
         let mut other = keyer.connect();
         owner.run("\\rtty_open").unwrap();
@@ -308,11 +283,10 @@ mod tests {
     }
 
     #[test]
-    fn ptt_without_a_line_is_not_available() {
-        let keyer = Keyer::start(false);
+    fn rig_commands_are_left_to_rigctld() {
+        let keyer = Keyer::start();
         let mut rig = keyer.connect();
-        assert_eq!(refusal(rig.run("T 1")), code::NOT_AVAILABLE);
-        assert_eq!(refusal(rig.run("\\get_ptt")), code::NOT_AVAILABLE);
+        assert_eq!(refusal(rig.run("T 1")), code::NOT_IMPLEMENTED);
         assert_eq!(refusal(rig.run("\\get_freq")), code::NOT_IMPLEMENTED);
     }
 }

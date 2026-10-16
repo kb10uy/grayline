@@ -42,9 +42,8 @@ pub struct RigSettings {
 /// One `rigctld` the application connects to.
 ///
 /// There is nothing to choose between here: Hamlib already covers the CI-V and
-/// DTR/RTS PTT that a second kind of transport would be for, and `gl-keyer`
-/// speaks the same protocol for the FSK keying Hamlib does not, so a port is
-/// an address and no more.
+/// DTR/RTS PTT that a second kind of transport would be for, so a port is an
+/// address and no more.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PortSettings {
     /// Where that `rigctld` listens.

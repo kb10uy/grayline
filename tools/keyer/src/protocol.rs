@@ -14,8 +14,6 @@ pub mod code {
     pub const REJECTED: i32 = -9;
     /// The request would not fit.
     pub const TRUNCATED: i32 = -10;
-    /// The keyer was not set up with what the request needs.
-    pub const NOT_AVAILABLE: i32 = -11;
 }
 
 /// The longest run of codes one `\rtty_send` may carry.
@@ -29,10 +27,6 @@ const DIGITS: &[u8; 32] = b"0123456789ABCDEFGHIJKLMNOPQRSTUV";
 pub enum Command {
     /// Whether every command wants a VFO argument; never, here.
     ChkVfo,
-    /// Key or release the PTT line.
-    SetPtt(bool),
-    /// Read back whether the PTT line is keyed.
-    GetPtt,
     /// Open an RTTY stream framed by this configuration.
     RttyOpen(TxConfig),
     /// Queue codes on the open stream.
@@ -52,8 +46,6 @@ impl Command {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::ChkVfo => "chk_vfo",
-            Self::SetPtt(_) => "set_ptt",
-            Self::GetPtt => "get_ptt",
             Self::RttyOpen(_) => "rtty_open",
             Self::RttySend(_) => "rtty_send",
             Self::RttyEnd => "rtty_end",
@@ -154,15 +146,6 @@ fn parse_command(name: &str, arguments: &[&str]) -> Result<Command, Reply> {
     };
     match name {
         "\\chk_vfo" => bare(Command::ChkVfo),
-        "T" | "\\set_ptt" => match arguments {
-            [value] => match value.parse::<u8>() {
-                Ok(0) => Ok(Command::SetPtt(false)),
-                Ok(1..=3) => Ok(Command::SetPtt(true)),
-                _ => Err(Reply::refuse("set_ptt", code::INVALID)),
-            },
-            _ => Err(Reply::refuse("set_ptt", code::INVALID)),
-        },
-        "t" | "\\get_ptt" => bare(Command::GetPtt),
         "\\rtty_open" => parse_open(arguments)
             .map(Command::RttyOpen)
             .ok_or_else(|| Reply::refuse("rtty_open", code::INVALID)),
@@ -314,17 +297,13 @@ mod tests {
 
     #[rstest]
     #[case("+\\chk_vfo", true, Ok(Command::ChkVfo))]
-    #[case("T 1", false, Ok(Command::SetPtt(true)))]
-    #[case("+\\set_ptt 0", true, Ok(Command::SetPtt(false)))]
-    #[case("T 3", false, Ok(Command::SetPtt(true)))]
-    #[case("+t", true, Ok(Command::GetPtt))]
     #[case("\\rtty_send 0Vh", false, Ok(Command::RttySend(vec![TxCode::Character(0), TxCode::Character(31), TxCode::HoldMark])))]
     #[case("+\\rtty_end", true, Ok(Command::RttyEnd))]
     #[case("\\status", false, Ok(Command::Status))]
     #[case("+\\stop", true, Ok(Command::Stop))]
     #[case("q", false, Ok(Command::Quit))]
-    #[case("T 4", false, Err(Reply::refuse("set_ptt", code::INVALID)))]
-    #[case("T", false, Err(Reply::refuse("set_ptt", code::INVALID)))]
+    #[case("T 1", false, Err(Reply::refuse("T", code::NOT_IMPLEMENTED)))]
+    #[case("+\\get_ptt", true, Err(Reply::refuse("get_ptt", code::NOT_IMPLEMENTED)))]
     #[case("+\\status now", true, Err(Reply::refuse("status", code::INVALID)))]
     #[case("+\\rtty_send", true, Err(Reply::refuse("rtty_send", code::INVALID)))]
     #[case("+\\rtty_send 0Z", true, Err(Reply::refuse("rtty_send", code::INVALID)))]
@@ -396,15 +375,15 @@ mod tests {
 
     #[test]
     fn the_extended_form_names_the_command_and_always_reports() {
-        let reply = Reply::new("get_ptt", vec!["PTT: 1".to_owned()]);
-        assert_eq!(reply.render(true), "get_ptt:\nPTT: 1\nRPRT 0\n");
+        let reply = Reply::new("chk_vfo", vec!["ChkVFO: 0".to_owned()]);
+        assert_eq!(reply.render(true), "chk_vfo:\nChkVFO: 0\nRPRT 0\n");
         assert_eq!(Reply::refuse("stop", code::REJECTED).render(true), "stop:\nRPRT -9\n");
     }
 
     #[test]
     fn the_plain_form_answers_a_query_with_its_values_alone() {
-        let reply = Reply::new("get_ptt", vec!["PTT: 1".to_owned()]);
-        assert_eq!(reply.render(false), "1\n");
+        let reply = Reply::new("chk_vfo", vec!["ChkVFO: 0".to_owned()]);
+        assert_eq!(reply.render(false), "0\n");
         assert_eq!(Reply::new("stop", Vec::new()).render(false), "RPRT 0\n");
         assert_eq!(Reply::refuse("stop", code::REJECTED).render(false), "RPRT -9\n");
     }

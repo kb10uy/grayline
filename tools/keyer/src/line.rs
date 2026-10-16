@@ -53,21 +53,17 @@ impl ControlLine for SerialLine {
     }
 }
 
-/// Opens `path` for its control lines alone.
+/// Opens `path` for its control lines alone, with both of them released.
+///
+/// The line the keyer does not drive is released too: a driver may raise it
+/// on open, and on a port wired for PTT that would key the rig.
 pub fn open_port(path: &str) -> Result<Box<dyn SerialPort>, KeyerError> {
-    serialport::new(path, 9_600)
-        .dtr_on_open(false)
-        .open()
-        .map_err(|error| KeyerError::Port {
-            port: path.to_owned(),
-            detail: error.to_string(),
-        })
-}
-
-/// A second handle to `port`, for a line driven separately.
-pub fn share_port(port: &dyn SerialPort, path: &str) -> Result<Box<dyn SerialPort>, KeyerError> {
-    port.try_clone().map_err(|error| KeyerError::Port {
+    let failed = |error: serialport::Error| KeyerError::Port {
         port: path.to_owned(),
         detail: error.to_string(),
-    })
+    };
+    let mut port = serialport::new(path, 9_600).dtr_on_open(false).open().map_err(failed)?;
+    port.write_data_terminal_ready(false).map_err(failed)?;
+    port.write_request_to_send(false).map_err(failed)?;
+    Ok(port)
 }

@@ -1,6 +1,6 @@
 [package]
 name = "grayline-keyer"
-description = "Serial-line keying for Grayline: FSK and PTT on DTR and RTS, reached the way rigctld is"
+description = "Serial-line FSK keying for Grayline on DTR or RTS, reached the way rigctld is"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

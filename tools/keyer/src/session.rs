@@ -10,7 +10,7 @@ use crate::{
 /// The most codes a stream may hold waiting to be keyed.
 pub const MAXIMUM_QUEUED_CODES: usize = 65_536;
 
-/// One client connection, which owns whatever it keyed.
+/// One client connection, which owns the stream it opened.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ConnectionId(pub u64);
 
@@ -79,8 +79,6 @@ pub enum Refusal {
 pub struct Status {
     /// Where the last stream stands.
     pub phase: Phase,
-    /// Whether the PTT line is asked to be keyed.
-    pub ptt: bool,
     /// Codes of the current or last stream that have gone out.
     pub sent: usize,
     /// Codes still waiting.
@@ -98,6 +96,7 @@ struct Stream {
     queue: VecDeque<TxCode>,
     ended: bool,
     started: bool,
+    since: Option<Duration>,
     stop: Option<StopReason>,
 }
 
@@ -108,9 +107,6 @@ pub struct Session {
     phase: Phase,
     sent: usize,
     progress: Progress,
-    ptt: bool,
-    ptt_owner: Option<ConnectionId>,
-    keyed_since: Option<Duration>,
     fault: Option<String>,
 }
 
@@ -126,6 +122,7 @@ impl Session {
             queue: VecDeque::new(),
             ended: false,
             started: false,
+            since: None,
             stop: None,
         });
         self.phase = Phase::Sending;
@@ -184,45 +181,27 @@ impl Session {
         }
     }
 
-    /// Asks for the PTT line to be keyed or released on behalf of `owner`.
-    pub fn set_ptt(&mut self, owner: ConnectionId, keyed: bool) {
-        self.ptt = keyed;
-        self.ptt_owner = keyed.then_some(owner);
-    }
-
-    /// Whether the PTT line is asked to be keyed.
-    pub const fn ptt(&self) -> bool {
-        self.ptt
-    }
-
-    /// Lets go of everything `connection` keyed, returning whether a stream
-    /// being keyed has to be cancelled.
+    /// Stops the stream `connection` opened, returning whether one being keyed
+    /// has to be cancelled.
     pub fn release(&mut self, connection: ConnectionId) -> bool {
-        if self.ptt_owner == Some(connection) {
-            self.ptt = false;
-            self.ptt_owner = None;
-        }
         match &self.stream {
             Some(stream) if stream.owner == connection => self.stop(StopReason::Disconnected),
             _ => false,
         }
     }
 
-    /// Enforces the transmit time limit at `now`, returning whether a stream
-    /// being keyed has to be cancelled.
+    /// Enforces the time limit on the stream being keyed at `now`, returning
+    /// whether it has to be cancelled.
+    ///
+    /// The limit counts from the first look after the stream started, on the
+    /// keyer's own clock.
     pub fn expire(&mut self, now: Duration, limit: Option<Duration>) -> bool {
-        if !self.ptt && self.stream.is_none() {
-            self.keyed_since = None;
+        let Some(stream) = self.stream.as_mut().filter(|stream| stream.started) else {
             return false;
-        }
-        let since = *self.keyed_since.get_or_insert(now);
+        };
+        let since = *stream.since.get_or_insert(now);
         match limit {
-            Some(limit) if now.saturating_sub(since) >= limit => {
-                self.keyed_since = None;
-                self.ptt = false;
-                self.ptt_owner = None;
-                self.stop(StopReason::TimedOut)
-            }
+            Some(limit) if now.saturating_sub(since) >= limit => self.stop(StopReason::TimedOut),
             _ => false,
         }
     }
@@ -274,7 +253,6 @@ impl Session {
     pub fn status(&self) -> Status {
         Status {
             phase: self.phase,
-            ptt: self.ptt,
             sent: self.sent,
             queued: self.stream.as_ref().map_or(0, |stream| stream.queue.len()),
             progress: self.progress,
@@ -368,53 +346,35 @@ mod tests {
     }
 
     #[test]
-    fn a_disconnect_releases_only_what_that_connection_keyed() {
+    fn a_disconnect_stops_only_the_stream_that_connection_opened() {
         let mut session = opened();
         session.take_started();
-        session.set_ptt(OTHER, true);
-        assert!(!session.release(ConnectionId(3)));
-        assert!(session.ptt());
+        assert!(!session.release(OTHER));
         assert!(session.release(OWNER));
-        assert!(session.ptt());
         session.finish(Some(Outcome::Stopped));
         assert_eq!(session.status().phase, Phase::Stopped(StopReason::Disconnected));
-        assert!(!session.release(OTHER));
-        assert!(!session.ptt());
     }
 
     #[test]
-    fn the_time_limit_unkeys_and_stops_once_it_runs_out() {
+    fn the_time_limit_stops_a_stream_once_it_runs_out() {
         let mut session = opened();
-        session.take_started();
-        session.set_ptt(OWNER, true);
         let limit = Some(10 * SECOND);
-        assert!(!session.expire(SECOND, limit));
-        assert!(!session.expire(10 * SECOND, limit));
-        assert!(session.expire(11 * SECOND, limit));
-        assert!(!session.ptt());
+        assert!(!session.expire(100 * SECOND, limit));
+        session.take_started();
+        assert!(!session.expire(101 * SECOND, limit));
+        assert!(!session.expire(110 * SECOND, limit));
+        assert!(session.expire(111 * SECOND, limit));
         session.finish(Some(Outcome::Stopped));
         assert_eq!(session.status().phase, Phase::Stopped(StopReason::TimedOut));
     }
 
     #[test]
-    fn the_time_limit_counts_from_when_keying_began() {
-        let mut session = Session::default();
-        let limit = Some(10 * SECOND);
-        assert!(!session.expire(100 * SECOND, limit));
-        session.set_ptt(OWNER, true);
-        assert!(!session.expire(101 * SECOND, limit));
-        assert!(!session.expire(110 * SECOND, limit));
-        assert!(!session.expire(111 * SECOND, limit));
-        assert!(!session.ptt());
-    }
-
-    #[test]
     fn no_limit_never_expires() {
-        let mut session = Session::default();
-        session.set_ptt(OWNER, true);
+        let mut session = opened();
+        session.take_started();
         assert!(!session.expire(Duration::ZERO, None));
         assert!(!session.expire(Duration::from_secs(1_000_000), None));
-        assert!(session.ptt());
+        assert_eq!(session.status().phase, Phase::Sending);
     }
 
     #[test]
