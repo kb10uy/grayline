@@ -1,0 +1,27 @@
+[package]
+name = "grayline-keyer"
+description = "Serial-line keying for Grayline: FSK and PTT on DTR and RTS, reached the way rigctld is"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "gl-keyer"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ctrlc.workspace = true
+grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
+serialport.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
+
+[dev-dependencies]
+grayline-rig = { path = "../../crates/rig" }
+rstest.workspace = true

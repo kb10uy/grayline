@@ -29,9 +29,12 @@ The repository contains:
   the binary `gl-<mode>`; `gl-sstv` encodes and decodes WAV files and
   `gl-wefax` decodes them. `gl-rtty` encodes and decodes RTTY WAV files,
   while `tools/qso-cli/` provides `gl-qso` for the shared contact directory
-  and ADIF import. Each binary parses its command line with clap's
-  derive interface and reaches the work through its own library, so a
-  subcommand stays a thin layer over a tested function.
+  and ADIF import. `tools/keyer/` is the exception to both the naming and the
+  "not shipped": it holds the package `grayline-keyer` and the binary
+  `gl-keyer`, a keyer an operator runs beside `rigctld` to key FSK and PTT on
+  a serial port's DTR and RTS lines. Each binary parses its command line
+  with clap's derive interface and reaches the work through its own library,
+  so a subcommand stays a thin layer over a tested function.
 - `assets/`: data the repository ships outside any one crate, such as the
   ported MMSSTV templates under `assets/templates/`.
 - `docs/reference/mmsstv/` and `docs/reference/mmtty/`: the original MMSSTV and

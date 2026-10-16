@@ -8,27 +8,12 @@ use grayline_dsp::{
 
 use crate::{
     RttyError,
-    code::{FIGS, LTRS},
     tx::{
-        config::{Diddle, TxConfig},
+        config::TxConfig,
         encoder::TxCode,
-        schedule::{CONTROL_HOLD_BITS, Timing},
+        framer::{Framer, Keying},
     },
 };
-
-/// The three states a transmitter's output can be in.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Keying {
-    /// The mark tone, a logical one and the idle line.
-    Mark,
-    /// The space tone, a logical zero.
-    Space,
-    /// No carrier at all: the sample is exactly zero and the oscillator's
-    /// phase does not advance. This is a keying state of its own, distinct
-    /// from the transmit gate the amplitude ramp shapes; MMTTY cuts it just
-    /// as hard (`Rtty.cpp:623`).
-    Muted,
-}
 
 /// Width added on each side of the tones by the transmit band-pass, in hertz.
 const BAND_PASS_MARGIN_HZ: f64 = 150.0;
@@ -47,16 +32,10 @@ pub struct Transmitter<I: Iterator<Item = TxCode>> {
     codes: I,
     stage: Stage,
     pending: VecDeque<(Keying, f64)>,
-    diddle_enabled: bool,
-    /// The shift the stream last announced, which a diddle filler must not
-    /// contradict: the codes are already encoded, so nothing downstream
-    /// would re-announce a case a stray LTRS knocked over.
-    announced_shift: u8,
+    framer: Framer,
     keying: Keying,
     position: u64,
     boundary: f64,
-    samples_per_bit: f64,
-    character_bits: f64,
     vco: Vco,
     smoothing: Option<MovingAverage>,
     band_pass: Option<Fir>,
@@ -65,7 +44,6 @@ pub struct Transmitter<I: Iterator<Item = TxCode>> {
     ramp_samples: f64,
     tail_samples: f64,
     fade_out_end: Option<f64>,
-    config: TxConfig,
 }
 
 impl<I: Iterator<Item = TxCode>> Transmitter<I> {
@@ -73,7 +51,8 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
     pub fn new(codes: I, sample_rate_hz: u32, config: TxConfig) -> Result<Self, RttyError> {
         let rate = f64::from(sample_rate_hz);
         config.tones.validate(rate)?;
-        let timing = Timing::new(sample_rate_hz, &config)?;
+        let framer = Framer::new(sample_rate_hz, &config)?;
+        let timing = framer.timing();
         if !config.amplitude.is_finite() || config.amplitude <= 0.0 {
             return Err(RttyError::Dsp(grayline_dsp::DspError::InvalidLevel));
         }
@@ -113,13 +92,10 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
             codes,
             stage: Stage::Stream,
             pending,
-            diddle_enabled: true,
-            announced_shift: LTRS,
+            framer,
             keying: Keying::Mark,
             position: 0,
             boundary: 0.0,
-            samples_per_bit: timing.samples_per_bit,
-            character_bits: timing.character_bits,
             vco,
             smoothing,
             band_pass,
@@ -128,7 +104,6 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
             ramp_samples: timing.ramp_samples,
             tail_samples: timing.tail_samples,
             fade_out_end: None,
-            config,
         })
     }
 
@@ -161,7 +136,7 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
             }
             match self.stage {
                 Stage::Stream => match self.codes.next() {
-                    Some(code) => self.schedule(code),
+                    Some(code) => self.framer.frame(code, &mut self.pending),
                     None => {
                         self.stage = Stage::Tail;
                         if self.tail_samples > 0.0 {
@@ -175,78 +150,6 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
                     return false;
                 }
             }
-        }
-    }
-
-    fn schedule(&mut self, code: TxCode) {
-        match code {
-            TxCode::Character(code) => {
-                if code == LTRS || code == FIGS {
-                    self.announced_shift = code;
-                }
-                self.schedule_character(code);
-                self.schedule_gap();
-            }
-            TxCode::HoldMark => self
-                .pending
-                .push_back((Keying::Mark, CONTROL_HOLD_BITS * self.samples_per_bit)),
-            TxCode::CarrierOff => self
-                .pending
-                .push_back((Keying::Muted, CONTROL_HOLD_BITS * self.samples_per_bit)),
-            TxCode::DisableDiddle => self.diddle_enabled = false,
-            TxCode::EnableDiddle => self.diddle_enabled = true,
-        }
-    }
-
-    /// Frames one character: start, data b1-first, parity, then the stop
-    /// element as one mark of one bit plus the configured extra.
-    fn schedule_character(&mut self, code: u8) {
-        let bit = self.samples_per_bit;
-        self.pending.push_back((Keying::Space, bit));
-        let bits = self.config.framing.bits.bits();
-        let mut marks = 0;
-        for index in (0..bits).rev() {
-            let is_mark = (code >> index) & 1 == 1;
-            marks += u32::from(is_mark);
-            self.pending
-                .push_back((if is_mark { Keying::Mark } else { Keying::Space }, bit));
-        }
-        if let Some(parity) = self.config.framing.parity.transmitted_bit(marks) {
-            self.pending
-                .push_back((if parity { Keying::Mark } else { Keying::Space }, bit));
-        }
-        self.pending
-            .push_back((Keying::Mark, (1.0 + self.config.framing.stop.extra_bits()) * bit));
-    }
-
-    /// Fills the character gap with diddle characters where they fit, and
-    /// mark idle for whatever is left.
-    fn schedule_gap(&mut self) {
-        let mut remaining = self.config.char_gap_bits;
-        if remaining <= 0.0 {
-            return;
-        }
-        let diddle = if self.diddle_enabled {
-            self.config.diddle
-        } else {
-            Diddle::None
-        };
-        let filler = match diddle {
-            Diddle::None => None,
-            // The filler repeats whichever shift the stream last announced:
-            // a bare LTRS in the middle of figures text would silently move
-            // the receiver's case out from under the remaining codes.
-            Diddle::Ltrs => Some(self.announced_shift),
-            Diddle::Blank => Some(0),
-        };
-        if let Some(code) = filler {
-            while remaining >= self.character_bits {
-                self.schedule_character(code);
-                remaining -= self.character_bits;
-            }
-        }
-        if remaining > 0.0 {
-            self.pending.push_back((Keying::Mark, remaining * self.samples_per_bit));
         }
     }
 
@@ -301,7 +204,11 @@ mod tests {
     use alloc::{vec, vec::Vec};
 
     use super::*;
-    use crate::params::{Parity, StopElement, ToneSet};
+    use crate::{
+        code::LTRS,
+        params::{Parity, StopElement, ToneSet},
+        tx::Diddle,
+    };
     use rstest::rstest;
 
     const RATE: u32 = 48_000;

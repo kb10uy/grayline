@@ -35,7 +35,8 @@ rx/
   pipeline.rs   the wiring, and the AFC's FFT cadence
 tx/
   encoder.rs    text to TxCode streams
-  modulator.rs  keying, the VCO, the filters, and the gate ramp
+  framer.rs     codes to keying elements, in the caller's ticks
+  modulator.rs  the VCO, the filters, and the gate ramp
   config.rs     TxConfig
 ```
 
@@ -333,10 +334,17 @@ PCM and nothing else; PTT runs through `grayline-rig-control`, which the
 application calls on either side of a transmission. The queue is why the two
 are not one call each: the rig stays keyed while messages are still waiting, so
 what unkeys is an empty queue rather than the end of a stream
-([rig-control.md](rig-control.md)). Serial FSK keying, where the rig is handed
-bits instead of audio, is still deferred: it would replace the modulator rather
-than sit beside it, and the schedule a sent-text display reads has no
-counterpart once a UART owns the timing.
+([rig-control.md](rig-control.md)).
+
+**Framing is shared with the keyer.** What a code becomes on the line —
+start, data, parity, stop, gap, and diddle — is `Framer`, and `Transmitter`
+is a framer driving a VCO. A framer counts in its caller's ticks, so the same
+one drives `gl-keyer`'s serial-line FSK in microseconds
+([keyer.md](keyer.md)). The lead-in and tail stay with the caller, because a
+keyer fed codes as they arrive has to idle when it runs dry and only it knows
+that from the end. Because the keyer owns its own timing, a stream's elapsed
+time maps onto `TxSchedule` the same way a playback position does. Using it
+from the application, in place of the audio, is still deferred.
 
 ## Consequences an operator sees
 
