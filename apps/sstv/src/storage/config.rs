@@ -11,12 +11,18 @@ use std::{
 };
 
 use grayline_qso::DEFAULT_FIELDS;
-use grayline_rig::DEFAULT_ADDRESS;
+use grayline_rig_control::DEFAULT_ADDRESS;
 use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::storage::history::HistoryFormat;
+
+/// What the `[rig]` section holds, and the names its ports are reached by.
+///
+/// Re-exported rather than defined here: the file is the application's, while
+/// what the settings in it mean belongs to rig control.
+pub use grayline_rig_control::{PortSettings, RigSettings};
 
 /// The serial number a fresh log starts from.
 ///
@@ -49,17 +55,6 @@ pub const DEFAULT_TX_MODE: Mode = Mode::Scottie2;
 /// Full scale, because the modulator already produces normalized PCM and the
 /// operator's own output mixer is what the level is usually set against.
 pub const DEFAULT_TX_VOLUME: f32 = 1.0;
-/// How often the rig is asked what it is tuned to, in seconds.
-pub const DEFAULT_POLL_SECONDS: f32 = 1.0;
-/// How long the rig is given to settle between keying and the first sample.
-///
-/// A rig switching to transmit takes a moment its own audio does not wait for,
-/// and anything sent inside it is simply lost. A fifth of a second covers the
-/// relays in a station that has them; a rig that switches faster only wastes
-/// it.
-pub const DEFAULT_LEAD_IN_SECONDS: f32 = 0.2;
-/// How long the carrier is held after the last sample has been played.
-pub const DEFAULT_TAIL_SECONDS: f32 = 0.05;
 /// The longest either side of a transmission may be padded by, in seconds.
 pub const KEYING_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=5.0;
 /// How far apart polls may be asked to be, in seconds.
@@ -119,25 +114,6 @@ pub struct Settings {
     pub contact: ContactSettings,
 }
 
-/// How the station's rig is reached.
-///
-/// Only which `rigctld` instances to reach and the keying timing. What is sent
-/// over them is the operator's own script, because what a rig wants around a
-/// transmission is a property of that rig and of the station around it, and
-/// none of that belongs hard-coded in an SSTV application.
-#[derive(Clone, Debug, PartialEq)]
-pub struct RigSettings {
-    pub enabled: bool,
-    /// The transports to open, under the names the script reaches them by.
-    pub ports: BTreeMap<String, PortSettings>,
-    /// How often the frequency is read, in seconds; zero never reads it.
-    pub poll_seconds: f32,
-    /// How long after keying the first sample is sent, in seconds.
-    pub lead_in_seconds: f32,
-    /// How long after the last sample the rig is unkeyed, in seconds.
-    pub tail_seconds: f32,
-}
-
 /// Where the contact directory looks a callsign up.
 ///
 /// Written under `[qso]`, beside the serial number: the callsign in that panel
@@ -176,39 +152,6 @@ impl Default for ContactSettings {
             lookup: true,
             wavelog_url: String::new(),
             fields: DEFAULT_FIELDS.iter().map(|field| (*field).to_owned()).collect(),
-        }
-    }
-}
-
-/// The name the default port is offered to the script under.
-pub const DEFAULT_PORT_NAME: &str = "rig";
-
-/// One `rigctld` the application connects to.
-///
-/// There is nothing to choose between here: Hamlib already covers the CI-V and
-/// DTR/RTS keying that a second kind of transport would be for, so a port is
-/// an address and no more.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PortSettings {
-    pub address: String,
-}
-
-impl Default for RigSettings {
-    fn default() -> Self {
-        Self {
-            // A station with no rigctld running is the state every first run
-            // is in, and trying to reach one would only produce an error the
-            // operator did not ask for.
-            enabled: false,
-            ports: BTreeMap::from([(
-                DEFAULT_PORT_NAME.to_owned(),
-                PortSettings {
-                    address: DEFAULT_ADDRESS.to_owned(),
-                },
-            )]),
-            poll_seconds: DEFAULT_POLL_SECONDS,
-            lead_in_seconds: DEFAULT_LEAD_IN_SECONDS,
-            tail_seconds: DEFAULT_TAIL_SECONDS,
         }
     }
 }
@@ -680,6 +623,7 @@ fn table_mut<'a>(document: &'a mut DocumentMut, name: &str) -> &'a mut Table {
 
 #[cfg(test)]
 mod tests {
+    use grayline_rig_control::{DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS};
     use rstest::rstest;
 
     use super::*;

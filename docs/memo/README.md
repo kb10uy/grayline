@@ -92,7 +92,8 @@ The Rust implementation: what it is meant to be, and what it currently is.
   application design, implementation status, and remaining work.
 - [grayline/rig-control.md](grayline/rig-control.md): the transports the rig is
   reached over, the script that decides what is sent, and the band plan both
-  read, including the implemented SSTV Lua host and radio panel.
+  read, including the shared keying worker and Lua host, what each application
+  uses of them, and the SSTV radio panel.
 - [grayline/qso-directory.md](grayline/qso-directory.md): the directory of
   stations a template looks a callsign up in, the store behind it, and why it
   is not a log.

@@ -1,3 +1,5 @@
+use grayline_rig_control::{DEFAULT_PORT_NAME, RigControlError, RigError, script::ScriptError};
+
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -39,4 +41,19 @@ pub fn scratch_dir() -> PathBuf {
     let path = env::temp_dir().join(format!("grayline-rtty-scratch-{}", std::process::id()));
     fs::create_dir_all(&path).expect("the temporary directory is writable");
     path
+}
+
+/// A rig failure in the shape rig control publishes one.
+///
+/// A refused connection reaches the snapshot as the port the script was
+/// loading when the transport gave up, which is what the interface has to
+/// print legibly.
+pub(crate) fn refused_port() -> RigControlError {
+    RigControlError::Script(ScriptError::Port {
+        name: DEFAULT_PORT_NAME.to_owned(),
+        error: RigError::Connect {
+            address: "127.0.0.1:4532".to_owned(),
+            detail: "connection refused".to_owned(),
+        },
+    })
 }

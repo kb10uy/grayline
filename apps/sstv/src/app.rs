@@ -18,6 +18,11 @@ use jiff::{Timestamp, Zoned};
 
 use grayline_sstv_rx::SyncStart;
 
+use grayline_rig_control::{
+    Reading, RigControlError, RigSnapshot, RigState, RigWorker,
+    bands::{BandDefinition, BandPlan},
+    script,
+};
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale, owned},
@@ -27,7 +32,6 @@ use grayline_shell::{
 use crate::{
     error::AppError,
     storage::{
-        bands::{BandDefinition, BandPlan},
         config::{Config, ContactSettings, RigSettings, Settings},
         paths::{AppPaths, Folder},
     },
@@ -38,7 +42,6 @@ use crate::{
         compose::{ComposeRequest, Composer},
         contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         receive::{Frame, RxProgress},
-        rig::{Reading, RigSnapshot, RigState, RigWorker, script},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
     },
 };
@@ -1226,7 +1229,12 @@ impl App {
     fn poll_rig(&mut self) {
         match (self.rig.enabled, self.rig_worker.is_some()) {
             (true, false) => {
-                let worker = RigWorker::spawn(&self.rig, self.paths.config_dir(), Arc::clone(&self.bands));
+                let worker = RigWorker::spawn(
+                    &self.rig,
+                    self.paths.config_dir(),
+                    Arc::clone(&self.bands),
+                    grayline_shell::log::note,
+                );
                 self.rig_worker = Some(worker);
                 self.rig_snapshot = RigSnapshot::default();
             }
@@ -1744,7 +1752,7 @@ impl App {
         }
         let detail = self.rig_snapshot.error.as_ref().map_or_else(
             || self.i18n.text(self.rig_snapshot.state.label_key()),
-            AppError::to_string,
+            RigControlError::to_string,
         );
         Some(
             self.i18n

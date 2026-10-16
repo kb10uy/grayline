@@ -51,7 +51,8 @@ platform integration, and application behavior.
 | Modulator | Timed frequencies to PCM samples | `grayline-tone-tx` |
 | Audio adapters | Platform-specific input and output streams | `grayline-audio`; capture and playback implemented |
 | Rig transport | How a rig is reached: a `rigctld` socket | `grayline-rig`; implemented |
-| Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-sstv` |
+| Rig control | When the rig is keyed, and the host for what it is told | `grayline-rig-control`; implemented |
+| Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-rig-control` |
 | Integration | Composition of core stages for a particular environment | `gl-sstv`, `gl-wefax`, `gl-rtty`, and `web-demo` |
 | Template composition | KDL scene parsing, variables, RGBA overlay rendering, and RGB composition | `grayline-sstv-template` |
 | Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv` receive interface; designed in [gui-design.md](gui-design.md) |
@@ -367,6 +368,7 @@ The workspace currently contains twenty-one packages:
 | `grayline-web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
+| `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
 | `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
 | `grayline-qso-cli` | Contact directory command line, as `gl-qso` | Implemented |
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
@@ -389,12 +391,13 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-qso` | None |
 | `grayline-qso-cli` | `grayline-qso` |
 | `grayline-rig` | None |
+| `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |
-| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
+| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
 | `grayline-rtty-cli` | `grayline-rtty` |
 | `grayline-shell` | None |
 | `grayline-sstv` | `grayline-sstv-fskid` |
-| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
 | `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
 | `grayline-sstv-fskid` | None |
 | `grayline-sstv-rx` | `grayline-dsp`, `grayline-sstv`, `grayline-sstv-fskid` |
@@ -432,9 +435,19 @@ a rig, because Hamlib already covers the CI-V and DTR/RTS keying that other
 SSTV software arranges separately.
 
 The crate is how a rig is reached and not what it is told: what is sent at each
-moment is a Lua script the application hosts, because what a rig wants around a
-transmission differs by rig and by station. The whole arrangement is described
-in [rig-control.md](rig-control.md).
+moment is a Lua script, because what a rig wants around a transmission differs
+by rig and by station.
+
+`grayline-rig-control` is the layer above it, and it is what every transmitting
+application needs and no mode decides: the thread that holds the transports,
+the host for the operator's `rigcontrol.lua`, and the band plan that script
+reads. It sits in a crate of its own rather than in `grayline-shell` because a
+receive-only application would otherwise link a Lua interpreter it never calls,
+and rather than in `grayline-rig` because a scripting host is policy and that
+crate is transport. An application supplies the settings, the directory the
+script is read from, and the moments — the two sides of a transmission, a
+tuning request, a frequency poll. The whole arrangement is described in
+[rig-control.md](rig-control.md).
 
 `grayline-dsp`, `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` build as
 allocation-backed `no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
@@ -626,7 +639,9 @@ implementations:
 - The RTTY pieces deliberately deferred, listed in [rtty.md](rtty.md): the
   FIR, PLL, and sliding-DFT discriminators, the center-sampling framing
   machine, the zero-crossing limiter AGC, the prefilter notch and LMS chain,
-  6-to-8-bit pipelines, CW identification, and serial FSK keying.
+  6-to-8-bit pipelines, CW identification, and serial FSK keying. PTT is no
+  longer among them: the RTTY application keys through
+  `grayline-rig-control`.
 - The rest of `apps/rtty`, whose receive and transmit halves and scope window
   are implemented: the received-text history log, the aligned save, and the
   rig frequency readout. The design is

@@ -1,3 +1,6 @@
+use grayline_rig::RigError;
+use grayline_rig_control::{DEFAULT_PORT_NAME, RigControlError, script::ScriptError};
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -49,4 +52,19 @@ impl Drop for TempDir {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).unwrap();
     }
+}
+
+/// A rig failure in the shape rig control publishes one.
+///
+/// A refused connection reaches the snapshot as the port the script was
+/// loading when the transport gave up, which is what the interface has to
+/// print legibly.
+pub(crate) fn refused_port() -> RigControlError {
+    RigControlError::Script(ScriptError::Port {
+        name: DEFAULT_PORT_NAME.to_owned(),
+        error: RigError::Connect {
+            address: "127.0.0.1:4532".to_owned(),
+            detail: "connection refused".to_owned(),
+        },
+    })
 }

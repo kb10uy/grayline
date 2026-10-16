@@ -139,13 +139,13 @@ mod tests {
             .chain(crate::storage::paths::Folder::ALL.map(crate::storage::paths::Folder::label_key))
             .chain(
                 [
-                    crate::worker::rig::RigState::Disconnected,
-                    crate::worker::rig::RigState::Connecting,
-                    crate::worker::rig::RigState::Receiving,
-                    crate::worker::rig::RigState::Transmitting,
-                    crate::worker::rig::RigState::Failed,
+                    grayline_rig_control::RigState::Disconnected,
+                    grayline_rig_control::RigState::Connecting,
+                    grayline_rig_control::RigState::Receiving,
+                    grayline_rig_control::RigState::Transmitting,
+                    grayline_rig_control::RigState::Failed,
                 ]
-                .map(crate::worker::rig::RigState::label_key),
+                .map(grayline_rig_control::RigState::label_key),
             );
         for label in labels {
             assert!(defined.contains(label), "`{label}` is not defined");

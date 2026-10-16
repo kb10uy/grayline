@@ -4,9 +4,11 @@ The application keys the station's rig, reads what it is tuned to, and moves it
 between bands. What each of those means at the rig differs by station, so the
 application supplies the moments and the operator supplies the commands.
 
-This document describes the implemented SSTV rig control; see
-[Status](#status). The RTTY application currently uses VOX for PTT and does
-not host this script.
+Rig control lives in `grayline-rig-control`, above the `grayline-rig`
+transport, because keying is what every transmitting application needs and no
+mode decides. The SSTV application uses all of it; the RTTY application keys
+through it and no more, which [What Each Application Uses](#what-each-application-uses)
+describes. This document covers what is implemented; see [Status](#status).
 
 ## Why One Transport and a Script
 
@@ -52,23 +54,69 @@ what a station running more than one program is doing anyway.
 | Layer | Holds | Where |
 | --- | --- | --- |
 | Transport | The `rigctld` protocol, framed | `grayline-rig` |
+| Keying | When the script is called, and the thread that calls it | `grayline-rig-control` |
 | Policy | What to send, and when, for this station | `rigcontrol.lua` |
 | Band data | Where each band is and what to do on it | `bands.toml` |
 | Timing and wiring | Which `rigctld` instances to reach, keying delays, poll rate | `config.toml` |
 
-The Lua host and the worker thread live in the application crate rather than in
-`grayline-rig`: a scripting host is application policy, and the reusable crate
-stays what it is now, a description of how to talk to a rig.
+The Lua host and the worker thread live above `grayline-rig` rather than in it:
+a scripting host is policy, and the transport crate stays what it is, a
+description of how to talk to a rig. They moved out of the SSTV application
+once a second application needed to key a rig, which is the rule the rest of
+this repository's crates were drawn by.
+
+The application still owns the moments and the settings. It supplies the
+`[rig]` section it parsed out of its own configuration file, the directory the
+script and the plan are read from, and a function the script's `log` writes
+to — rig control keeps no log of its own, because which log a message belongs
+in is the application's to know.
+
+Each application reads its own configuration directory, so a station that keys
+both has a `rigcontrol.lua` per application rather than one the two could
+disagree over. Copying one across is the operator's; sharing one from the
+family directory is left until there is a reason to make the two agree.
 
 Ports are named because a station may reach more than one `rigctld` — the rig
 on one, an amplifier or a rotator on another — not because there is more than
 one kind of transport. There is not.
 
+## What Each Application Uses
+
+| | SSTV | RTTY |
+| --- | --- | --- |
+| Keying around a transmission | Yes | Yes |
+| Settings | `[rig]`, edited from the radio panel | `[rig]`, edited in the file |
+| `rigcontrol.lua`, `bands.toml` | Read, and written out from the menu | Read, and the built-in default otherwise |
+| Frequency poll | On, and shown in the radio panel | Off by default; nothing shows a frequency yet |
+| Band selector, tuning controls | Yes | No |
+| Template variables | Yes | No |
+
+The RTTY application has no editor for the `[rig]` section and no menu entry
+that writes the script out. Keying is wired once for a station and then left
+alone, so the configuration file is where it is set up — which is why the
+section is written back with its defaults on the first save, keys and all: an
+operator who had to invent the keys before they could change them would have
+no way to learn the keys exist.
+
+What that application adds on its own is the queue. One transmission is not
+one message there: the rig stays keyed while anything is still queued behind
+the message on the air, because unkeying between two of them would drop the
+carrier in the middle of what the receiving station reads as one transmission.
+It is unkeyed once the stream has drained and the queue is empty.
+
+Its transmitter also generates half a second of mark idle before the first
+character, and that is not the rig's lead-in: the idle is there for the
+receiving station's integrators, while `lead-in` is the time the rig takes to
+switch over. The two add up, and neither replaces the other. A station that
+keys fast can set `lead-in` to zero and still send a lead-in the other end can
+settle on.
+
 ## Status
 
 Everything described here is implemented: the `rigctld` transport and its
 framing, named ports, the Lua host and every entry point, keying around a
-transmission, the band plan, the radio panel, and the template variables.
+transmission in both applications, the band plan, the radio panel, and the
+template variables.
 
 ## The Script
 
@@ -264,10 +312,10 @@ address = "127.0.0.1:4533"
 
 | Key | Meaning |
 | --- | --- |
-| `enabled` | Whether to connect at all. The Rig Control menu is the same switch. |
+| `enabled` | Whether to connect at all. The SSTV application's Rig Control menu is the same switch; the RTTY application reads this key and offers no switch. |
 | `lead-in` | Seconds between `transmit` returning and the first audio sample. |
 | `tail` | Seconds between the last audio sample and `receive` being called. |
-| `poll-interval` | Seconds between calls to `poll_frequency`. `0` never calls it. |
+| `poll-interval` | Seconds between calls to `poll_frequency`. `0` never calls it, which is what the RTTY application starts on. |
 
 `lead-in` covers the time a rig takes to switch to transmit, which its audio
 path does not wait for: anything sent inside it is lost. `tail` covers the
@@ -360,7 +408,10 @@ traffic on the wire during the one part of a session that has to be left alone.
 `set_frequency` and `change_band` are refused while keyed for the same reason.
 
 While rig control is switched on and not connected, a transmission is refused
-with what the rig said. Switching it off transmits anyway.
+with what the rig said. Switching it off transmits anyway. In the RTTY
+application the refusal holds the send button, and a rig that fails once a
+message is already going out stops it and gives the unsent text back to the
+draft, as stopping a transmission by hand does.
 
 ## Template Variables
 
@@ -379,7 +430,8 @@ template that says nothing about the frequency is left alone.
 
 ## Interface
 
-Rig control is worked from a radio panel in the window, shared by both tabs:
+In the SSTV application, rig control is worked from a radio panel in the
+window, shared by both tabs:
 
 | Control | Does |
 | --- | --- |
@@ -413,6 +465,12 @@ same height.
 Nothing about rig control is in the menu bar except putting `rigcontrol.lua`
 and `bands.toml` where they can be edited, which sits under Settings. Writing
 a file out is a once-ever thing rather than an operating control.
+
+The RTTY application has no panel. It shows the connection's state on the
+status bar beside the sample rate, and only while `enabled` is on: a station
+keying with VOX has nothing to report there, and a line saying so would be a
+fault where there is none. What the rig said goes to the status bar as every
+other fault does.
 
 ## Verification Strategy
 

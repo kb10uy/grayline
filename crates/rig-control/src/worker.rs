@@ -9,20 +9,14 @@ use std::{
     time::Duration,
 };
 
-pub mod script;
-
 use grayline_rig::DEFAULT_TIMEOUT;
 
 use crate::{
-    error::AppError,
-    storage::{
-        bands::BandPlan,
-        config::{PortSettings, RigSettings},
-    },
-    worker::{
-        rig::script::{Entry, ScriptError, ScriptHost},
-        update,
-    },
+    bands::BandPlan,
+    error::RigControlError,
+    script::{Entry, Logger, ScriptError, ScriptHost},
+    settings::{PortSettings, RigSettings},
+    update,
 };
 
 /// What the rig was found to be tuned to.
@@ -32,7 +26,9 @@ use crate::{
 /// compare it, and the settings behind it belong to the script.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Reading {
+    /// What the rig is tuned to.
     pub frequency_hz: u64,
+    /// The mode it is in, as the rig names it.
     pub mode: String,
     /// The band it falls in, named as the plan names it.
     pub band: Option<String>,
@@ -66,6 +62,7 @@ impl RigState {
         matches!(self, Self::Receiving | Self::Transmitting)
     }
 
+    /// The localization key the interface shows this state under.
     pub const fn label_key(self) -> &'static str {
         match self {
             Self::Disconnected => "rig-state-disconnected",
@@ -77,12 +74,15 @@ impl RigState {
     }
 }
 
+/// What rig control publishes for the interface to read.
 #[derive(Clone, Debug, Default)]
 pub struct RigSnapshot {
+    /// What rig control is doing.
     pub state: RigState,
+    /// What the rig was last read as being tuned to, if it is read at all.
     pub reading: Option<Reading>,
     /// The last failure, cleared when a transmission asks to be keyed.
-    pub error: Option<AppError>,
+    pub error: Option<RigControlError>,
 }
 
 /// What the interface asks the rig for.
@@ -109,14 +109,17 @@ pub struct RigWorker {
 }
 
 impl RigWorker {
-    pub fn spawn(settings: &RigSettings, config_dir: &Path, bands: Arc<BandPlan>) -> Self {
+    /// Starts the thread, which opens the transports and loads the script.
+    ///
+    /// `log` is where a message the operator's script wrote is recorded.
+    pub fn spawn(settings: &RigSettings, config_dir: &Path, bands: Arc<BandPlan>, log: Logger) -> Self {
         let snapshot = Arc::new(Mutex::new(RigSnapshot {
             state: RigState::Connecting,
             ..RigSnapshot::default()
         }));
         let (requests, incoming) = mpsc::channel();
         let worker_snapshot = Arc::clone(&snapshot);
-        let plan = Plan::new(settings, config_dir, bands);
+        let plan = Plan::new(settings, config_dir, bands, log);
         let thread = thread::Builder::new()
             .name("grayline-rig".to_owned())
             .spawn(move || rig_loop(plan, &incoming, &worker_snapshot))
@@ -126,7 +129,7 @@ impl RigWorker {
         {
             *current = RigSnapshot {
                 state: RigState::Failed,
-                error: Some(AppError::WorkerUnavailable("rig control")),
+                error: Some(RigControlError::WorkerUnavailable),
                 reading: None,
             };
         }
@@ -137,13 +140,14 @@ impl RigWorker {
         }
     }
 
+    /// What rig control last published.
     pub fn latest(&self) -> RigSnapshot {
         self.snapshot
             .lock()
             .map(|snapshot| snapshot.clone())
             .unwrap_or_else(|_| RigSnapshot {
                 state: RigState::Failed,
-                error: Some(AppError::WorkerUnavailable("rig control")),
+                error: Some(RigControlError::WorkerUnavailable),
                 reading: None,
             })
     }
@@ -163,6 +167,7 @@ impl RigWorker {
         self.request(Request::Receive);
     }
 
+    /// Asks for the rig to be tuned.
     pub fn set_frequency(&self, target_hz: u64) {
         self.request(Request::SetFrequency(target_hz));
     }
@@ -227,10 +232,11 @@ struct Plan {
     poll: Option<Duration>,
     lead_in: Duration,
     tail: Duration,
+    log: Logger,
 }
 
 impl Plan {
-    fn new(settings: &RigSettings, config_dir: &Path, bands: Arc<BandPlan>) -> Self {
+    fn new(settings: &RigSettings, config_dir: &Path, bands: Arc<BandPlan>, log: Logger) -> Self {
         Self {
             config_dir: config_dir.to_path_buf(),
             ports: settings.ports.clone(),
@@ -238,13 +244,14 @@ impl Plan {
             poll: (settings.poll_seconds > 0.0).then(|| Duration::from_secs_f32(settings.poll_seconds)),
             lead_in: Duration::from_secs_f32(settings.lead_in_seconds),
             tail: Duration::from_secs_f32(settings.tail_seconds),
+            log,
         }
     }
 }
 
 fn rig_loop(plan: Plan, requests: &Receiver<Request>, snapshot: &Arc<Mutex<RigSnapshot>>) {
     let host = match ScriptHost::source(&plan.config_dir)
-        .and_then(|source| ScriptHost::load(&source, &plan.ports, Arc::clone(&plan.bands), DEFAULT_TIMEOUT))
+        .and_then(|source| ScriptHost::load(&source, &plan.ports, Arc::clone(&plan.bands), DEFAULT_TIMEOUT, plan.log))
     {
         Ok(host) => host,
         Err(error) => {
@@ -369,7 +376,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::{storage::bands::BandPlan, test_util::TempDir};
+    use crate::{bands::BandPlan, script, test_util::TempDir};
 
     fn with_script(source: &str) -> TempDir {
         let directory = TempDir::new();
@@ -441,6 +448,9 @@ mod tests {
         }
     }
 
+    /// Where a script's own messages go in a test: nowhere.
+    fn log(_: &str) {}
+
     fn settle(worker: &RigWorker, predicate: impl Fn(&RigSnapshot) -> bool) -> RigSnapshot {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
@@ -457,7 +467,7 @@ mod tests {
     fn the_default_script_keys_and_unkeys() {
         let fake = FakeRig::spawn(14_230_000);
         let config = TempDir::new();
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         worker.transmit();
@@ -473,7 +483,7 @@ mod tests {
     fn a_script_that_exports_nothing_keys_nothing_and_still_connects() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return {}");
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         worker.transmit();
@@ -494,6 +504,7 @@ mod tests {
             },
             config.path(),
             plan(),
+            log,
         );
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
@@ -515,6 +526,7 @@ mod tests {
             },
             config.path(),
             plan(),
+            log,
         );
 
         let snapshot = settle(&worker, |snapshot| snapshot.reading.is_some());
@@ -536,6 +548,7 @@ mod tests {
             },
             config.path(),
             plan(),
+            log,
         );
 
         let snapshot = settle(&worker, |snapshot| snapshot.error.is_some());
@@ -560,6 +573,7 @@ mod tests {
             },
             config.path(),
             plan(),
+            log,
         );
         settle(&worker, |snapshot| snapshot.reading.is_some());
 
@@ -593,6 +607,7 @@ mod tests {
             },
             config.path(),
             plan(),
+            log,
         );
         settle(&worker, |snapshot| snapshot.reading.is_some());
 
@@ -610,7 +625,7 @@ mod tests {
     fn a_script_that_raises_reports_the_failure_and_stays_connected() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return { transmit = function() error('no antenna') end }");
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         worker.transmit();
@@ -627,7 +642,7 @@ mod tests {
     fn a_script_that_never_finishes_is_abandoned() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return { transmit = function() while true do end end }");
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         worker.transmit();
@@ -644,7 +659,7 @@ mod tests {
     fn a_script_that_does_not_return_a_module_is_reported() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return 3");
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
 
         let snapshot = settle(&worker, |snapshot| snapshot.state == RigState::Failed);
 
@@ -664,7 +679,7 @@ mod tests {
     fn a_rig_that_is_not_listening_is_reported_rather_than_waited_on() {
         let config = TempDir::new();
 
-        let worker = RigWorker::spawn(&settings(NOTHING_LISTENING), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(NOTHING_LISTENING), config.path(), plan(), log);
 
         let snapshot = settle(&worker, |snapshot| snapshot.state == RigState::Failed);
         assert!(snapshot.error.is_some());
@@ -693,7 +708,7 @@ mod tests {
             "amplifier = true\n",
         ))
         .unwrap();
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), Arc::new(plan));
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), Arc::new(plan), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         worker.change_band("40m");
@@ -712,7 +727,7 @@ mod tests {
     fn a_keyed_rig_is_not_tuned() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return { set_frequency = function(ctx, hz) ctx.ports.rig:send('F ' .. hz) end }");
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         worker.transmit();
@@ -731,7 +746,7 @@ mod tests {
     fn dropping_the_worker_calls_close() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return { close = function(ctx) ctx.ports.rig:send('T 0') end }");
-        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan());
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         drop(worker);

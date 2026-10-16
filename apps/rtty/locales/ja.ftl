@@ -48,6 +48,7 @@ status-no-audio = 入力デバイスなし
 status-no-output = 出力デバイスなし
 status-dropped = { $samples } サンプル欠落
 status-reading = 読み込み中
+status-rig = リグ: { $state }
 
 hint-listening = まだ何も受信していません。受信機を合わせるか、WAV ファイルをここにドロップしてください。
 hint-resync = 同期を失った行のために、フレーミングをやり直します
@@ -76,6 +77,7 @@ hint-templates = templates.toml に登録した定型文を本文に書き込み
 hint-unsendable = { $character } はボドー符号にありません。取り除いてから送信してください。
 
 error-no-output = 出力デバイスが選択されていません
+error-rig-unavailable = リグコントロールが使用できません: { $error }
 error-underrun = サウンドカードへの供給が間に合わず、送信内容に欠落が生じました
 
 section-contact = 交信相手
@@ -138,3 +140,9 @@ contact-email = メール
 contact-note = メモ
 
 error-credentials = 認証情報ファイルを書き出せませんでした
+
+rig-state-disconnected = 未接続
+rig-state-connecting = 接続中…
+rig-state-receiving = 接続済み
+rig-state-transmitting = 送信中
+rig-state-failed = 接続失敗

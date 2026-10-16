@@ -37,12 +37,14 @@ enum Stage {
 }
 
 /// What the page displays after a call to [`SstvReceiver::status`].
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct ReceiverStatus {
     /// Detected mode's displayed name, once VIS identifies one.
+    #[wasm_bindgen(getter_with_clone)]
     pub mode_name: Option<String>,
     /// One of `waiting`, `acquiring`, `decoding`, `complete`, `incomplete`, or
     /// `stopped`.
+    #[wasm_bindgen(getter_with_clone)]
     pub state: String,
     /// Image rows the decoder has delivered.
     pub completed_rows: u32,
@@ -57,6 +59,7 @@ pub struct ReceiverStatus {
     /// The fitted raster rate, once a raster is acquired.
     pub effective_sample_rate_hz: Option<f64>,
     /// FSKID callsigns, which are only known once the stream is finished.
+    #[wasm_bindgen(getter_with_clone)]
     pub callsigns: Vec<String>,
     /// Peak amplitude of the most recently pushed packet.
     pub level: f32,

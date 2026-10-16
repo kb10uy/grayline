@@ -11,7 +11,7 @@ use super::*;
 use grayline_shell::i18n::Locale;
 
 use crate::app::{App, FIRST_QSO_NUMBER};
-use grayline_rig::RigError;
+use crate::test_util::refused_port;
 
 use super::panels::decibels;
 
@@ -174,7 +174,7 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
 
     app.rig.enabled = true;
     app.rig_snapshot.state = RigState::Receiving;
-    app.rig_snapshot.reading = Some(crate::worker::rig::Reading {
+    app.rig_snapshot.reading = Some(grayline_rig_control::Reading {
         frequency_hz: 7_100_000,
         mode: "LSB".to_owned(),
         band: Some("40m".to_owned()),
@@ -190,10 +190,7 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
     }
 
     app.rig_snapshot.state = RigState::Failed;
-    let failure = AppError::Rig(RigError::Connect {
-        address: "127.0.0.1:4532".to_owned(),
-        detail: "connection refused".to_owned(),
-    });
+    let failure = refused_port();
     let reported = failure.to_string();
     app.rig_snapshot.error = Some(failure);
     let harness = render(&mut app);

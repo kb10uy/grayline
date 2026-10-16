@@ -19,7 +19,11 @@ The repository contains:
   hold are named `grayline-*`. `crates/shell/` holds what every application
   needs and no mode decides: platform integration, the localization machinery,
   and the log. An application supplies what makes it itself through
-  `grayline_shell::Identity` and an `i18n::Catalog`.
+  `grayline_shell::Identity` and an `i18n::Catalog`. `crates/rig-control/`
+  holds the other half of what an application needs and no mode decides:
+  keying the rig, the host for the operator's `rigcontrol.lua`, and the band
+  plan. It is a crate of its own rather than part of the shell so that a
+  receive-only application does not link a Lua interpreter.
 - `tools/`: development command-line tools that are not shipped. One directory
   per mode, named `<mode>-cli`, holding the package `grayline-<mode>-cli` and
   the binary `gl-<mode>`; `gl-sstv` encodes and decodes WAV files and

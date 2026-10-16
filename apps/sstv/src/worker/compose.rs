@@ -20,7 +20,9 @@ use grayline_sstv_template::{
 use image::imageops::FilterType;
 use jiff::{Zoned, tz::TimeZone};
 
-use crate::{error::AppError, worker::rig::Reading};
+use grayline_rig_control::Reading;
+
+use crate::error::AppError;
 
 #[derive(Clone, Debug)]
 pub struct ComposeRequest {

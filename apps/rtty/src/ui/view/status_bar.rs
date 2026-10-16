@@ -2,7 +2,7 @@
 
 use super::*;
 
-use grayline_shell::i18n::number;
+use grayline_shell::i18n::{number, owned};
 
 /// What is true of the session rather than of any one decode path.
 ///
@@ -43,6 +43,14 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.label(RichText::new(audio).size(LABEL));
+            // Only for a station that keys through rig control: one that keys
+            // with VOX has nothing here to report, and a line saying so would
+            // be a fault where there is none.
+            if app.rig.enabled {
+                let state = app.i18n.text(app.rig_snapshot.state.label_key());
+                let rig = app.i18n.text_with("status-rig", &[("state", owned(state))]);
+                ui.label(RichText::new(rig).size(LABEL));
+            }
             // After the reading rather than before it, so that the reading
             // keeps the right edge: a countdown put outside it would shove the
             // rate along by a digit's width every second, and would renumber
