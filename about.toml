@@ -17,3 +17,6 @@ accepted = [
 
 [option-ext]
 accepted = ["MPL-2.0"]
+
+[serialport]
+accepted = ["MPL-2.0"]

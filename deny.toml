@@ -18,6 +18,7 @@ allow = [
 ]
 exceptions = [
     { allow = ["MPL-2.0"], crate = "option-ext" }, # No Exhibit B
+    { allow = ["MPL-2.0"], crate = "serialport" }, # No Exhibit B
 ]
 
 [advisories]
