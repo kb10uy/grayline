@@ -13,10 +13,16 @@ use std::{
     time::Duration,
 };
 
-use grayline_audio::PlaybackWriter;
+use grayline_audio::{Playback, PlaybackWriter};
 use grayline_rtty::{Transmitter, TxCode, TxConfig};
 
-use crate::{error::AppError, worker::update};
+use crate::{
+    error::AppError,
+    worker::{
+        keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
+        update,
+    },
+};
 
 const PCM_BLOCK_SIZE: usize = 1_024;
 
@@ -125,6 +131,144 @@ impl core::fmt::Debug for TxWorker {
         formatter
             .debug_struct("TxWorker")
             .field("snapshot", &self.latest())
+            .finish_non_exhaustive()
+    }
+}
+
+/// What one message is going out on.
+enum TxOutput {
+    /// Audio played into the rig.
+    Audio { playback: Playback, worker: TxWorker },
+    /// A keyer switching the rig's FSK input.
+    Keyer(KeyerWorker),
+}
+
+/// The output one message is going out on, and whether it has been started.
+///
+/// A stream lives exactly as long as the message it carries, which is what
+/// puts a mark idle between queued messages without anything having to insert
+/// one: each transmission brings its own lead-in and tail.
+///
+/// Either output reports how far it has gone in ticks of its own rate, the
+/// device's samples or the keyer's microseconds, and the schedule built for a
+/// message is built at that rate, so nothing above this has to know which.
+#[derive(Default)]
+pub struct TxState {
+    output: Option<TxOutput>,
+    /// Whether the output was told to start: the device to consume its queue,
+    /// or the keyer to open its stream.
+    started: bool,
+}
+
+impl TxState {
+    pub fn begin_audio(&mut self, playback: Playback, worker: TxWorker) {
+        self.output = Some(TxOutput::Audio { playback, worker });
+        self.started = false;
+    }
+
+    pub fn begin_keyer(&mut self, worker: KeyerWorker) {
+        self.output = Some(TxOutput::Keyer(worker));
+        self.started = false;
+    }
+
+    pub fn latest(&self) -> Option<TxSnapshot> {
+        match self.output.as_ref()? {
+            TxOutput::Audio { worker, .. } => Some(worker.latest()),
+            TxOutput::Keyer(worker) => {
+                let snapshot = worker.latest();
+                Some(TxSnapshot {
+                    phase: snapshot.phase,
+                    error: snapshot.error,
+                    ..TxSnapshot::default()
+                })
+            }
+        }
+    }
+
+    pub const fn is_running(&self) -> bool {
+        self.output.is_some()
+    }
+
+    pub fn start_playback(&mut self) -> Result<(), AppError> {
+        match self.output.as_ref().ok_or(AppError::PlaybackClosed)? {
+            TxOutput::Audio { playback, .. } => playback.play()?,
+            TxOutput::Keyer(worker) => worker.start(),
+        }
+        self.started = true;
+        Ok(())
+    }
+
+    pub const fn is_started(&self) -> bool {
+        self.started
+    }
+
+    /// Whether the device ran the queue dry while a message was going out.
+    ///
+    /// Never true of the keyer, which is handed the whole message before it
+    /// is told the message has ended.
+    pub fn has_underrun(&self) -> bool {
+        self.started
+            && matches!(
+                &self.output,
+                Some(TxOutput::Audio { playback, .. }) if playback.underrun_samples() > 0
+            )
+    }
+
+    /// Whether the output went out to the end of the message.
+    pub fn is_drained(&self) -> bool {
+        match &self.output {
+            Some(TxOutput::Audio { playback, .. }) => playback.is_complete(),
+            Some(TxOutput::Keyer(worker)) => worker.latest().completed,
+            None => false,
+        }
+    }
+
+    /// How much of the transmission has actually left for the rig.
+    ///
+    /// This is the figure the sent-text underline follows: what has been
+    /// generated is already in a queue the operator cannot hear yet.
+    pub fn played_samples(&self) -> u64 {
+        match &self.output {
+            Some(TxOutput::Audio { playback, .. }) => playback.played_samples(),
+            Some(TxOutput::Keyer(worker)) => u64::try_from(worker.latest().elapsed.as_micros()).unwrap_or(u64::MAX),
+            None => 0,
+        }
+    }
+
+    /// The rate [`played_samples`](Self::played_samples) counts in.
+    pub fn sample_rate_hz(&self) -> Option<u32> {
+        match self.output.as_ref()? {
+            TxOutput::Audio { playback, .. } => Some(playback.sample_rate_hz()),
+            TxOutput::Keyer(_) => Some(KEYER_TICKS_PER_SECOND),
+        }
+    }
+
+    /// How late the keyer's worst transition was, for a message it keyed.
+    pub fn keyer_late(&self) -> Option<Duration> {
+        match self.output.as_ref()? {
+            TxOutput::Audio { .. } => None,
+            TxOutput::Keyer(worker) => Some(worker.latest().late),
+        }
+    }
+
+    /// Stops keying and drops the output, cutting whatever was still queued.
+    ///
+    /// Dropping the playback is what makes an abort immediate: the samples
+    /// already handed to the device are not played out, so the carrier stops
+    /// and a VOX circuit lets go. Dropping the keyer stops its stream at
+    /// mark.
+    pub fn stop(&mut self) {
+        self.output = None;
+        self.started = false;
+    }
+}
+
+impl core::fmt::Debug for TxState {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("TxState")
+            .field("started", &self.started)
+            .field("running", &self.is_running())
             .finish_non_exhaustive()
     }
 }

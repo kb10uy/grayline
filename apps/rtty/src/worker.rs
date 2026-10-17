@@ -5,6 +5,7 @@
 
 pub mod audio;
 pub mod contact;
+pub mod keyer;
 pub mod receive;
 pub mod transmit;
 

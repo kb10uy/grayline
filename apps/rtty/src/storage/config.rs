@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
+use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
 use grayline_qso::DEFAULT_FIELDS;
 use grayline_rig_control::DEFAULT_ADDRESS;
 use grayline_shell::log;
@@ -88,6 +89,9 @@ pub struct Settings {
     pub contact: ContactSettings,
     /// How the station's rig is keyed, if it is keyed at all.
     pub rig: RigSettings,
+    /// Whether a transmission keys the rig's FSK input through `gl-keyer`
+    /// rather than being played as audio.
+    pub keyer: KeyerSettings,
     /// Whether the scope window was open.
     ///
     /// A display rather than a receiver setting, and remembered for the same
@@ -121,6 +125,28 @@ pub struct ContactSettings {
     /// back says `!ja` where they wrote `!ja`. What the dialog lays out is
     /// `grayline_qso::expand_fields` of this.
     pub fields: Vec<String>,
+}
+
+/// Where a transmission goes when it is keyed as FSK rather than played.
+///
+/// Written under `[keyer]` and, like `[rig]`, edited only in the file: which
+/// line the rig's FSK input hangs off is wired once for a station and then
+/// left alone.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeyerSettings {
+    /// Whether a transmission is streamed to the keyer in place of the audio.
+    pub enabled: bool,
+    /// Where `gl-keyer serve` listens.
+    pub address: String,
+}
+
+impl Default for KeyerSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            address: DEFAULT_KEYER_ADDRESS.to_owned(),
+        }
+    }
 }
 
 impl Default for ContactSettings {
@@ -183,6 +209,7 @@ impl Default for Settings {
                 poll_seconds: 0.0,
                 ..RigSettings::default()
             },
+            keyer: KeyerSettings::default(),
             scope: false,
         }
     }
@@ -321,6 +348,7 @@ impl Config {
         store_custom_variables(table, &settings.custom_variables);
         store_contact(table, &settings.contact);
         store_rig(table, &settings.rig);
+        store_keyer(table, &settings.keyer);
 
         self.write();
     }
@@ -399,6 +427,7 @@ fn read(document: &DocumentMut) -> Settings {
     settings.custom_variables = read_custom_variables(table);
     settings.contact = read_contact(table);
     settings.rig = read_rig(table);
+    settings.keyer = read_keyer(table);
     settings.clamped()
 }
 
@@ -457,6 +486,28 @@ fn read_ports(rig: &Table) -> Option<BTreeMap<String, PortSettings>> {
             })
             .collect(),
     )
+}
+
+/// Reads the `[keyer]` section.
+fn read_keyer(table: &Table) -> KeyerSettings {
+    let defaults = KeyerSettings::default();
+    let Some(keyer) = table.get("keyer").and_then(Item::as_table) else {
+        return defaults;
+    };
+    KeyerSettings {
+        enabled: keyer
+            .get("enabled")
+            .and_then(Item::as_value)
+            .and_then(|flag| flag.as_bool())
+            .unwrap_or(defaults.enabled),
+        address: keyer
+            .get("address")
+            .and_then(Item::as_value)
+            .and_then(|address| address.as_str())
+            .map(str::trim)
+            .filter(|address| !address.is_empty())
+            .map_or(defaults.address, str::to_owned),
+    }
 }
 
 fn read_contact(table: &Table) -> ContactSettings {
@@ -604,6 +655,18 @@ fn store_rig(table: &mut Table, rig: &RigSettings) {
     }
 }
 
+/// Writes the `[keyer]` section back, at its defaults too, for the reason the
+/// `[rig]` section is.
+fn store_keyer(table: &mut Table, keyer: &KeyerSettings) {
+    let section = table
+        .entry("keyer")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut();
+    let Some(section) = section else { return };
+    section["enabled"] = value(keyer.enabled);
+    section["address"] = value(keyer.address.as_str());
+}
+
 /// Reads a TOML number however it was written, ignoring one that is not
 /// finite: a decoder built from a NaN would fail on every sample.
 fn number(item: &toml_edit::Value) -> Option<f64> {
@@ -679,6 +742,10 @@ mod tests {
                 lead_in_seconds: 0.4,
                 tail_seconds: 0.1,
             },
+            keyer: KeyerSettings {
+                enabled: true,
+                address: "192.168.0.8:4534".to_owned(),
+            },
             scope: true,
         };
         Config::load(path.clone()).0.save(&wanted);
@@ -741,6 +808,20 @@ mod tests {
         assert!(written.contains("[rig]"), "{written}");
         assert!(written.contains("lead-in = 0.2"), "{written}");
         assert!(written.contains("[rig.ports.rig]"), "{written}");
+        assert!(written.contains("[keyer]"), "{written}");
+        assert!(written.contains("address = \"127.0.0.1:4534\""), "{written}");
+    }
+
+    #[test]
+    fn a_blank_keyer_address_falls_back_to_the_default() {
+        let root = TempDir::new();
+        let path = root.path().join("config.toml");
+        fs::write(&path, "[keyer]\nenabled = true\naddress = \"  \"\n").unwrap();
+
+        let keyer = Config::load(path).1.keyer;
+
+        assert!(keyer.enabled);
+        assert_eq!(keyer.address, KeyerSettings::default().address);
     }
 
     #[test]

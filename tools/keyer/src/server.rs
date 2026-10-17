@@ -113,7 +113,7 @@ pub fn execute(command: &Command, id: ConnectionId, shared: &Shared) -> Reply {
         Command::Status => {
             let status = shared.update(|session| session.status());
             let mut lines = vec![
-                format!("State: {}", status.phase.name()),
+                format!("State: {}", status.phase.state().name()),
                 format!("Sent: {}", status.sent),
                 format!("Queued: {}", status.queued),
                 format!("Elapsed: {}", status.progress.elapsed.as_micros()),
@@ -141,6 +141,7 @@ mod tests {
         time::{Duration, Instant},
     };
 
+    use grayline_keyer_protocol::{KeyerClient, Status, StreamState};
     use grayline_rig::{Response, RigError, Rigctld};
     use grayline_rtty::{
         TxConfig, encode_text,
@@ -151,7 +152,6 @@ mod tests {
     use crate::{
         method::LineMethod,
         player,
-        protocol::{encode_codes, encode_open},
         test_util::{FakeClock, RecordingLine},
     };
 
@@ -190,6 +190,10 @@ mod tests {
         fn connect(&self) -> Rigctld {
             Rigctld::connect(&self.address, TIMEOUT).unwrap()
         }
+
+        fn client(&self) -> KeyerClient {
+            KeyerClient::connect(&self.address, TIMEOUT).unwrap()
+        }
     }
 
     impl Drop for Keyer {
@@ -201,20 +205,11 @@ mod tests {
         }
     }
 
-    fn field(response: &Response, label: &str) -> String {
-        response
-            .lines()
-            .iter()
-            .find_map(|line| line.strip_prefix(label)?.strip_prefix(": "))
-            .unwrap_or_default()
-            .to_owned()
-    }
-
-    fn wait_for_state(rig: &mut Rigctld, state: &str) -> Response {
+    fn wait_for_state(client: &mut KeyerClient, state: StreamState) -> Status {
         let started = Instant::now();
         loop {
-            let status = rig.run("\\status").unwrap();
-            if field(&status, "State") == state {
+            let status = client.status().unwrap();
+            if status.state == state {
                 return status;
             }
             assert!(started.elapsed() < TIMEOUT, "still {status:?}");
@@ -230,20 +225,19 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_sent_through_a_rigctld_client_keys_the_line_in_order() {
+    fn a_stream_sent_through_a_client_keys_the_line_in_order() {
         let keyer = Keyer::start();
-        let mut rig = keyer.connect();
-        assert!(!rig.requires_vfo());
+        let mut client = keyer.client();
         let config = TxConfig::default();
         let codes = encode_text("RYRY DE JL1HIS", &config).unwrap();
-        rig.run(&format!("\\rtty_open {}", encode_open(&config))).unwrap();
+        client.open(&config).unwrap();
         let (first, second) = codes.split_at(5);
-        rig.run(&format!("\\rtty_send {}", encode_codes(first))).unwrap();
-        rig.run(&format!("\\rtty_send {}", encode_codes(second))).unwrap();
-        rig.run("\\rtty_end").unwrap();
-        let status = wait_for_state(&mut rig, "completed");
-        assert_eq!(field(&status, "Sent"), codes.len().to_string());
-        assert_eq!(field(&status, "Queued"), "0");
+        client.send(first).unwrap();
+        client.send(second).unwrap();
+        client.end().unwrap();
+        let status = wait_for_state(&mut client, StreamState::Completed);
+        assert_eq!(status.sent, codes.len());
+        assert_eq!(status.queued, 0);
 
         let mut framer = Framer::new(1_000_000, &config).unwrap();
         let mut elements = Vec::new();
@@ -264,21 +258,21 @@ mod tests {
         owner.run("\\rtty_open lead_in=0 tail=0").unwrap();
         owner.run("\\rtty_send 0123").unwrap();
         drop(owner);
-        let mut watcher = keyer.connect();
-        wait_for_state(&mut watcher, "disconnected");
+        let mut watcher = keyer.client();
+        wait_for_state(&mut watcher, StreamState::Disconnected);
         assert_eq!(keyer.fsk.changes().last().map(|(_, level)| *level), Some(false));
     }
 
     #[test]
     fn a_stream_belongs_to_the_connection_that_opened_it() {
         let keyer = Keyer::start();
-        let mut owner = keyer.connect();
+        let mut owner = keyer.client();
         let mut other = keyer.connect();
-        owner.run("\\rtty_open").unwrap();
+        owner.open(&TxConfig::default()).unwrap();
         assert_eq!(refusal(other.run("\\rtty_open")), code::REJECTED);
         assert_eq!(refusal(other.run("\\rtty_send 0")), code::REJECTED);
         other.run("\\stop").unwrap();
-        wait_for_state(&mut owner, "stopped");
+        wait_for_state(&mut owner, StreamState::Stopped);
         other.run("\\rtty_open").unwrap();
     }
 

@@ -2101,12 +2101,22 @@ dependencies = [
  "anyhow",
  "clap",
  "ctrlc",
+ "grayline-keyer-protocol",
  "grayline-rig",
  "grayline-rtty",
  "rstest",
  "serialport",
  "thiserror 2.0.21",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "grayline-keyer-protocol"
+version = "0.6.0-beta.1"
+dependencies = [
+ "grayline-rig",
+ "grayline-rtty",
+ "rstest",
 ]
 
 [[package]]
@@ -2177,6 +2187,7 @@ dependencies = [
  "fontdb",
  "grayline-audio",
  "grayline-dsp",
+ "grayline-keyer-protocol",
  "grayline-qso",
  "grayline-rig-control",
  "grayline-rtty",

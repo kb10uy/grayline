@@ -16,8 +16,8 @@
 //!
 //! ```text
 //! RigWorker::spawn(&settings, config_dir, bands)
-//!   worker.transmit()   before the first sample goes out
-//!   worker.receive()    once the last sample has been played
+//!   worker.transmit(keying)   before the first sample goes out
+//!   worker.receive()          once the last sample has been played
 //! ```
 //!
 //! Each application reads its own directory, so a station running two of them
@@ -38,6 +38,7 @@ mod test_util;
 
 pub use error::RigControlError;
 pub use grayline_rig::{DEFAULT_ADDRESS, RigError};
+pub use script::Keying;
 pub use settings::{
     DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS, DEFAULT_PORT_NAME, DEFAULT_TAIL_SECONDS, PortSettings, RigSettings,
 };
