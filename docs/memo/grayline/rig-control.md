@@ -32,6 +32,15 @@ keying actually engaged rather than trusting that the command was accepted. So
 the application calls a Lua script at each moment it reaches, and what the
 script sends is the operator's.
 
+What "drives DTR and RTS" covers is PTT: a line held for the whole
+transmission, and keyed from here whether the rig sends audio or FSK. FSK
+keying itself switches a line once a bit, which no socket round trip can be
+timed to and Hamlib does not offer. That belongs to `gl-keyer`
+([keyer.md](keyer.md)), a process that holds the port and times the bits
+itself. It speaks `rigctld`'s protocol, so the application reaches it with the
+same client rather than a second kind of transport, but it is not a port the
+script keys through: it takes streams, and leaves PTT here.
+
 ## Why `rigctld` Rather Than Linked Hamlib
 
 The transport is a socket to a `rigctld` the operator already has running,

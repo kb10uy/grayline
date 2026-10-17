@@ -354,7 +354,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twenty-one packages:
+The workspace currently contains twenty-two packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -377,6 +377,7 @@ The workspace currently contains twenty-one packages:
 | `grayline-variables` | `${name}` interpolation shared by the SSTV templates and the RTTY macros | Implemented |
 | `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
 | `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
+| `grayline-keyer` | Serial-line FSK keying, as `gl-keyer` | DTR and RTS implemented; described in [keyer.md](keyer.md) |
 | `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
@@ -395,6 +396,7 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-rtty` | `grayline-dsp` |
 | `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
 | `grayline-rtty-cli` | `grayline-rtty` |
+| `grayline-keyer` | `grayline-rtty` |
 | `grayline-shell` | None |
 | `grayline-sstv` | `grayline-sstv-fskid` |
 | `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
@@ -639,9 +641,11 @@ implementations:
 - The RTTY pieces deliberately deferred, listed in [rtty.md](rtty.md): the
   FIR, PLL, and sliding-DFT discriminators, the center-sampling framing
   machine, the zero-crossing limiter AGC, the prefilter notch and LMS chain,
-  6-to-8-bit pipelines, CW identification, and serial FSK keying. PTT is no
-  longer among them: the RTTY application keys through
-  `grayline-rig-control`.
+  6-to-8-bit pipelines, and CW identification. PTT is no longer among them:
+  the RTTY application keys through `grayline-rig-control`. Serial FSK
+  keying is implemented in `gl-keyer` but not yet used by the application,
+  and the keyer's CAT relay and other methods are listed in
+  [keyer.md](keyer.md).
 - The rest of `apps/rtty`, whose receive and transmit halves and scope window
   are implemented: the received-text history log, the aligned save, and the
   rig frequency readout. The design is
