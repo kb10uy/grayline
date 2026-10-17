@@ -2075,7 +2075,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-audio"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "cpal",
  "hound",
@@ -2086,7 +2086,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-dsp"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
  "libm",
@@ -2096,7 +2096,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-keyer"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2111,7 +2111,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-qso"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "directories",
  "encoding_rs",
@@ -2126,7 +2126,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-qso-cli"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2136,7 +2136,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rig"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "rstest",
  "thiserror 2.0.21",
@@ -2144,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rig-control"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "grayline-rig",
  "mlua",
@@ -2155,7 +2155,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rtty"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2166,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rtty-app"
-version = "0.1.1"
+version = "0.2.0-beta.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2192,7 +2192,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-rtty-cli"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2203,7 +2203,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-shell"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2222,7 +2222,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
  "grayline-sstv-fskid",
@@ -2234,7 +2234,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-app"
-version = "0.4.4"
+version = "0.4.5-beta.1"
 dependencies = [
  "directories",
  "eframe",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-cli"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-fskid"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "rstest",
  "thiserror 2.0.21",
@@ -2294,7 +2294,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-rx"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2307,7 +2307,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-sstv-template"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "grayline-sstv",
  "grayline-variables",
@@ -2322,7 +2322,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-tone-tx"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2333,7 +2333,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-variables"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "jiff",
  "rstest",
@@ -2342,7 +2342,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-web-demo"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "console_error_panic_hook",
  "grayline-sstv",
@@ -2353,7 +2353,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
  "grayline-dsp",
@@ -2387,7 +2387,7 @@ dependencies = [
 
 [[package]]
 name = "grayline-wefax-cli"
-version = "0.5.1"
+version = "0.6.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2916,9 +2916,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.190"
+version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "libloading"
@@ -6388,9 +6388,9 @@ dependencies = [
 
 [[package]]
 name = "zbus_names"
-version = "4.3.4"
+version = "4.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8bf88b4a3ff53e883001e0e0115b297a9d53c31b9c1edd2bfdd853e3428624e"
+checksum = "812a12be4ead7a59e18ea8f047d08add0066b73bc62fc1467066a2472ae088dd"
 dependencies = [
  "serde",
  "winnow 1.0.4",
@@ -6528,9 +6528,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant"
-version = "5.15.0"
+version = "5.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1d34c27cc6cdd1f458427519dd6b8612f7b7e3f7b9a0b2355d041dda9869147"
+checksum = "80bf6d6cd6a4b601acb64cfb8284cdc643fcfa75ef26ae3c46ec8aa4e8a1fbb7"
 dependencies = [
  "endi",
  "enumflags2",
@@ -6543,9 +6543,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "5.15.0"
+version = "5.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "864155e69b4352db0c7f374917bf45d1e0c8d17659c8b3dbf9795f3673f8c497"
+checksum = "ef2672456ba1cb54b5eaec136e63135b3c7495fb938e53b28a62e633496d486d"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
