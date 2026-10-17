@@ -6,8 +6,7 @@
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use grayline_audio::Playback;
-use grayline_rig_control::{RigControlError, RigSettings, RigSnapshot, RigState, RigWorker, bands::BandPlan};
+use grayline_rig_control::{Keying, RigControlError, RigSettings, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
@@ -24,17 +23,18 @@ use crate::{
     error::AppError,
     locales::CATALOG,
     storage::{
-        config::{Config, ContactSettings, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
+        config::{Config, ContactSettings, KeyerSettings, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
         library,
         paths::{AppPaths, Folder},
     },
     ui::{scope::Scope, scrollback::Scrollback},
     worker::{
         Waker,
-        audio::{AudioState, TxState},
+        audio::AudioState,
         contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
+        keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
         receive::{ColumnSnapshot, DecodePath, WorkerSettings},
-        transmit::{TxPhase, TxWorker},
+        transmit::{TxPhase, TxState, TxWorker},
     },
 };
 
@@ -127,6 +127,9 @@ pub struct App {
     pub contact_settings: ContactSettings,
     /// How the rig is keyed, read from the file and not edited here.
     pub rig: RigSettings,
+    /// Whether a transmission goes to the FSK keyer rather than the audio
+    /// device, read from the file and not edited here either.
+    pub keyer: KeyerSettings,
     /// The thread that reads and writes the contact directory.
     pub contact_directory: ContactWorker,
     /// What it last found, read once per frame.
@@ -275,6 +278,7 @@ impl App {
             custom_variables: settings.custom_variables.clone(),
             contact_settings: settings.contact.clone(),
             rig: settings.rig.clone(),
+            keyer: settings.keyer.clone(),
             contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
@@ -481,6 +485,7 @@ impl App {
             custom_variables: self.custom_variables.clone(),
             contact: self.contact_settings.clone(),
             rig: self.rig.clone(),
+            keyer: self.keyer.clone(),
             scope: self.scope.is_open(),
         }
         .clamped()
@@ -664,7 +669,7 @@ impl App {
             }
         };
         if self.macros.get(index).is_some_and(|template| template.send) {
-            if self.audio.output_device.is_none() {
+            if self.lacks_output() {
                 self.notice = Some(self.i18n.text("error-no-output"));
                 return None;
             }
@@ -959,8 +964,22 @@ impl App {
     pub fn can_send(&self) -> bool {
         !self.transmit.draft.trim().is_empty()
             && self.unsendable_character().is_none()
-            && self.audio.output_device.is_some()
+            && !self.lacks_output()
             && self.rig_problem().is_none()
+    }
+
+    /// Whether a transmission has nowhere to go.
+    ///
+    /// Only the audio path needs a device. A keyer that is not running is
+    /// found out by the transmission that tries it, because nothing here holds
+    /// a connection to it between messages.
+    pub fn lacks_output(&self) -> bool {
+        !self.keyer.enabled && self.audio.output_device.is_none()
+    }
+
+    /// How a transmission reaches the rig.
+    pub const fn keying(&self) -> Keying {
+        if self.keyer.enabled { Keying::Fsk } else { Keying::Audio }
     }
 
     /// Queues the draft.
@@ -969,7 +988,7 @@ impl App {
     /// lets the operator keep writing while the rig is keying.
     pub fn send_draft(&mut self) {
         if !self.can_send() {
-            if self.audio.output_device.is_none() {
+            if self.lacks_output() {
                 let message = self.i18n.text("error-no-output");
                 self.notice = Some(message);
             } else if let Some(problem) = self.rig_problem() {
@@ -1121,12 +1140,19 @@ impl App {
             }
             let snapshot = self.tx.latest().unwrap_or_default();
             match snapshot.phase {
+                // What had not gone out goes back to the draft, the queue
+                // behind it included, as it does when the rig fails: a keyer
+                // that is not running fails every message the same way, and
+                // the text is still what the operator wrote.
                 TxPhase::Failed => {
+                    let played = self.tx.played_samples();
                     self.tx.stop();
-                    self.transmit.finish();
+                    let unsent = self.transmit.abandon(played);
+                    self.return_to_draft(unsent);
                     if let Some(error) = snapshot.error {
                         self.report(&error);
                     }
+                    return;
                 }
                 // The device is told to start once the queue has something in
                 // it, so the lead-in is not the thing that underruns. A keyed
@@ -1156,6 +1182,12 @@ impl App {
                 {
                     self.echo_sent(&echo);
                 }
+                // Logged rather than shown: it is what says whether a serial
+                // adapter is fit to key with, which is a question asked once
+                // while setting a station up rather than on every message.
+                if let Some(late) = self.tx.keyer_late() {
+                    log::note(&format!("FSK keyer: worst transition {} µs late", late.as_micros()));
+                }
                 self.tx.stop();
                 self.transmit.finish();
             }
@@ -1181,14 +1213,11 @@ impl App {
         if let Some(worker) = self.rig_worker.as_ref()
             && !self.rig_keyed
         {
-            worker.transmit();
+            worker.transmit(self.keying());
             self.rig_keyed = true;
         }
         match self.open_transmission(&text) {
-            Ok((playback, worker, schedule)) => {
-                self.tx.begin(playback, worker);
-                self.transmit.begin(Sending::new(text, schedule));
-            }
+            Ok(schedule) => self.transmit.begin(Sending::new(text, schedule)),
             Err(error) => {
                 self.report(&error);
                 // The message had already left the queue, so it is given back
@@ -1201,13 +1230,24 @@ impl App {
         }
     }
 
-    fn open_transmission(&self, text: &str) -> Result<(Playback, TxWorker, TxSchedule), AppError> {
+    /// Starts `text` on its output and returns where its characters land.
+    ///
+    /// The keyer counts in microseconds of its own timeline, so a message it
+    /// keys is scheduled at that rate, as one played is scheduled at the
+    /// device's.
+    fn open_transmission(&mut self, text: &str) -> Result<TxSchedule, AppError> {
         let config = self.tx_config();
-        let (playback, writer) = self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES)?;
-        let rate = playback.sample_rate_hz();
         let codes = encode_text(text, &config)?;
-        let schedule = TxSchedule::new(text, rate, &config)?;
-        Ok((playback, TxWorker::spawn(writer, codes, config), schedule))
+        if self.keyer.enabled {
+            let schedule = TxSchedule::new(text, KEYER_TICKS_PER_SECOND, &config)?;
+            self.tx
+                .begin_keyer(KeyerWorker::spawn(self.keyer.address.clone(), codes, config));
+            return Ok(schedule);
+        }
+        let (playback, writer) = self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES)?;
+        let schedule = TxSchedule::new(text, playback.sample_rate_hz(), &config)?;
+        self.tx.begin_audio(playback, TxWorker::spawn(writer, codes, config));
+        Ok(schedule)
     }
 
     fn echo_sent(&mut self, text: &str) {

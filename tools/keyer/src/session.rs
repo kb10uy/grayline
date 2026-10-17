@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, time::Duration};
 
+use grayline_keyer_protocol::StreamState;
 use grayline_rtty::{TxCode, TxConfig};
 
 use crate::{
@@ -44,17 +45,17 @@ pub enum Phase {
 }
 
 impl Phase {
-    /// The name a status reply gives this phase.
-    pub const fn name(self) -> &'static str {
+    /// The state a status reply reports this phase as.
+    pub const fn state(self) -> StreamState {
         match self {
-            Self::Idle => "idle",
-            Self::Sending => "sending",
-            Self::Completed => "completed",
-            Self::Stopped(StopReason::Requested) => "stopped",
-            Self::Stopped(StopReason::Disconnected) => "disconnected",
-            Self::Stopped(StopReason::TimedOut) => "timeout",
-            Self::Stopped(StopReason::ShutDown) => "shutdown",
-            Self::Failed => "failed",
+            Self::Idle => StreamState::Idle,
+            Self::Sending => StreamState::Sending,
+            Self::Completed => StreamState::Completed,
+            Self::Stopped(StopReason::Requested) => StreamState::Stopped,
+            Self::Stopped(StopReason::Disconnected) => StreamState::Disconnected,
+            Self::Stopped(StopReason::TimedOut) => StreamState::TimedOut,
+            Self::Stopped(StopReason::ShutDown) => StreamState::ShutDown,
+            Self::Failed => StreamState::Failed,
         }
     }
 }

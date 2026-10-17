@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 
-use grayline_rtty::{BaudRate, Parity, StopElement, TxCode, TxConfig, tx::Diddle, tx::Framer};
+use grayline_keyer_protocol::{MAXIMUM_CODES_PER_LINE, decode_codes, decode_open};
+use grayline_rtty::{TxCode, TxConfig};
 
 /// Hamlib's status codes, negated as `rigctld` reports them.
 pub mod code {
@@ -15,12 +16,6 @@ pub mod code {
     /// The request would not fit.
     pub const TRUNCATED: i32 = -10;
 }
-
-/// The longest run of codes one `\rtty_send` may carry.
-pub const MAXIMUM_CODES_PER_LINE: usize = 4_096;
-
-/// The digits a five-bit code is written with, by value.
-const DIGITS: &[u8; 32] = b"0123456789ABCDEFGHIJKLMNOPQRSTUV";
 
 /// One request a client can make.
 #[derive(Clone, Debug, PartialEq)]
@@ -146,7 +141,7 @@ fn parse_command(name: &str, arguments: &[&str]) -> Result<Command, Reply> {
     };
     match name {
         "\\chk_vfo" => bare(Command::ChkVfo),
-        "\\rtty_open" => parse_open(arguments)
+        "\\rtty_open" => decode_open(arguments)
             .map(Command::RttyOpen)
             .ok_or_else(|| Reply::refuse("rtty_open", code::INVALID)),
         "\\rtty_send" => match arguments {
@@ -164,136 +159,11 @@ fn parse_command(name: &str, arguments: &[&str]) -> Result<Command, Reply> {
     }
 }
 
-/// Reads `key=value` framing arguments over the defaults.
-fn parse_open(arguments: &[&str]) -> Option<TxConfig> {
-    let mut config = TxConfig::default();
-    for argument in arguments {
-        let (key, value) = argument.split_once('=')?;
-        match key {
-            "baud" => config.framing.baud = BaudRate::new(value.parse().ok()?).ok()?,
-            "stop" => {
-                config.framing.stop = match value {
-                    "1" => StopElement::One,
-                    "1.5" => StopElement::OneAndAHalf,
-                    "2" => StopElement::Two,
-                    _ => return None,
-                }
-            }
-            "parity" => {
-                config.framing.parity = match value {
-                    "none" => Parity::None,
-                    "even" => Parity::Even,
-                    "odd" => Parity::Odd,
-                    "mark" => Parity::Mark,
-                    "space" => Parity::Space,
-                    _ => return None,
-                }
-            }
-            "gap" => config.char_gap_bits = value.parse().ok()?,
-            "diddle" => {
-                config.diddle = match value {
-                    "none" => Diddle::None,
-                    "ltrs" => Diddle::Ltrs,
-                    "blank" => Diddle::Blank,
-                    _ => return None,
-                }
-            }
-            "lead_in" => config.lead_in_seconds = value.parse().ok()?,
-            "tail" => config.tail_seconds = value.parse().ok()?,
-            _ => return None,
-        }
-    }
-    Framer::new(1_000_000, &config).ok()?;
-    Some(config)
-}
-
-/// Writes the arguments `\rtty_open` reads back as `config`'s framing.
-pub fn encode_open(config: &TxConfig) -> String {
-    let stop = match config.framing.stop {
-        StopElement::One => "1",
-        StopElement::OneAndAHalf => "1.5",
-        StopElement::Two => "2",
-    };
-    let parity = match config.framing.parity {
-        Parity::None => "none",
-        Parity::Even => "even",
-        Parity::Odd => "odd",
-        Parity::Mark => "mark",
-        Parity::Space => "space",
-    };
-    let diddle = match config.diddle {
-        Diddle::None => "none",
-        Diddle::Ltrs => "ltrs",
-        Diddle::Blank => "blank",
-    };
-    format!(
-        "baud={} stop={stop} parity={parity} gap={} diddle={diddle} lead_in={} tail={}",
-        config.framing.baud.bits_per_second(),
-        config.char_gap_bits,
-        config.lead_in_seconds,
-        config.tail_seconds,
-    )
-}
-
-/// Writes codes in the form `\rtty_send` reads.
-pub fn encode_codes(codes: &[TxCode]) -> String {
-    codes
-        .iter()
-        .map(|code| match code {
-            TxCode::Character(value) => char::from(DIGITS[usize::from(value & 0x1f)]),
-            TxCode::HoldMark => 'h',
-            TxCode::CarrierOff => 'x',
-            TxCode::DisableDiddle => 'd',
-            TxCode::EnableDiddle => 'e',
-        })
-        .collect()
-}
-
-/// Reads codes written by [`encode_codes`].
-pub fn decode_codes(text: &str) -> Option<Vec<TxCode>> {
-    text.bytes()
-        .map(|byte| match byte {
-            b'h' => Some(TxCode::HoldMark),
-            b'x' => Some(TxCode::CarrierOff),
-            b'd' => Some(TxCode::DisableDiddle),
-            b'e' => Some(TxCode::EnableDiddle),
-            _ => DIGITS
-                .iter()
-                .position(|digit| *digit == byte)
-                .and_then(|value| u8::try_from(value).ok())
-                .map(TxCode::Character),
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
     use super::*;
-
-    #[test]
-    fn every_code_survives_a_round_trip() {
-        let mut codes: Vec<TxCode> = (0..32).map(TxCode::Character).collect();
-        codes.extend([
-            TxCode::HoldMark,
-            TxCode::CarrierOff,
-            TxCode::DisableDiddle,
-            TxCode::EnableDiddle,
-        ]);
-        let text = encode_codes(&codes);
-        assert_eq!(text, "0123456789ABCDEFGHIJKLMNOPQRSTUVhxde");
-        assert_eq!(decode_codes(&text), Some(codes));
-    }
-
-    #[rstest]
-    #[case("W")]
-    #[case("a")]
-    #[case("1 2")]
-    #[case("Ｒ")]
-    fn a_character_outside_the_alphabet_is_refused(#[case] text: &str) {
-        assert_eq!(decode_codes(text), None);
-    }
 
     #[rstest]
     #[case("+\\chk_vfo", true, Ok(Command::ChkVfo))]
@@ -323,41 +193,13 @@ mod tests {
     }
 
     #[test]
-    fn open_arguments_override_the_defaults() {
-        let Ok(Command::RttyOpen(config)) =
-            parse("+\\rtty_open baud=50 stop=2 parity=odd gap=1.5 diddle=ltrs lead_in=0.1 tail=0").command
-        else {
-            panic!("not an open");
-        };
-        assert_eq!(config.framing.baud.bits_per_second(), 50.0);
-        assert_eq!(config.framing.stop, StopElement::Two);
-        assert_eq!(config.framing.parity, Parity::Odd);
-        assert_eq!(config.char_gap_bits, 1.5);
-        assert_eq!(config.diddle, Diddle::Ltrs);
-        assert_eq!(config.lead_in_seconds, 0.1);
-        assert_eq!(config.tail_seconds, 0.0);
-    }
-
-    #[test]
-    fn written_open_arguments_read_back_as_the_same_framing() {
-        let mut config = TxConfig {
-            char_gap_bits: 2.0,
-            diddle: Diddle::Blank,
-            lead_in_seconds: 0.25,
-            tail_seconds: 0.125,
-            ..TxConfig::default()
-        };
-        config.framing.parity = Parity::Even;
-        config.framing.stop = StopElement::One;
-        let line = format!("\\rtty_open {}", encode_open(&config));
-        let Ok(Command::RttyOpen(read)) = parse(&line).command else {
-            panic!("not an open: {line}");
-        };
-        assert_eq!(read.framing, config.framing);
-        assert_eq!(read.char_gap_bits, config.char_gap_bits);
-        assert_eq!(read.diddle, config.diddle);
-        assert_eq!(read.lead_in_seconds, config.lead_in_seconds);
-        assert_eq!(read.tail_seconds, config.tail_seconds);
+    fn open_arguments_are_the_shared_framing_arguments() {
+        let arguments = ["baud=50", "stop=2", "parity=odd", "lead_in=0.1"];
+        let line = format!("+\\rtty_open {}", arguments.join(" "));
+        assert_eq!(
+            parse(&line).command,
+            Ok(Command::RttyOpen(decode_open(&arguments).unwrap()))
+        );
     }
 
     #[rstest]

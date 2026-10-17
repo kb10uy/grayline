@@ -99,6 +99,7 @@ one kind of transport. There is not.
 | Frequency poll | On, and shown in the radio panel | Off by default; nothing shows a frequency yet |
 | Band selector, tuning controls | Yes | No |
 | Template variables | Yes | No |
+| `ctx.keying` | Always `"audio"` | `"audio"`, or `"fsk"` with `[keyer]` on |
 
 The RTTY application has no editor for the `[rig]` section and no menu entry
 that writes the script out. Keying is wired once for a station and then left
@@ -202,10 +203,37 @@ is the script's own arrangement, not a call the application makes twice.
 | `ctx.ports` | The transports, by the name they were configured under |
 | `ctx.band` | The band the rig is on, or `nil` between bands |
 | `ctx.frequency` | The last frequency read, in hertz, or `nil` |
+| `ctx.keying` | In `transmit` and `receive`, how the transmission reaches the rig; `nil` elsewhere |
 | `ctx.log(message)` | Writes to the application log |
 
 Absent fields are `nil` rather than empty: a rig that has not been read has no
 frequency, and one between the bands has no band.
+
+`ctx.keying` is `"audio"` when the application plays the signal into the rig.
+It is `"fsk"` when `gl-keyer` keys the rig's FSK input and nothing is played
+([keyer.md](keyer.md)). A rig keyed for FSK usually has to be in its FSK mode,
+and which mode that is belongs to the rig, so the application reports the
+keying and the script selects the mode. `receive` is told the keying of the
+transmission it ends, so a script that changed the mode can change it back:
+
+```lua
+local function transmit(ctx)
+  if ctx.keying == "fsk" then
+    ctx.ports.rig:send("M RTTY 0")
+  end
+  ctx.ports.rig:send("T 1")
+end
+
+local function receive(ctx)
+  ctx.ports.rig:send("T 0")
+  if ctx.keying == "fsk" then
+    ctx.ports.rig:send("M USB 0")
+  end
+end
+```
+
+The default script does not change the mode: a rig that was already set up
+for FSK by hand stays as it was.
 
 `ctx.band` is the same table `change_band` receives, so a script reads a band's
 settings the same way whether it was handed one or is acting on the one the rig
@@ -489,7 +517,8 @@ the VFO question, a refused command, and a hangup.
 
 The script host is tested against the same stand-in, with the script under test
 written into a temporary configuration directory: that the shipped default keys
-and unkeys, that a module exporting nothing still connects and sends nothing,
+and unkeys, that both sides of a transmission are told its keying and nothing
+else is, that a module exporting nothing still connects and sends nothing,
 that the band reaches the script, that a script which raises is reported
 without taking the connection down, that one which never returns is abandoned,
 and that a chunk returning something other than a table is refused.

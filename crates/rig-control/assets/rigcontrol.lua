@@ -12,11 +12,18 @@
 --   ctx.ports      the rigctld connections from [rig.ports], by name
 --   ctx.band       the band the rig is on, or nil between bands
 --   ctx.frequency  the last frequency read, in hertz, or nil
+--   ctx.keying     in transmit and receive: "audio" when the application plays
+--                  the signal, "fsk" when gl-keyer keys the rig's FSK input
 --   ctx.log(text)  writes to the application log
 --
 -- A rigctld port takes one command per call. Two commands on one line may be
 -- answered twice, and the answer left over would be read by the next command.
 
+-- A rig keyed for FSK usually has to be in its RTTY mode first. Which mode
+-- that is, and which to go back to, is the rig's own, so this leaves the mode
+-- alone; a station keying FSK selects it here, for example:
+--
+--   if ctx.keying == "fsk" then ctx.ports.rig:send("M RTTY 0") end
 local function transmit(ctx)
   ctx.ports.rig:send("T 1")
 end

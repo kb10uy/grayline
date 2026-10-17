@@ -194,7 +194,7 @@ fn transmit_controls(ui: &mut Ui, app: &mut App) {
                 app.i18n
                     .text_with("hint-unsendable", &[("character", owned(character.to_string()))]),
             );
-        } else if app.audio.output_device.is_none() {
+        } else if app.lacks_output() {
             response.on_hover_text(app.i18n.text("error-no-output"));
         }
 

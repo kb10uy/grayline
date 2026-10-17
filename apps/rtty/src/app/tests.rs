@@ -13,7 +13,10 @@ use grayline_shell::{
 use rstest::rstest;
 
 use super::*;
-use crate::{test_util::refused_port, worker::contact::ContactState};
+use crate::{
+    test_util::{FakeKeyer, refused_port},
+    worker::contact::ContactState,
+};
 
 #[derive(Default)]
 struct RecordingPlatform {
@@ -310,6 +313,67 @@ fn a_message_cannot_be_sent_without_an_output_device() {
 
     assert_eq!(app.transmit.queued().len(), 0);
     assert!(app.notice.is_some());
+}
+
+#[test]
+fn a_station_keying_fsk_needs_no_output_device() {
+    let mut app = App::headless();
+    app.transmit.draft = "CQ DE JL1HIS".to_owned();
+    assert_eq!(app.keying(), Keying::Audio);
+
+    app.keyer.enabled = true;
+
+    assert_eq!(app.keying(), Keying::Fsk);
+    assert!(!app.lacks_output());
+    assert!(app.can_send());
+}
+
+fn run_until_idle(app: &mut App) {
+    let deadline = Instant::now() + std::time::Duration::from_secs(10);
+    while app.transmit.is_busy() {
+        assert!(Instant::now() < deadline, "the transmission never finished");
+        app.poll_workers();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
+#[test]
+fn a_message_keyed_as_fsk_goes_to_the_keyer_and_is_echoed() {
+    let fake = FakeKeyer::spawn(&[("sending", 0), ("completed", 60_000_000)]);
+    let mut app = App::headless();
+    app.keyer.enabled = true;
+    app.keyer.address.clone_from(&fake.address);
+    app.transmit.queue("RYRY".to_owned());
+
+    run_until_idle(&mut app);
+
+    assert!(app.notice.is_none(), "{:?}", app.notice);
+    assert!(app.columns[0].text().contains("RYRY"), "{:?}", app.columns[0].text());
+    assert!(!app.tx.is_running());
+    let received = fake.received();
+    assert!(
+        received.iter().any(|line| line.starts_with("+\\rtty_send ")),
+        "{received:?}"
+    );
+    assert!(received.contains(&"+\\rtty_end".to_owned()), "{received:?}");
+}
+
+#[test]
+fn a_keyer_that_is_not_running_gives_the_messages_back() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    drop(listener);
+    let mut app = App::headless();
+    app.keyer.enabled = true;
+    app.keyer.address = address;
+    app.transmit.queue("FIRST".to_owned());
+    app.transmit.queue("SECOND".to_owned());
+
+    run_until_idle(&mut app);
+
+    assert_eq!(app.transmit.draft, "FIRST\nSECOND");
+    let notice = app.notice.clone().unwrap_or_default();
+    assert!(notice.starts_with("FSK keyer:"), "{notice}");
 }
 
 #[test]

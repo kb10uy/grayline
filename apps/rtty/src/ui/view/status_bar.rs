@@ -51,6 +51,14 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
                 let rig = app.i18n.text_with("status-rig", &[("state", owned(state))]);
                 ui.label(RichText::new(rig).size(LABEL));
             }
+            // Said because nothing else on screen is: a station keying FSK
+            // sends no audio, and the level fader still moves.
+            if app.keyer.enabled {
+                let keyer = app
+                    .i18n
+                    .text_with("status-keyer", &[("address", owned(app.keyer.address.clone()))]);
+                ui.label(RichText::new(keyer).size(LABEL));
+            }
             // After the reading rather than before it, so that the reading
             // keeps the right edge: a countdown put outside it would shove the
             // rate along by a digit's width every second, and would renumber

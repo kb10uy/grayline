@@ -14,7 +14,7 @@ use grayline_rig::DEFAULT_TIMEOUT;
 use crate::{
     bands::BandPlan,
     error::RigControlError,
-    script::{Entry, Logger, ScriptError, ScriptHost},
+    script::{Entry, Keying, Logger, ScriptError, ScriptHost},
     settings::{PortSettings, RigSettings},
     update,
 };
@@ -90,7 +90,7 @@ pub struct RigSnapshot {
 /// Only the two sides of a transmission: everything else the rig is told is
 /// the operator's own script, and the moments it hangs off are these.
 enum Request {
-    Transmit,
+    Transmit(Keying),
     Receive,
     SetFrequency(u64),
     ChangeBand(String),
@@ -152,17 +152,20 @@ impl RigWorker {
             })
     }
 
-    /// Asks for the rig to be keyed.
+    /// Asks for the rig to be keyed for a transmission that reaches it as
+    /// `keying`.
     ///
     /// The last failure is cleared here rather than on the worker's thread, so
     /// that a transmission asking to be keyed cannot read the error left by
     /// the one before it in the moment before the request is picked up.
-    pub fn transmit(&self) {
+    pub fn transmit(&self, keying: Keying) {
         update(&self.snapshot, |state| state.error = None);
-        self.request(Request::Transmit);
+        self.request(Request::Transmit(keying));
     }
 
     /// Asks for the rig to be unkeyed.
+    ///
+    /// The script is told the keying the rig was keyed with.
     pub fn receive(&self) {
         self.request(Request::Receive);
     }
@@ -271,6 +274,7 @@ fn rig_loop(plan: Plan, requests: &Receiver<Request>, snapshot: &Arc<Mutex<RigSn
     }
     update(snapshot, |state| state.state = RigState::Receiving);
     let mut keyed = false;
+    let mut keying = Keying::default();
     let mut frequency: Option<u64> = None;
     loop {
         // Polling stops while the rig is keyed. Reading the frequency back
@@ -282,8 +286,9 @@ fn rig_loop(plan: Plan, requests: &Receiver<Request>, snapshot: &Arc<Mutex<RigSn
             _ => IDLE_GAP,
         };
         let outcome = match requests.recv_timeout(gap) {
-            Ok(Request::Transmit) => {
-                let outcome = host.call(Entry::Transmit, frequency);
+            Ok(Request::Transmit(requested)) => {
+                keying = requested;
+                let outcome = host.call_keyed(Entry::Transmit, frequency, keying);
                 if outcome.is_ok() {
                     // The rig switches over on its own time, and anything sent
                     // inside that is lost. Waiting here rather than in the
@@ -298,7 +303,7 @@ fn rig_loop(plan: Plan, requests: &Receiver<Request>, snapshot: &Arc<Mutex<RigSn
                 thread::sleep(plan.tail);
                 keyed = false;
                 update(snapshot, |state| state.state = RigState::Receiving);
-                host.call(Entry::Receive, frequency)
+                host.call_keyed(Entry::Receive, frequency, keying)
             }
             // Tuning a keyed rig would move a transmission that is on the air.
             // The interface disables the controls while transmitting, so a
@@ -470,7 +475,7 @@ mod tests {
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
         worker.receive();
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
@@ -480,13 +485,50 @@ mod tests {
     }
 
     #[test]
+    fn both_sides_of_a_transmission_are_told_how_the_rig_is_keyed() {
+        let fake = FakeRig::spawn(14_230_000);
+        let config = with_script(
+            r#"return {
+                transmit = function(ctx) ctx.ports.rig:send("transmit " .. ctx.keying) end,
+                receive = function(ctx) ctx.ports.rig:send("receive " .. ctx.keying) end,
+                set_frequency = function(ctx) ctx.ports.rig:send("tune " .. tostring(ctx.keying)) end,
+            }"#,
+        );
+        let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
+        settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
+
+        worker.transmit(Keying::Fsk);
+        settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
+        worker.receive();
+        settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
+        worker.transmit(Keying::Audio);
+        settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
+        worker.receive();
+        settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
+        worker.set_frequency(7_000_000);
+        drop(worker);
+
+        assert_eq!(
+            fake.received(),
+            [
+                "+\\chk_vfo",
+                "+transmit fsk",
+                "+receive fsk",
+                "+transmit audio",
+                "+receive audio",
+                "+tune nil",
+            ]
+        );
+    }
+
+    #[test]
     fn a_script_that_exports_nothing_keys_nothing_and_still_connects() {
         let fake = FakeRig::spawn(14_230_000);
         let config = with_script("return {}");
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
         drop(worker);
 
@@ -509,7 +551,7 @@ mod tests {
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
         let asked = Instant::now();
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
 
         assert!(asked.elapsed() >= Duration::from_millis(300), "{:?}", asked.elapsed());
@@ -577,7 +619,7 @@ mod tests {
         );
         settle(&worker, |snapshot| snapshot.reading.is_some());
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
         let keyed_at = fake.received().len();
         thread::sleep(Duration::from_millis(200));
@@ -611,7 +653,7 @@ mod tests {
         );
         settle(&worker, |snapshot| snapshot.reading.is_some());
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
 
         assert!(
@@ -628,7 +670,7 @@ mod tests {
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         let snapshot = settle(&worker, |snapshot| snapshot.error.is_some());
 
         assert!(
@@ -645,7 +687,7 @@ mod tests {
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         let snapshot = settle(&worker, |snapshot| snapshot.error.is_some());
 
         assert!(
@@ -730,7 +772,7 @@ mod tests {
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
-        worker.transmit();
+        worker.transmit(Keying::Audio);
         settle(&worker, |snapshot| snapshot.state == RigState::Transmitting);
         worker.set_frequency(14_240_000);
         thread::sleep(Duration::from_millis(200));

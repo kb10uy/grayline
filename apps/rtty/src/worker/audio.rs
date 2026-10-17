@@ -9,7 +9,6 @@ use crate::{
     worker::{
         Waker,
         receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
-        transmit::{TxSnapshot, TxWorker},
     },
 };
 
@@ -339,94 +338,6 @@ impl AudioState {
         };
         self.open(&device);
         self.is_capturing()
-    }
-}
-
-/// The playback stream and worker one message is going out on.
-///
-/// The receive half keeps its device and worker together in [`AudioState`];
-/// this is the transmit mirror. A stream lives exactly as long as the message
-/// it carries, which is what puts a mark idle between queued messages without
-/// anything having to insert one: each transmission brings its own lead-in and
-/// tail.
-#[derive(Default)]
-pub struct TxState {
-    playback: Option<Playback>,
-    /// Whether the device was told to start consuming the queue.
-    started: bool,
-    worker: Option<TxWorker>,
-}
-
-impl TxState {
-    pub fn begin(&mut self, playback: Playback, worker: TxWorker) {
-        self.playback = Some(playback);
-        self.worker = Some(worker);
-        self.started = false;
-    }
-
-    pub fn latest(&self) -> Option<TxSnapshot> {
-        self.worker.as_ref().map(TxWorker::latest)
-    }
-
-    pub const fn is_running(&self) -> bool {
-        self.worker.is_some()
-    }
-
-    pub fn start_playback(&mut self) -> Result<(), AppError> {
-        self.playback.as_ref().ok_or(AppError::PlaybackClosed)?.play()?;
-        self.started = true;
-        Ok(())
-    }
-
-    pub const fn is_started(&self) -> bool {
-        self.started
-    }
-
-    /// Whether the device ran the queue dry while a message was going out.
-    pub fn has_underrun(&self) -> bool {
-        self.started
-            && self
-                .playback
-                .as_ref()
-                .is_some_and(|playback| playback.underrun_samples() > 0)
-    }
-
-    /// Whether the queue was closed by the worker and played to its end.
-    pub fn is_drained(&self) -> bool {
-        self.playback.as_ref().is_some_and(Playback::is_complete)
-    }
-
-    /// How much of the transmission has actually left for the rig.
-    ///
-    /// This is the figure the sent-text underline follows: what has been
-    /// generated is already in a queue the operator cannot hear yet.
-    pub fn played_samples(&self) -> u64 {
-        self.playback.as_ref().map_or(0, Playback::played_samples)
-    }
-
-    pub fn sample_rate_hz(&self) -> Option<u32> {
-        self.playback.as_ref().map(Playback::sample_rate_hz)
-    }
-
-    /// Stops keying and drops the stream, cutting whatever was still queued.
-    ///
-    /// Dropping the playback is what makes an abort immediate: the samples
-    /// already handed to the device are not played out, so the carrier stops
-    /// and a VOX circuit lets go.
-    pub fn stop(&mut self) {
-        self.playback = None;
-        self.worker = None;
-        self.started = false;
-    }
-}
-
-impl core::fmt::Debug for TxState {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("TxState")
-            .field("started", &self.started)
-            .field("running", &self.is_running())
-            .finish_non_exhaustive()
     }
 }
 

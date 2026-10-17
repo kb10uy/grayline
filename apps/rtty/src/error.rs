@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use grayline_audio::{AudioError, WavError};
 use grayline_qso::QsoError;
+use grayline_rig_control::RigError;
 use grayline_rtty::RttyError;
 use grayline_variables::VariableError;
 use thiserror::Error;
@@ -42,6 +43,12 @@ pub enum AppError {
     /// A transmission was asked to start on a stream that is no longer open.
     #[error("the playback stream is closed")]
     PlaybackClosed,
+    /// The FSK keyer could not be reached, or refused part of a stream.
+    #[error("FSK keyer: {0}")]
+    Keyer(RigError),
+    /// The FSK keyer ended a stream before it had gone out whole, saying how.
+    #[error("the FSK keyer stopped the transmission: {0}")]
+    KeyerStopped(String),
     /// A recording could not be opened or read.
     #[error(transparent)]
     Wav(#[from] WavError),

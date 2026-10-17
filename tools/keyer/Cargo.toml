@@ -15,6 +15,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 ctrlc.workspace = true
+grayline-keyer-protocol = { path = "../../crates/keyer-protocol" }
 grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
 serialport.workspace = true
 thiserror.workspace = true

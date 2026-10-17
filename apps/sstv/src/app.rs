@@ -19,7 +19,7 @@ use jiff::{Timestamp, Zoned};
 use grayline_sstv_rx::SyncStart;
 
 use grayline_rig_control::{
-    Reading, RigControlError, RigSnapshot, RigState, RigWorker,
+    Keying, Reading, RigControlError, RigSnapshot, RigState, RigWorker,
     bands::{BandDefinition, BandPlan},
     script,
 };
@@ -1839,7 +1839,7 @@ impl App {
         // Asked for before the audio is generated, so the lead-in the rig
         // needs runs alongside filling the queue rather than after it.
         if let Some(worker) = self.rig_worker.as_ref() {
-            worker.transmit();
+            worker.transmit(Keying::Audio);
             self.rig_keyed = true;
         }
         Some(writer)

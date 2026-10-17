@@ -85,6 +85,30 @@ impl Entry {
     }
 }
 
+/// How a transmission reaches the rig, as the script is told it.
+///
+/// A rig keyed for audio and one keyed for FSK are usually in different modes,
+/// and which mode that is belongs to the rig, so the script is told which and
+/// left to select it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Keying {
+    /// The modulation is audio played into the rig.
+    #[default]
+    Audio,
+    /// A keyer switches the rig's FSK input, and nothing is played.
+    Fsk,
+}
+
+impl Keying {
+    /// The word `ctx.keying` holds for this.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Audio => "audio",
+            Self::Fsk => "fsk",
+        }
+    }
+}
+
 /// What went wrong with the operator's script, or with a transport it sends on.
 #[derive(Clone, Debug, Error)]
 pub enum ScriptError {
@@ -216,20 +240,28 @@ impl ScriptHost {
     /// has to say.
     /// Calls `entry`, which is handed the frequency the rig was last read at.
     pub fn call(&self, entry: Entry, frequency_hz: Option<u64>) -> Result<(), ScriptError> {
-        self.invoke(entry, frequency_hz, None)
+        self.invoke(entry, frequency_hz, None, None)
+    }
+
+    /// Calls `entry` for one side of a transmission keyed as `keying`.
+    ///
+    /// `receive` is told the keying of the transmission it ends, so a script
+    /// that moved the rig to an FSK mode can move it back.
+    pub fn call_keyed(&self, entry: Entry, frequency_hz: Option<u64>, keying: Keying) -> Result<(), ScriptError> {
+        self.invoke(entry, frequency_hz, Some(keying), None)
     }
 
     /// Asks the script to tune the rig to `target_hz`.
     pub fn set_frequency(&self, frequency_hz: Option<u64>, target_hz: u64) -> Result<(), ScriptError> {
         let target = Value::Integer(i64::try_from(target_hz).unwrap_or(i64::MAX));
-        self.invoke(Entry::SetFrequency, frequency_hz, Some(target))
+        self.invoke(Entry::SetFrequency, frequency_hz, None, Some(target))
     }
 
     /// Asks the script to move the rig to `band`, which it is handed whole.
     pub fn change_band(&self, frequency_hz: Option<u64>, band: &BandDefinition) -> Result<(), ScriptError> {
         let entry = Entry::ChangeBand;
         let table = self.band_table(band).map_err(|error| call_error(entry, &error))?;
-        self.invoke(entry, frequency_hz, Some(Value::Table(table)))
+        self.invoke(entry, frequency_hz, None, Some(Value::Table(table)))
     }
 
     /// Calls `poll_frequency`, returning what the rig is tuned to.
@@ -241,7 +273,9 @@ impl ScriptHost {
         let Some(function) = self.function(entry) else {
             return Ok(None);
         };
-        let context = self.context(frequency_hz).map_err(|error| call_error(entry, &error))?;
+        let context = self
+            .context(frequency_hz, None)
+            .map_err(|error| call_error(entry, &error))?;
         let (frequency_hz, mode) = self
             .guarded(|| function.call::<(Option<u64>, Option<String>)>(context))
             .map_err(|error| call_error(entry, &error))?;
@@ -255,11 +289,19 @@ impl ScriptHost {
         }
     }
 
-    fn invoke(&self, entry: Entry, frequency_hz: Option<u64>, argument: Option<Value>) -> Result<(), ScriptError> {
+    fn invoke(
+        &self,
+        entry: Entry,
+        frequency_hz: Option<u64>,
+        keying: Option<Keying>,
+        argument: Option<Value>,
+    ) -> Result<(), ScriptError> {
         let Some(function) = self.function(entry) else {
             return Ok(());
         };
-        let context = self.context(frequency_hz).map_err(|error| call_error(entry, &error))?;
+        let context = self
+            .context(frequency_hz, keying)
+            .map_err(|error| call_error(entry, &error))?;
         self.guarded(|| match argument {
             Some(argument) => function.call::<()>((context, argument)),
             None => function.call::<()>(context),
@@ -271,9 +313,12 @@ impl ScriptHost {
         self.module.get::<Option<Function>>(entry.name()).ok()?
     }
 
-    fn context(&self, frequency_hz: Option<u64>) -> mlua::Result<Table> {
+    fn context(&self, frequency_hz: Option<u64>, keying: Option<Keying>) -> mlua::Result<Table> {
         let context = self.lua.create_table()?;
         context.set("ports", self.ports.clone())?;
+        if let Some(keying) = keying {
+            context.set("keying", keying.name())?;
+        }
         if let Some(frequency_hz) = frequency_hz {
             context.set("frequency", frequency_hz)?;
             if let Some(band) = self.bands.for_frequency(frequency_hz) {

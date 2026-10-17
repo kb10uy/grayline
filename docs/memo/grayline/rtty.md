@@ -343,8 +343,9 @@ one drives `gl-keyer`'s serial-line FSK in microseconds
 ([keyer.md](keyer.md)). The lead-in and tail stay with the caller, because a
 keyer fed codes as they arrive has to idle when it runs dry and only it knows
 that from the end. Because the keyer owns its own timing, a stream's elapsed
-time maps onto `TxSchedule` the same way a playback position does. Using it
-from the application, in place of the audio, is still deferred.
+time maps onto `TxSchedule` the same way a playback position does, which is
+how the application uses it in place of the audio when its `[keyer]` section
+is on.
 
 ## Consequences an operator sees
 
