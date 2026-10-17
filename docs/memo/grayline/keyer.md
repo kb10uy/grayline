@@ -22,6 +22,12 @@ stay a socket.
 
 Speaking `rigctld`'s protocol is what keeps a second kind of transport out of
 the applications: `grayline_rig::Rigctld` connects to the keyer unchanged.
+What that framing leaves open is how the keyer's own commands are spelled,
+and that lives in `grayline-keyer-protocol` (`crates/keyer-protocol/`), which
+both ends depend on: the code alphabet, the `\rtty_open` arguments, the state
+names `\status` reports, and `KeyerClient`, a client over `Rigctld` that
+speaks them. The keyer keeps only what is its own: parsing commands and
+rendering replies.
 
 ## Why Not PTT
 
@@ -175,6 +181,51 @@ is the next after `rigctld`'s 4532 and `rotctld`'s 4533. `send` keys one
 message without the socket, for checking a station's wiring with the rig keyed
 by hand or by `rigctl`; it reports how late the worst transition was.
 
+## The RTTY Application
+
+The RTTY application streams to the keyer in place of playing audio when its
+configuration file asks for it:
+
+```toml
+[keyer]
+enabled = true
+address = "127.0.0.1:4534"
+```
+
+Like `[rig]`, the section has no editor and is written out with its defaults
+on the first save: which line the rig's FSK input hangs off is wired once for
+a station. Nothing else about a transmission changes. Messages queue the same
+way, rig control keys PTT around them the same way, and the sent text is
+echoed and underlined the same way.
+
+1. The rig is keyed through rig control with `ctx.keying` set to `"fsk"`, so
+   the script can put the rig in its FSK mode before `T 1`
+   ([rig-control.md](rig-control.md)).
+2. A worker connects to the keyer at once, so a keyer that is not running is
+   found out while the rig is still switching over.
+3. Once the rig reports it is transmitting — after rig control's `lead-in` —
+   the worker opens the stream and sends the whole message, then `\rtty_end`.
+   Opening waits for the rig because the keyer starts keying the moment a
+   stream opens. Sending everything before ending means the stream never runs
+   dry: a dry stream idles at mark and falls behind its schedule.
+4. The worker asks `\status` every 20 ms. `Elapsed`, in microseconds, is read
+   as a playback position against a `TxSchedule` built at 1 MHz, which is what
+   drives the echo, the underline, the time remaining, and the text returned
+   by Stop.
+5. When the stream completes, the worst `Late` is written to the log, since it
+   is what says whether an adapter is fit to key with. Then the next queued
+   message goes, or the rig is unkeyed.
+
+Stop drops the worker, which sends `\stop` and closes the connection, so the
+keyer stops the stream at mark either way. A keyer that cannot be reached,
+refuses part of a stream, or ends one cut short fails the message. The
+unsent text goes back to the draft with the queue behind it, as a rig failure
+does. No audio device is needed to send. Tones, level, and reverse are not
+used, because a keyed line has two states: the rig decides what they sound
+like, and `--mark-asserted` decides which state is mark. The status bar names
+the keyer's address while the section is on, since nothing else on screen
+says the audio is not being used.
+
 ## Later
 
 - **CAT on the same port.** A rig with one USB serial port — CAT and the
@@ -188,11 +239,6 @@ by hand or by `rigctl`; it reports how late the worst transition was.
 - **Other methods.** A UART TxD `Method`, GPIO `ControlLine`s, a CW payload
   beside the RTTY one, and the PTT line described above if a station needs
   it.
-- **The RTTY application.** Choosing FSK there means streaming to the keyer
-  instead of playing audio while rig control keys PTT as it does now,
-  telling the script which it is so it can select the rig's mode, and
-  moving `protocol.rs`'s code alphabet into a crate both
-  sides depend on.
 
 ## Verification
 
@@ -205,7 +251,13 @@ by hand or by `rigctl`; it reports how late the worst transition was.
   during keying, disconnects, and the time limit.
 - The protocol's code alphabet and framing arguments round trip, and malformed
   input is refused.
-- A keyer served on a loopback socket and driven by `grayline_rig::Rigctld`:
-  a stream keys the line in framing order, a dropped connection stops its
-  stream at mark, requests that conflict are refused, and rig commands are
-  left to `rigctld`.
+- A keyer served on a loopback socket and driven by `KeyerClient` and
+  `grayline_rig::Rigctld`: a stream keys the line in framing order, a dropped
+  connection stops its stream at mark, requests that conflict are refused, and
+  rig commands are left to `rigctld`.
+- In `grayline-keyer-protocol`: every state name reads back, and a status
+  answer is read by its labels.
+- In the RTTY application, against a stand-in keyer: nothing is opened before
+  the rig is keyed, a started stream is sent whole and followed to its end, a
+  stream cut short and an unreachable keyer are failures that give the text
+  back, and a cancelled stream is stopped at the keyer.

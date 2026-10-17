@@ -24,6 +24,9 @@ The repository contains:
   keying the rig, the host for the operator's `rigcontrol.lua`, and the band
   plan. It is a crate of its own rather than part of the shell so that a
   receive-only application does not link a Lua interpreter.
+  `crates/keyer-protocol/` holds what `gl-keyer` and the applications that
+  stream to it share: how the keyer's commands are spelled, and a client
+  for them.
 - `tools/`: development command-line tools that are not shipped. One directory
   per mode, named `<mode>-cli`, holding the package `grayline-<mode>-cli` and
   the binary `gl-<mode>`; `gl-sstv` encodes and decodes WAV files and

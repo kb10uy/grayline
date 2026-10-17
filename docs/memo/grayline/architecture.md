@@ -377,8 +377,9 @@ The workspace currently contains twenty-two packages:
 | `grayline-variables` | `${name}` interpolation shared by the SSTV templates and the RTTY macros | Implemented |
 | `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
 | `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
+| `grayline-keyer-protocol` | The protocol `gl-keyer` speaks, and a client for it | Implemented; described in [keyer.md](keyer.md) |
 | `grayline-keyer` | Serial-line FSK keying, as `gl-keyer` | DTR and RTS implemented; described in [keyer.md](keyer.md) |
-| `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit |
+| `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit, as audio or as FSK through `gl-keyer` |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
 
@@ -394,9 +395,10 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-rig` | None |
 | `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |
-| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
+| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
 | `grayline-rtty-cli` | `grayline-rtty` |
-| `grayline-keyer` | `grayline-rtty` |
+| `grayline-keyer-protocol` | `grayline-rig`, `grayline-rtty` |
+| `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
 | `grayline-shell` | None |
 | `grayline-sstv` | `grayline-sstv-fskid` |
 | `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
@@ -450,6 +452,12 @@ crate is transport. An application supplies the settings, the directory the
 script is read from, and the moments — the two sides of a transmission, a
 tuning request, a frequency poll. The whole arrangement is described in
 [rig-control.md](rig-control.md).
+
+`grayline-keyer-protocol` is what `gl-keyer` and the applications that stream
+to it share: how the keyer's commands spell codes, framing, and stream states,
+and a client for them over `grayline-rig`'s transport. It is a crate of its own
+so that an application reaches the keyer without linking the serial port
+library the keyer itself needs ([keyer.md](keyer.md)).
 
 `grayline-dsp`, `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` build as
 allocation-backed `no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
@@ -642,10 +650,9 @@ implementations:
   FIR, PLL, and sliding-DFT discriminators, the center-sampling framing
   machine, the zero-crossing limiter AGC, the prefilter notch and LMS chain,
   6-to-8-bit pipelines, and CW identification. PTT is no longer among them:
-  the RTTY application keys through `grayline-rig-control`. Serial FSK
-  keying is implemented in `gl-keyer` but not yet used by the application,
-  and the keyer's CAT relay and other methods are listed in
-  [keyer.md](keyer.md).
+  the RTTY application keys through `grayline-rig-control`, and keys FSK
+  through `gl-keyer` when asked to. The keyer's CAT relay and other methods
+  are listed in [keyer.md](keyer.md).
 - The rest of `apps/rtty`, whose receive and transmit halves and scope window
   are implemented: the received-text history log, the aligned save, and the
   rig frequency readout. The design is

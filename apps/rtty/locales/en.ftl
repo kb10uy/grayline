@@ -49,6 +49,7 @@ status-no-output = No output device
 status-dropped = { $samples } samples dropped
 status-reading = Reading
 status-rig = Rig: { $state }
+status-keyer = FSK keyer: { $address }
 
 hint-listening = Nothing printed yet. Tune a receiver in, or drop a WAV recording here.
 hint-resync = Start the framing again, for a line that has lost its place

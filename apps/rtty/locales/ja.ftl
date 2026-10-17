@@ -49,6 +49,7 @@ status-no-output = 出力デバイスなし
 status-dropped = { $samples } サンプル欠落
 status-reading = 読み込み中
 status-rig = リグ: { $state }
+status-keyer = FSK キーヤー: { $address }
 
 hint-listening = まだ何も受信していません。受信機を合わせるか、WAV ファイルをここにドロップしてください。
 hint-resync = 同期を失った行のために、フレーミングをやり直します

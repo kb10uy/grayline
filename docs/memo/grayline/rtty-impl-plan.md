@@ -16,7 +16,9 @@ described under Macros and Templates and in
 [qso-directory.md](qso-directory.md). Explicit PTT is wired in as well, which
 the plan below deferred: the rig worker and the Lua host moved out of the SSTV
 application into `grayline-rig-control`, and this application keys through it
-([rig-control.md](rig-control.md)). Aligned save, the received-text history
+([rig-control.md](rig-control.md)). FSK keying through `gl-keyer` is wired in
+too, in place of the audio when the `[keyer]` section asks for it
+([keyer.md](keyer.md)). Aligned save, the received-text history
 log, and the rig frequency readout remain unimplemented. The release workflow
 and headless UI, scope, and locale tests are implemented. Where the
 implementation departs from what is described below, the departure is recorded
