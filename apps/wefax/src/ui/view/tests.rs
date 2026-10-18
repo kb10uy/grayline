@@ -29,7 +29,7 @@ fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
         let model = menu::model(app);
         view(ui, app, &model, menu::is_in_window());
     });
-    crate::install_fonts(&harness.ctx);
+    grayline_shell::fonts::install(&harness.ctx);
     harness.run_steps(8);
     harness
 }

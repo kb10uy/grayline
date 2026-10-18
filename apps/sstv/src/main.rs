@@ -1,8 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{error::Error, sync::Arc};
-
-use egui::{FontData, FontDefinitions, FontFamily};
+use std::error::Error;
 
 mod app;
 mod error;
@@ -16,76 +14,9 @@ mod worker;
 mod test_util;
 
 use app::App;
-use grayline_shell::log;
-use grayline_shell::platform::{self, UI_FONTS};
+use grayline_shell::{log, platform};
 use storage::paths;
 use ui::{menu, view};
-
-/// Draws the interface with the platform's UI font.
-///
-/// The system families are installed ahead of the bundled fonts, so Latin and
-/// Japanese come from one face, while a machine with none of them installed
-/// still renders text.
-///
-/// The font database is queried directly because the face index matters:
-/// Windows ships `Yu Gothic UI` as the second face of a collection whose
-/// first face is `Yu Gothic`, and that first face carries a half-em line gap.
-/// Loading it would leave every label sitting high in its row.
-fn install_fonts(ctx: &egui::Context) {
-    let mut database = fontdb::Database::new();
-    database.load_system_fonts();
-    ctx.set_fonts(font_definitions(&database));
-}
-
-fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
-    let mut definitions = FontDefinitions::default();
-    let mut installed = Vec::new();
-    for family in UI_FONTS {
-        let Some((data, index)) = load_face(database, family) else {
-            continue;
-        };
-        definitions.font_data.insert(
-            (*family).to_owned(),
-            Arc::new(FontData {
-                font: data.into(),
-                index,
-                tweak: egui::FontTweak::default(),
-            }),
-        );
-        installed.push((*family).to_owned());
-    }
-
-    if installed.is_empty() {
-        log::note("no system UI font matched; using the bundled fonts");
-    }
-    for family in installed.iter().rev() {
-        for target in [FontFamily::Proportional, FontFamily::Monospace] {
-            definitions
-                .families
-                .entry(target)
-                .or_default()
-                .insert(0, family.clone());
-        }
-    }
-    definitions
-}
-
-fn load_face(database: &fontdb::Database, family: &str) -> Option<(Vec<u8>, u32)> {
-    let id = database.query(&fontdb::Query {
-        families: &[fontdb::Family::Name(family)],
-        weight: fontdb::Weight::NORMAL,
-        stretch: fontdb::Stretch::Normal,
-        style: fontdb::Style::Normal,
-    })?;
-    let (source, index) = database.face_source(id)?;
-    let data = match source {
-        fontdb::Source::File(path) => std::fs::read(path).ok()?,
-        fontdb::Source::Binary(data) => data.as_ref().as_ref().to_vec(),
-        #[allow(unreachable_patterns)]
-        _ => return None,
-    };
-    Some((data, index))
-}
 
 /// The name the desktop environment knows this application by.
 ///
@@ -192,7 +123,7 @@ fn fit_to_monitor(ctx: &egui::Context) -> bool {
 
 impl Interface {
     fn new(cc: &eframe::CreationContext<'_>, paths: paths::AppPaths, instance: platform::SingleInstance) -> Self {
-        install_fonts(&cc.egui_ctx);
+        grayline_shell::fonts::install(&cc.egui_ctx);
         platform::prepare_window(cc);
         instance.publish_window(cc);
 
@@ -265,39 +196,6 @@ impl eframe::App for Interface {
         }
         if self.quitting {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_empty_database_leaves_the_bundled_fonts_usable() {
-        let definitions = font_definitions(&fontdb::Database::new());
-        for family in [FontFamily::Proportional, FontFamily::Monospace] {
-            assert!(!definitions.families[&family].is_empty());
-        }
-    }
-
-    #[test]
-    fn a_matched_family_is_installed_ahead_of_the_bundled_fonts() {
-        let mut database = fontdb::Database::new();
-        database.load_system_fonts();
-        let Some(wanted) = UI_FONTS.iter().find(|family| load_face(&database, family).is_some()) else {
-            return; // No system font to check against on this machine.
-        };
-
-        let definitions = font_definitions(&database);
-        let bundled = FontDefinitions::default();
-        for family in [FontFamily::Proportional, FontFamily::Monospace] {
-            let installed = &definitions.families[&family];
-            assert_eq!(installed.first().map(String::as_str), Some(*wanted));
-            assert!(
-                installed.len() > bundled.families[&family].len(),
-                "the bundled fonts should still be behind the system ones"
-            );
         }
     }
 }

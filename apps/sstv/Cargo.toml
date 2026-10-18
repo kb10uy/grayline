@@ -16,7 +16,6 @@ directories.workspace = true
 eframe.workspace = true
 egui.workspace = true
 egui_extras.workspace = true
-fontdb.workspace = true
 image.workspace = true
 image-webp.workspace = true
 jiff.workspace = true
