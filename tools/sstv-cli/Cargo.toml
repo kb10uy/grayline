@@ -17,7 +17,7 @@ image.workspace = true
 jiff.workspace = true
 grayline-sstv-rx = { path = "../../crates/sstv-rx", features = ["std"] }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
-grayline-tone-tx = { path = "../../crates/tone-tx" }
+grayline-tone-tx = { path = "../../crates/tone-tx", features = ["std"] }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
 grayline-sstv-template = { path = "../../crates/sstv-template" }
 

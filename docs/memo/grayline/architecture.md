@@ -460,8 +460,8 @@ and a client for them over `grayline-rig`'s transport. It is a crate of its own
 so that an application reaches the keyer without linking the serial port
 library the keyer itself needs ([keyer.md](keyer.md)).
 
-`grayline-dsp`, `grayline-sstv`, `grayline-sstv-rx`, `grayline-wefax`, and
-`grayline-rtty` build as allocation-backed `no_std` crates by default.
+`grayline-dsp`, `grayline-sstv`, `grayline-sstv-rx`, `grayline-tone-tx`,
+`grayline-wefax`, and `grayline-rtty` build as `no_std` crates by default.
 `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
 remain in `grayline-wav` and in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
 `grayline-wav` reads a recording's first channel and writes 16-bit mono for the three tools and for
@@ -688,6 +688,7 @@ cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
 cargo build -p grayline-sstv-rx --no-default-features
+cargo build -p grayline-tone-tx --no-default-features
 cargo build -p grayline-dsp --no-default-features
 cargo build -p grayline-wefax --no-default-features
 cargo build -p grayline-rtty --no-default-features
