@@ -14,12 +14,17 @@ impl RxDecoder {
     /// Offline sources can provide their remaining tail after the active image
     /// has completed so a fitted raster clock still has enough guarded coverage.
     pub fn stage_for_refinement(&mut self, block: DemodulatedBlock<'_>) -> Result<(), SstvError> {
-        if self.decode.state != RxState::Complete {
+        if self.decode.state != Progress::Complete {
             return Err(SstvError::RxNotComplete);
         }
-        block.validate_continuity(self.next_sample)?;
+        block.validate_continuity(self.next_sample())?;
         block.validate_range(0, block.frequency_hz().len())?;
-        let Some(staged) = self.staged.as_mut() else {
+        let Some(Stream {
+            staged: Some(staged),
+            next_sample,
+            ..
+        }) = self.phase.stream_mut()
+        else {
             return Err(SstvError::StagingDisabled);
         };
         let max_samples = match self.config.staging {
@@ -34,12 +39,10 @@ impl RxDecoder {
             return Err(SstvError::StagingCapacityExceeded { max_samples });
         }
         staged.append(block, block.frequency_hz().len());
-        self.next_sample = Some(
-            block
-                .first_sample()
-                .checked_add(block.frequency_hz().len() as u64)
-                .ok_or(SstvError::SamplePositionOverflow)?,
-        );
+        *next_sample = block
+            .first_sample()
+            .checked_add(block.frequency_hz().len() as u64)
+            .ok_or(SstvError::SamplePositionOverflow)?;
         Ok(())
     }
     /// Re-estimates global rate and epoch and rebuilds from immutable staged samples.
@@ -50,7 +53,7 @@ impl RxDecoder {
     /// [`RxState::Complete`], so callers must collect the complete transmission
     /// before invoking this method.
     pub fn refine_staged(&mut self) -> Result<RefinementResult, SstvError> {
-        let Some(staged) = self.staged.as_ref() else {
+        let Some(staged) = self.phase.stream().and_then(|stream| stream.staged.as_ref()) else {
             return Err(SstvError::StagingDisabled);
         };
         let estimator =
@@ -80,8 +83,9 @@ impl RxDecoder {
         self.validate_staged_coverage(staged, clock, self.raster.units())?;
         let mut candidate = self.redraw(staged, clock, self.raster.units())?;
         candidate.delivered_rows = self.raster.mode.spec().active_rows() as usize;
-        candidate.state = RxState::Complete;
+        candidate.state = Progress::Complete;
         self.decode = candidate;
+        self.phase = core::mem::replace(&mut self.phase, Phase::Idle).with_clock(clock);
         self.image_revision = self.image_revision.saturating_add(1);
         Ok(RefinementResult {
             revision: self.image_revision,
@@ -94,10 +98,18 @@ impl RxDecoder {
     /// transmission to end, the rate is re-estimated as lines accumulate and,
     /// when it has moved far enough to matter, the rows already decoded are
     /// redrawn from the retained samples so the whole image stays consistent.
-    pub(super) fn track_slant(&mut self) -> Result<(), SstvError> {
-        if !self.config.live_slant || self.staged.is_none() {
+    pub(super) fn track_slant(&mut self, stream: &mut Stream, clock: &mut RasterClock) -> Result<(), SstvError> {
+        if !self.config.live_slant {
             return Ok(());
         }
+        let Stream {
+            input,
+            staged: Some(staged),
+            ..
+        } = stream
+        else {
+            return Ok(());
+        };
         let units = self.decode.raster_unit;
         if units < LIVE_SLANT_MIN_UNITS {
             return Ok(());
@@ -118,14 +130,14 @@ impl RxDecoder {
             return Ok(());
         }
         let smoothed = self.rate_estimates.iter().sum::<f64>() / self.rate_estimates.len() as f64;
-        let current = self.decode.clock.expect("clock acquired").effective_sample_rate_hz();
+        let current = clock.effective_sample_rate_hz();
         if (smoothed / current - 1.0).abs() * 1.0e6 < live_slant_threshold_ppm(units) {
             return Ok(());
         }
         let refit = RasterClock::from_estimate(estimate.source_epoch, smoothed)?;
         // A refit the retained samples cannot cover is simply left for a later
         // attempt, so tracking never destroys a usable image.
-        if let Ok(redrawn) = self.rebuild_live(refit, units) {
+        if let Ok(redrawn) = self.rebuild_live(staged, input, clock, refit, units) {
             self.last_slant_unit = Some(redrawn);
             self.rate_estimates.clear();
             self.phase_displacements.clear();
@@ -137,28 +149,34 @@ impl RxDecoder {
         }
         Ok(())
     }
-    /// Redraws the decoded raster under `clock` and resumes decoding.
+    /// Redraws the decoded raster under `refit` and resumes decoding.
     ///
     /// Returns the number of units redrawn, which may be fewer than `units`
     /// when the refit reaches past the samples received so far.
-    pub(super) fn rebuild_live(&mut self, clock: RasterClock, units: usize) -> Result<usize, SstvError> {
-        let staged = self.staged.as_ref().expect("staging checked by the caller");
-        let units = self.covered_units(staged, clock, units);
+    pub(super) fn rebuild_live(
+        &mut self,
+        staged: &SampleBuffer,
+        input: &mut SampleBuffer,
+        clock: &mut RasterClock,
+        refit: RasterClock,
+        units: usize,
+    ) -> Result<usize, SstvError> {
+        let units = self.covered_units(staged, refit, units);
         if units == 0 {
             return Err(SstvError::InsufficientStagedSync);
         }
-        let mut candidate = self.redraw(staged, clock, units)?;
+        let mut candidate = self.redraw(staged, refit, units)?;
         // Decoding continues from the refitted clock, so the working window is
         // taken again from the retained samples rather than from the window
         // that was trimmed against the old one.
-        let resume = clock.sample_at(
+        let resume = refit.sample_at(
             self.raster
                 .profile
                 .period_ps
                 .checked_mul(units as u64)
                 .ok_or(SstvError::TimeOverflow)?,
         )?;
-        let input = staged.tail_from(resume);
+        let resumed = staged.tail_from(resume);
         // Rows are delivered by the live path, not by a rebuild, so the
         // delivery bookkeeping is restated for the units that were redrawn.
         // Row events still queued deliver later and count themselves then, so
@@ -171,18 +189,15 @@ impl RxDecoder {
             .filter(|event| matches!(event, RxEvent::RowDecoded { .. }))
             .count();
         candidate.delivered_rows = (units * self.raster.rows_per_unit()).saturating_sub(queued_rows);
-        candidate.state = RxState::Decoding {
-            completed_rows: candidate.delivered_rows,
-        };
         candidate.pending_events = core::mem::take(&mut self.decode.pending_events);
         self.decode = candidate;
-        self.input = Some(input);
+        *input = resumed;
+        *clock = refit;
         self.image_revision = self.image_revision.saturating_add(1);
         Ok(units)
     }
     fn redraw(&self, staged: &SampleBuffer, clock: RasterClock, units: usize) -> Result<DecodeState, SstvError> {
         let mut candidate = DecodeState::new(self.decode.image.size());
-        candidate.clock = Some(clock);
         let scan = Scan {
             raster: &self.raster,
             input: staged,

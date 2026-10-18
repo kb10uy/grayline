@@ -249,6 +249,14 @@ staged periods, re-observes synchronization centers across the immutable staged
 stream, and fits the final global clock from those observations. This keeps
 early progressive display from biasing the completed-image slant correction.
 
+Both stages redraw into a fresh image from the staged samples under the refitted
+clock, and the decoder takes that image only once the redraw and the position
+decoding resumes from have both succeeded, so a refit the retained samples
+cannot cover leaves the reception exactly as it was. What a reception holds is
+a phase of the decoder rather than a set of optional fields: nothing before the
+first block, the working and staged streams while acquiring, and those streams
+with the raster clock while decoding.
+
 ### Timed Transmit Data
 
 `TxEncoder` owns an image and yields `TimedTone` values. Each value carries a

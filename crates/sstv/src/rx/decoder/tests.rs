@@ -120,8 +120,8 @@ fn decode(mode: Mode, frequency: &[f32], sync: &[f32], chunks: &[usize]) -> (Rgb
                 "decoder made no progress: mode={mode:?} state={:?} offset={offset} len={} required_end={:?} available_end={:?}",
                 decoder.state(),
                 frequency.len(),
-                decoder.required_end(),
-                decoder.input.as_ref().map(SampleBuffer::end)
+                decoder.phase.clock().map(|clock| decoder.required_end(clock)),
+                decoder.phase.stream().map(|stream| stream.input.end())
             ),
             None => {}
         }
@@ -390,7 +390,7 @@ fn unsuccessful_acquisition_window_is_consumed_without_error() {
     assert_eq!(result.consumed(), count);
     assert_eq!(result.event(), None);
     assert_eq!(decoder.state(), RxState::Acquiring);
-    assert!(decoder.input.as_ref().unwrap().len() < count);
+    assert!(decoder.phase.stream().unwrap().input.len() < count);
 }
 
 #[test]
@@ -592,7 +592,7 @@ fn staging_disabled_retains_no_full_stream_and_preserves_seam() {
     let (frequency, sync) = sampled_body(Mode::Martin2, 311);
     let (decoder, _) = drive_configured(Mode::Martin2, &frequency, &sync, RxConfig::default());
     assert_eq!(decoder.staged_samples_len(), 0);
-    assert!(decoder.input.as_ref().unwrap().len() < frequency.len() / 10);
+    assert!(decoder.phase.stream().unwrap().input.len() < frequency.len() / 10);
     assert_eq!(decoder.state(), RxState::Complete);
 }
 
@@ -631,7 +631,7 @@ fn completed_decoder_accepts_a_contiguous_refinement_tail() {
             ..RxConfig::default()
         },
     );
-    let first = decoder.next_sample.unwrap();
+    let first = decoder.next_sample().unwrap();
     let staged = decoder.staged_samples_len();
     decoder
         .stage_for_refinement(DemodulatedBlock::new(first, &[1900.0, 1900.0], &[0.0, 0.0]))
@@ -968,19 +968,17 @@ fn robot36_ambiguous_selector_matches_mmsstv_initial_alternation() {
     let block = DemodulatedBlock::new(0, &frequency, &sync);
     let mut input = SampleBuffer::new(0);
     input.append(block, frequency.len());
-    decoder.input = Some(input);
     let clock = RasterClock::from_estimate(0.0, SAMPLE_RATE as f64).unwrap();
-    decoder.decode.clock = Some(clock);
     let scan = Scan {
         raster: &decoder.raster,
-        input: decoder.input.as_ref().unwrap(),
+        input: &input,
         clock,
         source: Source::Live,
     };
     assert_eq!(scan.robot_selector_at(0).unwrap(), None);
-    decoder.decode_next().unwrap();
+    decoder.decode_next(&mut input, clock).unwrap();
     assert_eq!(decoder.decode.robot_selector, Some(RobotSelector::Cb));
-    decoder.decode_next().unwrap();
+    decoder.decode_next(&mut input, clock).unwrap();
     assert_eq!(decoder.decode.robot_selector, Some(RobotSelector::Cr));
 }
 

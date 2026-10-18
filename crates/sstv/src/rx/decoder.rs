@@ -65,8 +65,7 @@ pub struct RxDecoder {
     sample_rate_hz: u32,
     config: RxConfig,
     decode: DecodeState,
-    input: Option<SampleBuffer>,
-    next_sample: Option<u64>,
+    phase: Phase,
     observations: VecDeque<SyncObservation>,
     staged_observations: Vec<SyncObservation>,
     phase_displacements: VecDeque<i64>,
@@ -75,15 +74,64 @@ pub struct RxDecoder {
     sync_checks: usize,
     rate_estimates: VecDeque<f64>,
     last_slant_unit: Option<usize>,
-    staged: Option<SampleBuffer>,
     image_revision: u64,
+}
+
+#[derive(Debug)]
+enum Phase {
+    Idle,
+    Acquiring(Stream),
+    Decoding { stream: Stream, clock: RasterClock },
+}
+
+impl Phase {
+    fn stream(&self) -> Option<&Stream> {
+        match self {
+            Self::Idle => None,
+            Self::Acquiring(stream) | Self::Decoding { stream, .. } => Some(stream),
+        }
+    }
+
+    fn stream_mut(&mut self) -> Option<&mut Stream> {
+        match self {
+            Self::Idle => None,
+            Self::Acquiring(stream) | Self::Decoding { stream, .. } => Some(stream),
+        }
+    }
+
+    fn clock(&self) -> Option<RasterClock> {
+        match self {
+            Self::Decoding { clock, .. } => Some(*clock),
+            Self::Idle | Self::Acquiring(_) => None,
+        }
+    }
+
+    fn with_clock(self, clock: RasterClock) -> Self {
+        match self {
+            Self::Idle => Self::Idle,
+            Self::Acquiring(stream) | Self::Decoding { stream, .. } => Self::Decoding { stream, clock },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Stream {
+    input: SampleBuffer,
+    staged: Option<SampleBuffer>,
+    next_sample: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Progress {
+    Running,
+    Complete,
+    Stopped { completed_rows: usize, reason: StopReason },
 }
 
 #[derive(Debug)]
 struct DecodeState {
     image: RgbImage,
-    state: RxState,
-    clock: Option<RasterClock>,
+    state: Progress,
     raster_unit: usize,
     delivered_rows: usize,
     pending_events: VecDeque<RxEvent>,
@@ -95,8 +143,7 @@ impl DecodeState {
     fn new(size: ImageSize) -> Self {
         Self {
             image: RgbImage::new(size, Rgb8::default()),
-            state: RxState::Acquiring,
-            clock: None,
+            state: Progress::Running,
             raster_unit: 0,
             delivered_rows: 0,
             pending_events: VecDeque::with_capacity(3),
@@ -156,8 +203,7 @@ impl RxDecoder {
             sample_rate_hz,
             config,
             decode: DecodeState::new(size),
-            input: None,
-            next_sample: None,
+            phase: Phase::Idle,
             observations: VecDeque::with_capacity(16),
             staged_observations: Vec::new(),
             phase_displacements: VecDeque::with_capacity(PHASE_AGREEMENT),
@@ -166,7 +212,6 @@ impl RxDecoder {
             sync_checks: 0,
             rate_estimates: VecDeque::with_capacity(LIVE_SLANT_SMOOTHING),
             last_slant_unit: None,
-            staged: None,
             image_revision: 0,
         })
     }
@@ -178,7 +223,16 @@ impl RxDecoder {
 
     /// Returns the current decoder state.
     pub const fn state(&self) -> RxState {
-        self.decode.state
+        match self.decode.state {
+            Progress::Complete => RxState::Complete,
+            Progress::Stopped { completed_rows, reason } => RxState::Stopped { completed_rows, reason },
+            Progress::Running => match self.phase {
+                Phase::Decoding { .. } => RxState::Decoding {
+                    completed_rows: self.decode.delivered_rows,
+                },
+                Phase::Idle | Phase::Acquiring(_) => RxState::Acquiring,
+            },
+        }
     }
 
     /// Returns the decoded image.
@@ -188,12 +242,12 @@ impl RxDecoder {
 
     /// Returns the acquired physical raster epoch, if available.
     pub fn source_epoch(&self) -> Option<u64> {
-        self.decode.clock.map(|clock| clock.source_epoch())
+        self.phase.clock().map(|clock| clock.source_epoch())
     }
 
     /// Returns the acquired effective sample rate, if available.
     pub fn effective_sample_rate_hz(&self) -> Option<f64> {
-        self.decode.clock.map(|clock| clock.effective_sample_rate_hz())
+        self.phase.clock().map(|clock| clock.effective_sample_rate_hz())
     }
 
     /// Returns the immutable physical sample rate supplied at construction.
@@ -208,7 +262,10 @@ impl RxDecoder {
 
     /// Returns the number of paired samples retained for staged refinement.
     pub fn staged_samples_len(&self) -> usize {
-        self.staged.as_ref().map_or(0, SampleBuffer::len)
+        self.phase
+            .stream()
+            .and_then(|stream| stream.staged.as_ref())
+            .map_or(0, SampleBuffer::len)
     }
 
     /// Returns the current image revision, initially zero.
@@ -225,10 +282,10 @@ impl RxDecoder {
     /// raster, so nothing here would ever score a bad line. An already
     /// finished reception is left as it is.
     pub fn stop(&mut self, reason: StopReason) {
-        if matches!(self.decode.state, RxState::Complete | RxState::Stopped { .. }) {
+        if matches!(self.decode.state, Progress::Complete | Progress::Stopped { .. }) {
             return;
         }
-        self.decode.state = RxState::Stopped {
+        self.decode.state = Progress::Stopped {
             completed_rows: self.decode.delivered_rows,
             reason,
         };
@@ -242,10 +299,10 @@ impl RxDecoder {
     /// input is rejected. If processing fails after consuming a prefix, the
     /// returned [`RxProcessError`] reports that prefix so it is not resent.
     pub fn process(&mut self, block: DemodulatedBlock<'_>) -> Result<RxProcessResult, RxProcessError> {
-        let expected = self.next_sample;
+        let expected = self.next_sample();
         self.process_inner(block).map_err(|error| {
             let consumed = if expected.is_none_or(|sample| sample == block.first_sample()) {
-                self.next_sample
+                self.next_sample()
                     .and_then(|sample| sample.checked_sub(block.first_sample()))
                     .and_then(|count| usize::try_from(count).ok())
                     .unwrap_or(0)
@@ -254,124 +311,144 @@ impl RxDecoder {
                 0
             };
             if consumed == 0 && expected.is_none() {
-                self.input = None;
-                self.staged = None;
-                self.next_sample = None;
+                self.phase = Phase::Idle;
             }
             RxProcessError::new(consumed, error)
         })
     }
 
+    fn next_sample(&self) -> Option<u64> {
+        self.phase.stream().map(|stream| stream.next_sample)
+    }
+
     fn process_inner(&mut self, block: DemodulatedBlock<'_>) -> Result<RxProcessResult, SstvError> {
-        block.validate_continuity(self.next_sample)?;
+        block.validate_continuity(self.next_sample())?;
         if let Some(event) = self.poll_event() {
             return Ok(RxProcessResult::new(0, Some(event)));
         }
-        if matches!(self.decode.state, RxState::Complete | RxState::Stopped { .. }) {
+        if matches!(self.decode.state, Progress::Complete | Progress::Stopped { .. }) {
             return if block.frequency_hz().is_empty() {
                 Ok(RxProcessResult::new(0, None))
             } else {
                 Err(SstvError::RxAlreadyComplete)
             };
         }
-        if self.input.is_none() {
-            self.input = Some(SampleBuffer::new(block.first_sample()));
-            if let Staging::Memory { max_samples } = self.config.staging {
-                self.staged = Some(SampleBuffer::with_capacity(
-                    block.first_sample(),
-                    self.staging_reservation(max_samples),
-                ));
+        let mut stream = match core::mem::replace(&mut self.phase, Phase::Idle) {
+            Phase::Decoding { mut stream, mut clock } => {
+                let result = self.decode_block(&mut stream, &mut clock, block);
+                self.phase = Phase::Decoding { stream, clock };
+                return result;
             }
-            self.next_sample = Some(block.first_sample());
+            Phase::Acquiring(stream) => stream,
+            Phase::Idle => self.start_stream(block.first_sample()),
+        };
+        match self.acquire(&mut stream, block) {
+            Ok((consumed, Some(clock))) => {
+                self.phase = Phase::Decoding { stream, clock };
+                Ok(RxProcessResult::new(
+                    consumed,
+                    Some(RxEvent::RasterAcquired {
+                        source_epoch: clock.source_epoch(),
+                        effective_sample_rate_hz: clock.effective_sample_rate_hz(),
+                    }),
+                ))
+            }
+            result => {
+                self.phase = Phase::Acquiring(stream);
+                result.map(|(consumed, _)| RxProcessResult::new(consumed, None))
+            }
         }
+    }
 
+    fn start_stream(&self, first: u64) -> Stream {
+        Stream {
+            input: SampleBuffer::new(first),
+            staged: match self.config.staging {
+                Staging::Memory { max_samples } => Some(SampleBuffer::with_capacity(
+                    first,
+                    self.staging_reservation(max_samples),
+                )),
+                Staging::Disabled => None,
+            },
+            next_sample: first,
+        }
+    }
+
+    fn acquire(
+        &mut self,
+        stream: &mut Stream,
+        block: DemodulatedBlock<'_>,
+    ) -> Result<(usize, Option<RasterClock>), SstvError> {
         let mut consumed = 0;
         loop {
-            if self.decode.clock.is_none() {
-                if self.config.raster_start == RasterStart::AfterHeader {
-                    let clock = self.clock_at_input_start()?;
-                    self.decode.clock = Some(clock);
-                    self.skip_units_before_input(clock)?;
-                    self.decode.state = RxState::Decoding {
-                        completed_rows: self.decode.delivered_rows,
-                    };
-                    return Ok(RxProcessResult::new(
-                        consumed,
-                        Some(RxEvent::RasterAcquired {
-                            source_epoch: clock.source_epoch(),
-                            effective_sample_rate_hz: clock.effective_sample_rate_hz(),
-                        }),
-                    ));
-                }
-                let input = self.input.as_ref().expect("input initialized");
-                let target = startup_window_samples(self.raster.profile, self.sample_rate_hz);
-                if input.len() as u64 >= target {
-                    match acquire_startup(
-                        input,
-                        self.raster.profile,
-                        self.sample_rate_hz,
-                        self.config.sync_detector_delay,
-                    ) {
-                        Ok(clock) => {
-                            self.decode.clock = Some(clock);
-                            self.skip_units_before_input(clock)?;
-                            self.decode.state = RxState::Decoding {
-                                completed_rows: self.decode.delivered_rows,
-                            };
-                            return Ok(RxProcessResult::new(
-                                consumed,
-                                Some(RxEvent::RasterAcquired {
-                                    source_epoch: clock.source_epoch(),
-                                    effective_sample_rate_hz: clock.effective_sample_rate_hz(),
-                                }),
-                            ));
-                        }
-                        Err(SstvError::RasterNotAcquired) => {
-                            let advance = (target / 3).max(1);
-                            let keep_from = input.first().saturating_add(advance);
-                            self.input
-                                .as_mut()
-                                .expect("input initialized")
-                                .discard_before(keep_from);
-                            // What acquisition passed over can never be decoded,
-                            // so retaining it would only spend the staging
-                            // capacity a long stretch of noise then exhausts.
-                            if let Some(staged) = self.staged.as_mut() {
-                                staged.discard_before(keep_from);
-                            }
-                            if consumed == block.frequency_hz().len() {
-                                return Ok(RxProcessResult::new(consumed, None));
-                            }
-                            continue;
-                        }
-                        Err(error) => return Err(error),
-                    }
-                }
-                let needed = usize::try_from(target - input.len() as u64).unwrap_or(usize::MAX);
-                let take = needed.min(block.frequency_hz().len() - consumed);
-                self.append(block, consumed, take)?;
-                consumed += take;
-                if take == 0 {
-                    return Ok(RxProcessResult::new(consumed, None));
-                }
-                continue;
+            if self.config.raster_start == RasterStart::AfterHeader {
+                let clock = self.clock_at_input_start(stream.input.first())?;
+                self.skip_units_before_input(stream.input.first(), clock)?;
+                return Ok((consumed, Some(clock)));
             }
+            let target = startup_window_samples(self.raster.profile, self.sample_rate_hz);
+            if stream.input.len() as u64 >= target {
+                match acquire_startup(
+                    &stream.input,
+                    self.raster.profile,
+                    self.sample_rate_hz,
+                    self.config.sync_detector_delay,
+                ) {
+                    Ok(clock) => {
+                        self.skip_units_before_input(stream.input.first(), clock)?;
+                        return Ok((consumed, Some(clock)));
+                    }
+                    Err(SstvError::RasterNotAcquired) => {
+                        let advance = (target / 3).max(1);
+                        let keep_from = stream.input.first().saturating_add(advance);
+                        stream.input.discard_before(keep_from);
+                        // What acquisition passed over can never be decoded,
+                        // so retaining it would only spend the staging
+                        // capacity a long stretch of noise then exhausts.
+                        if let Some(staged) = stream.staged.as_mut() {
+                            staged.discard_before(keep_from);
+                        }
+                        if consumed == block.frequency_hz().len() {
+                            return Ok((consumed, None));
+                        }
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            let needed = usize::try_from(target - stream.input.len() as u64).unwrap_or(usize::MAX);
+            let take = needed.min(block.frequency_hz().len() - consumed);
+            self.append(stream, block, consumed, take)?;
+            consumed += take;
+            if take == 0 {
+                return Ok((consumed, None));
+            }
+        }
+    }
 
-            if self.can_decode_next()? {
-                if !self.synchronize()? {
+    fn decode_block(
+        &mut self,
+        stream: &mut Stream,
+        clock: &mut RasterClock,
+        block: DemodulatedBlock<'_>,
+    ) -> Result<RxProcessResult, SstvError> {
+        let mut consumed = 0;
+        loop {
+            if self.can_decode_next(&stream.input, *clock)? {
+                if !self.synchronize(&stream.input, clock)? {
                     let event = self.poll_event().expect("stop event queued");
                     return Ok(RxProcessResult::new(consumed, Some(event)));
                 }
-                if !self.can_decode_next()? {
+                if !self.can_decode_next(&stream.input, *clock)? {
                     if let Some(event) = self.poll_event() {
                         return Ok(RxProcessResult::new(consumed, Some(event)));
                     }
                     continue;
                 }
-                for row in self.decode_next()? {
+                for row in self.decode_next(&mut stream.input, *clock)? {
                     self.queue_event(RxEvent::RowDecoded { row });
                 }
-                self.track_slant()?;
+                self.track_slant(stream, clock)?;
                 if let Some(event) = self.poll_event() {
                     return Ok(RxProcessResult::new(consumed, Some(event)));
                 }
@@ -381,18 +458,18 @@ impl RxDecoder {
             if remaining == 0 {
                 return Ok(RxProcessResult::new(consumed, None));
             }
-            let required_end = self.required_end()?;
-            let available_end = self.input.as_ref().expect("input initialized").end();
-            let needed = usize::try_from(required_end.saturating_sub(available_end)).unwrap_or(usize::MAX);
+            let required_end = self.required_end(*clock)?;
+            let needed = usize::try_from(required_end.saturating_sub(stream.input.end())).unwrap_or(usize::MAX);
             let take = needed.max(1).min(remaining);
-            self.append(block, consumed, take)?;
+            self.append(stream, block, consumed, take)?;
             consumed += take;
         }
     }
 
     /// Consumes the decoder and returns its complete or partial image.
     pub fn finish(self) -> RxOutcome {
-        let DecodeState { image, state, .. } = self.decode;
+        let state = self.state();
+        let image = self.decode.image;
         match state {
             RxState::Complete => RxOutcome::Complete(image),
             RxState::Stopped { reason, .. } => RxOutcome::Stopped { image, reason },
@@ -425,8 +502,7 @@ impl RxDecoder {
     /// late; the samples that lag covers were dropped with the header, so the
     /// raster cannot reach back for them and live synchronization corrects the
     /// phase instead.
-    fn clock_at_input_start(&self) -> Result<RasterClock, SstvError> {
-        let first = self.input.as_ref().expect("input initialized").first();
+    fn clock_at_input_start(&self, first: u64) -> Result<RasterClock, SstvError> {
         let rate = f64::from(self.sample_rate_hz);
         let epoch = first as f64 + samples_spanned(rate, self.raster.profile.leading_ps);
         RasterClock::from_estimate(epoch, rate)
@@ -440,11 +516,10 @@ impl RxDecoder {
     /// starts. Those rows are left blank and counted as delivered, which is
     /// what MMSSTV shows as well, rather than failing the whole reception on
     /// samples that were never received.
-    fn skip_units_before_input(&mut self, clock: RasterClock) -> Result<(), SstvError> {
+    fn skip_units_before_input(&mut self, first: u64, clock: RasterClock) -> Result<(), SstvError> {
         let Some(segment) = self.raster.profile.pixels().iter().next() else {
             return Err(SstvError::UnsupportedRxMode(self.raster.mode));
         };
-        let first = self.input.as_ref().expect("input initialized").first();
         let units = self.raster.units();
         let mut unit = 0;
         while unit < units && self.raster.pixel_window(clock, unit, segment, 0)?.0 < first {
@@ -460,7 +535,13 @@ impl RxDecoder {
 
     /// Takes `count` samples of `block` from `offset` into the working window,
     /// and into staging when a refit may need to read them again.
-    fn append(&mut self, block: DemodulatedBlock<'_>, offset: usize, count: usize) -> Result<(), SstvError> {
+    fn append(
+        &self,
+        stream: &mut Stream,
+        block: DemodulatedBlock<'_>,
+        offset: usize,
+        count: usize,
+    ) -> Result<(), SstvError> {
         block.validate_range(offset, count)?;
         let first = block
             .first_sample()
@@ -471,25 +552,21 @@ impl RxDecoder {
             &block.frequency_hz()[offset..offset + count],
             &block.sync_strength()[offset..offset + count],
         );
-        if let Staging::Memory { max_samples } = self.config.staging {
-            let staged_len = self.staged.as_ref().map_or(0, SampleBuffer::len);
-            if staged_len.checked_add(count).is_none_or(|len| len > max_samples) {
+        if let (Staging::Memory { max_samples }, Some(staged)) = (self.config.staging, stream.staged.as_mut()) {
+            if staged.len().checked_add(count).is_none_or(|len| len > max_samples) {
                 return Err(SstvError::StagingCapacityExceeded { max_samples });
             }
-            self.staged.as_mut().expect("staging initialized").append(part, count);
+            staged.append(part, count);
         }
-        self.input.as_mut().expect("input initialized").append(part, count);
-        self.next_sample = Some(
-            first
-                .checked_add(count as u64)
-                .ok_or(SstvError::SamplePositionOverflow)?,
-        );
+        stream.input.append(part, count);
+        stream.next_sample = first
+            .checked_add(count as u64)
+            .ok_or(SstvError::SamplePositionOverflow)?;
         Ok(())
     }
 
     /// Returns the sample the current raster unit's last pixel window ends at.
-    fn required_end(&self) -> Result<u64, SstvError> {
-        let clock = self.decode.clock.expect("clock acquired");
+    fn required_end(&self, clock: RasterClock) -> Result<u64, SstvError> {
         let last = self
             .raster
             .profile
@@ -503,18 +580,17 @@ impl RxDecoder {
         Ok(end)
     }
 
-    fn can_decode_next(&self) -> Result<bool, SstvError> {
+    fn can_decode_next(&self, input: &SampleBuffer, clock: RasterClock) -> Result<bool, SstvError> {
         if self.decode.raster_unit >= self.raster.units() {
             return Ok(false);
         }
-        Ok(self.input.as_ref().expect("input initialized").end() >= self.required_end()?)
+        Ok(input.end() >= self.required_end(clock)?)
     }
 
-    fn decode_next(&mut self) -> Result<Range<usize>, SstvError> {
-        let clock = self.decode.clock.expect("clock acquired");
+    fn decode_next(&mut self, input: &mut SampleBuffer, clock: RasterClock) -> Result<Range<usize>, SstvError> {
         let scan = Scan {
             raster: &self.raster,
-            input: self.input.as_ref().expect("input initialized"),
+            input,
             clock,
             source: Source::Live,
         };
@@ -525,18 +601,16 @@ impl RxDecoder {
         // the samples of the unit it corrects.
         let discard =
             clock.sample_at(self.raster.profile.period_ps * self.decode.raster_unit.saturating_sub(1) as u64)?;
-        self.input.as_mut().expect("input initialized").discard_before(discard);
+        input.discard_before(discard);
         Ok(rows)
     }
 
     fn deliver_row(&mut self, row: usize) -> RxEvent {
         self.decode.delivered_rows += 1;
         if self.decode.delivered_rows == self.raster.mode.spec().active_rows() as usize {
-            self.decode.state = RxState::Complete;
+            self.decode.state = Progress::Complete;
         } else {
-            self.decode.state = RxState::Decoding {
-                completed_rows: self.decode.delivered_rows,
-            };
+            self.decode.state = Progress::Running;
         }
         RxEvent::RowDecoded { row }
     }
