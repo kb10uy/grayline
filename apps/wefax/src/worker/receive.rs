@@ -1,13 +1,13 @@
 use std::{
     sync::{
         Arc, Mutex, PoisonError,
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
 };
 
 use grayline_audio::CaptureReader;
-use grayline_wefax::{Format, Ioc, LinesPerMinute, WefaxBand, rx::RxState};
+use grayline_wefax::{Format, RxConfig, WefaxBand, rx::RxState};
 
 use grayline_shell::worker::Waker;
 
@@ -247,14 +247,11 @@ pub struct RxWorker {
 ///
 /// Everything here is read by the worker on its next block of audio, which is
 /// arriving continuously while a device is open.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Controls {
-    pub(super) auto_start: AtomicBool,
-    pub(super) auto_stop: AtomicBool,
-    pub(super) infer_lines_per_minute: AtomicBool,
-    pub(super) slant_tracking: AtomicBool,
-    pub(super) inverted: AtomicBool,
-    pub(super) narrow_shift: AtomicBool,
+    /// What the operator chose, read whole so the worker never sees half of a
+    /// change.
+    settings: Mutex<WorkerSettings>,
     /// Requests that the reception in progress be abandoned.
     pub(super) reset: AtomicBool,
     /// Requests that a reception begin here, without a start tone.
@@ -265,52 +262,26 @@ pub struct Controls {
     pub(super) phase_shift: Mutex<i64>,
     /// Line-rate corrections the operator has asked for, in parts per million.
     pub(super) slant_ppm: Mutex<f64>,
-    /// The geometry a manual start uses, packed as `(ioc index, lines)`.
-    pub(super) ioc: AtomicU32,
-    pub(super) lines_per_minute: AtomicU32,
 }
 
 impl Controls {
-    fn new(settings: &WorkerSettings) -> Self {
-        let controls = Self::default();
-        controls.apply(settings);
-        controls
-    }
-
-    fn apply(&self, settings: &WorkerSettings) {
-        self.auto_start.store(settings.auto_start, Ordering::Relaxed);
-        self.auto_stop.store(settings.auto_stop, Ordering::Relaxed);
-        self.infer_lines_per_minute
-            .store(settings.infer_lines_per_minute, Ordering::Relaxed);
-        self.slant_tracking.store(settings.slant_tracking, Ordering::Relaxed);
-        self.inverted.store(settings.inverted, Ordering::Relaxed);
-        self.narrow_shift.store(settings.narrow_shift, Ordering::Relaxed);
-        self.ioc.store(settings.format.ioc.index(), Ordering::Relaxed);
-        self.lines_per_minute
-            .store(settings.format.lines_per_minute.as_lpm(), Ordering::Relaxed);
-    }
-
-    pub(super) fn format(&self) -> Format {
-        let index = self.ioc.load(Ordering::Relaxed);
-        let lines = self.lines_per_minute.load(Ordering::Relaxed);
-        Format {
-            ioc: Ioc::ALL
-                .into_iter()
-                .find(|ioc| ioc.index() == index)
-                .unwrap_or(Ioc::Ioc576),
-            lines_per_minute: LinesPerMinute::ALL
-                .into_iter()
-                .find(|rate| rate.as_lpm() == lines)
-                .unwrap_or(LinesPerMinute::L120),
+    pub(super) fn new(settings: &WorkerSettings) -> Self {
+        Self {
+            settings: Mutex::new(*settings),
+            reset: AtomicBool::new(false),
+            manual_start: AtomicBool::new(false),
+            manual_stop: AtomicBool::new(false),
+            phase_shift: Mutex::new(0),
+            slant_ppm: Mutex::new(0.0),
         }
     }
 
-    pub(super) fn band(&self) -> WefaxBand {
-        if self.narrow_shift.load(Ordering::Relaxed) {
-            WefaxBand::NARROW
-        } else {
-            WefaxBand::WIDE
-        }
+    pub(super) fn apply(&self, settings: &WorkerSettings) {
+        *self.settings.lock().unwrap_or_else(PoisonError::into_inner) = *settings;
+    }
+
+    pub(super) fn settings(&self) -> WorkerSettings {
+        *self.settings.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     pub(super) fn take_phase_shift(&self) -> i64 {
@@ -334,6 +305,26 @@ pub struct WorkerSettings {
     pub slant_tracking: bool,
     pub inverted: bool,
     pub narrow_shift: bool,
+}
+
+impl WorkerSettings {
+    /// The receiver these settings ask for.
+    pub(super) fn rx_config(&self) -> RxConfig {
+        RxConfig {
+            band: if self.narrow_shift {
+                WefaxBand::NARROW
+            } else {
+                WefaxBand::WIDE
+            },
+            format: Some(self.format),
+            auto_start: self.auto_start,
+            auto_stop: self.auto_stop,
+            infer_lines_per_minute: self.infer_lines_per_minute,
+            slant_tracking: self.slant_tracking,
+            inverted: self.inverted,
+            ..RxConfig::default()
+        }
+    }
 }
 
 impl RxWorker {
@@ -419,8 +410,10 @@ impl core::fmt::Debug for RxWorker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use grayline_wefax::{Ioc, LinesPerMinute};
     use rstest::rstest;
+
+    use super::*;
 
     fn update(first_line: usize, lines: usize, replaces_all: bool) -> StripUpdate {
         StripUpdate {
@@ -549,9 +542,8 @@ mod tests {
         assert!(!RxProgress::Complete { lines: 1 }.is_active());
     }
 
-    #[test]
-    fn the_stored_geometry_survives_a_round_trip_through_the_controls() {
-        let settings = WorkerSettings {
+    fn settings() -> WorkerSettings {
+        WorkerSettings {
             format: Format {
                 ioc: Ioc::Ioc288,
                 lines_per_minute: LinesPerMinute::L240,
@@ -562,15 +554,21 @@ mod tests {
             slant_tracking: false,
             inverted: true,
             narrow_shift: true,
-        };
-        let controls = Controls::new(&settings);
-        assert_eq!(controls.format(), settings.format);
-        assert_eq!(controls.band(), WefaxBand::NARROW);
+        }
+    }
+
+    #[test]
+    fn the_settings_survive_a_round_trip_through_the_controls() {
+        let controls = Controls::new(&settings());
+        assert_eq!(controls.settings(), settings());
+        let config = controls.settings().rx_config();
+        assert_eq!(config.format, Some(settings().format));
+        assert_eq!(config.band, WefaxBand::NARROW);
     }
 
     #[test]
     fn a_phase_shift_accumulates_until_it_is_taken() {
-        let controls = Controls::default();
+        let controls = Controls::new(&settings());
         *controls.phase_shift.lock().unwrap() += 5;
         *controls.phase_shift.lock().unwrap() -= 2;
         assert_eq!(controls.take_phase_shift(), 3);
@@ -579,7 +577,7 @@ mod tests {
 
     #[test]
     fn a_line_rate_correction_accumulates_until_it_is_taken() {
-        let controls = Controls::default();
+        let controls = Controls::new(&settings());
         *controls.slant_ppm.lock().unwrap() += 50.0;
         *controls.slant_ppm.lock().unwrap() -= 5.0;
         assert_eq!(controls.take_slant_ppm(), 45.0);

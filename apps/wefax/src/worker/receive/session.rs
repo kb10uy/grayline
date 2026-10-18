@@ -101,7 +101,7 @@ struct Session {
 
 impl Session {
     fn new(sample_rate_hz: u32, controls: &Controls) -> Result<Self, AppError> {
-        let config = configure(controls);
+        let config = controls.settings().rx_config();
         Ok(Self {
             pipeline: ReceivePipeline::new(sample_rate_hz, config)?,
             sample_rate_hz,
@@ -114,7 +114,7 @@ impl Session {
     }
 
     fn restart(&mut self, controls: &Controls) -> Result<(), AppError> {
-        let config = configure(controls);
+        let config = controls.settings().rx_config();
         self.pipeline = ReceivePipeline::new(self.sample_rate_hz, config)?;
         self.config = config;
         self.published_lines = 0;
@@ -128,7 +128,7 @@ impl Session {
     /// Returns whether anything the interface draws changed, and what went
     /// wrong if something did.
     fn obey(&mut self, controls: &Controls) -> (bool, Option<AppError>) {
-        let wanted = configure(controls);
+        let wanted = controls.settings().rx_config();
         // The band is fixed when a demodulator is built, so changing the shift
         // is a new reception rather than a setting.
         if wanted.band != self.config.band
@@ -164,7 +164,7 @@ impl Session {
                 return (true, Some(error));
             }
             let sample = self.pipeline.demodulator().next_sample();
-            let format = controls.format();
+            let format = controls.settings().format;
             if let Err(error) = self.pipeline.decoder_mut().start_manually(format, sample) {
                 return (true, Some(error.into()));
             }
@@ -280,20 +280,6 @@ impl Session {
     }
 }
 
-fn configure(controls: &Controls) -> RxConfig {
-    let format = controls.format();
-    RxConfig {
-        band: controls.band(),
-        format: Some(format),
-        auto_start: controls.auto_start.load(Ordering::Relaxed),
-        auto_stop: controls.auto_stop.load(Ordering::Relaxed),
-        infer_lines_per_minute: controls.infer_lines_per_minute.load(Ordering::Relaxed),
-        slant_tracking: controls.slant_tracking.load(Ordering::Relaxed),
-        inverted: controls.inverted.load(Ordering::Relaxed),
-        ..RxConfig::default()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,9 +288,7 @@ mod tests {
     use crate::worker::receive::WorkerSettings;
 
     fn controls(settings: WorkerSettings) -> Controls {
-        let controls = Controls::default();
-        controls.apply(&settings);
-        controls
+        Controls::new(&settings)
     }
 
     fn settings() -> WorkerSettings {
@@ -331,7 +315,7 @@ mod tests {
             inverted: true,
             ..settings()
         });
-        let config = configure(&controls);
+        let config = controls.settings().rx_config();
         assert_eq!(config.format.unwrap().ioc, Ioc::Ioc288);
         assert_eq!(config.format.unwrap().lines_per_minute, LinesPerMinute::L90);
         assert!(!config.auto_start);
@@ -366,7 +350,10 @@ mod tests {
         let mut session = Session::new(11_025, &controls).unwrap();
         assert_eq!(session.config.band, grayline_wefax::WefaxBand::WIDE);
 
-        controls.narrow_shift.store(true, Ordering::Relaxed);
+        controls.apply(&WorkerSettings {
+            narrow_shift: true,
+            ..settings()
+        });
         assert!(session.obey(&controls).1.is_none());
         assert_eq!(session.config.band, grayline_wefax::WefaxBand::NARROW);
         assert_eq!(session.pipeline.demodulator().band(), grayline_wefax::WefaxBand::NARROW);
