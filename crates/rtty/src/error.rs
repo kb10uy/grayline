@@ -43,6 +43,15 @@ pub enum RttyError {
     /// A transmit duration is negative or not finite.
     #[error("lead-in, tail, ramp, and character gap must be finite and non-negative")]
     InvalidTransmitTiming,
+    /// A transmit amplitude is non-positive or not finite.
+    #[error("transmit amplitude must be finite and positive")]
+    InvalidAmplitude,
+    /// An ATC design averages over no blocks or more than it can hold.
+    #[error("ATC block count must be between 1 and {maximum}")]
+    InvalidAtcBlocks {
+        /// The largest block count an ATC holds.
+        maximum: usize,
+    },
     /// A signal-processing stage rejected its configuration.
     #[error(transparent)]
     Dsp(#[from] DspError),
