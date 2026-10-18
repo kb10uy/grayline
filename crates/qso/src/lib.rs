@@ -21,6 +21,7 @@ mod directory;
 mod error;
 mod paths;
 mod record;
+mod settings;
 mod store;
 mod wavelog;
 mod worker;
@@ -37,6 +38,7 @@ pub use record::{
     DEFAULT_FIELDS, FIELD_GROUPS, GROUP_PREFIX, Record, WELL_KNOWN_KEYS, expand_fields, field_group,
     normalize_callsign, valid_key,
 };
+pub use settings::ContactSettings;
 pub use store::{Origin, Store};
 pub use wavelog::{DEFAULT_TIMEOUT, Wavelog};
 pub use worker::{ContactPaths, ContactSnapshot, ContactState, ContactWorker};

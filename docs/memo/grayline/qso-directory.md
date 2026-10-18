@@ -304,6 +304,11 @@ The address is written even while it is empty, for the same reason the rig ports
 are: this file is where it is edited, and an operator who has to invent the key
 before they can change it has no way to learn it exists.
 
+`grayline-qso::ContactSettings` is what the section holds, and its `read` and
+`write` are the only code that parses or writes it: each application finds the
+`[qso]` table in its own file, hands it over with the defaults it starts on,
+and leaves its own keys in that table, such as SSTV's serial number, alone.
+
 Both paths are named by whoever builds the worker rather than discovered inside
 it. A discovered path is one a test cannot escape: the suite would otherwise
 write its store into the operator's own directory and read the operator's own
@@ -422,8 +427,9 @@ write that only ever added would hand it straight back on the next lookup.
 
 ## In the RTTY application
 
-RTTY uses the same `grayline-qso::ContactWorker` as SSTV. The dialog and `[qso]`
-settings remain application-owned, including their field lists and defaults.
+RTTY uses the same `grayline-qso::ContactWorker` and `ContactSettings` as
+SSTV. The dialog and the defaults remain application-owned, including the
+field list a first run offers.
 What differs downstream of the answer follows from ITA2 having no kanji.
 
 **The default field list is `["!core", "!latin"]` rather than `["!core"]`.**

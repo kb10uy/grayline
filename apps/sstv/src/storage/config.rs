@@ -10,10 +10,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use grayline_qso::DEFAULT_FIELDS;
+use grayline_qso::ContactSettings;
 use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
-use toml_edit::{Array, DocumentMut, Item, Table, value};
+use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::storage::history::HistoryFormat;
 
@@ -103,48 +103,6 @@ pub struct Settings {
     pub history_format: HistoryFormat,
     pub rig: RigSettings,
     pub contact: ContactSettings,
-}
-
-/// Where the contact directory looks a callsign up.
-///
-/// Written under `[qso]`, beside the serial number: the callsign in that panel
-/// is what a lookup is about, and a section of its own would separate the two
-/// halves of one thing.
-///
-/// The API key is deliberately absent, and is read from the family's own
-/// credentials file instead. This file is the one the operator is invited to
-/// open from the menu, the one that sits beside the rig script and the band
-/// plan, and the one the application rewrites at the end of any frame that
-/// changed a setting; a credential belongs in none of those.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContactSettings {
-    /// Whether the operator's own logger is asked about a callsign the store
-    /// has nothing recent to say about.
-    pub lookup: bool,
-    /// The base URL of that logger.
-    pub wavelog_url: String,
-    /// Which fields the contact dialog offers, as written: keys, and groups
-    /// spelled `!name`.
-    ///
-    /// Kept as written rather than expanded, so the file the operator reads
-    /// back says `!ja` where they wrote `!ja`. What the dialog lays out is
-    /// `grayline_qso::expand_fields` of this.
-    pub fields: Vec<String>,
-}
-
-impl Default for ContactSettings {
-    fn default() -> Self {
-        Self {
-            // Unlike rig control, an enabled lookup with nothing configured
-            // does nothing at all rather than trying to reach something: with
-            // no URL and no key there is no logger to ask, and the store still
-            // answers. So the switch starts on, and an operator who writes a
-            // credentials file is not left wondering why nothing happens.
-            lookup: true,
-            wavelog_url: String::new(),
-            fields: DEFAULT_FIELDS.iter().map(|field| (*field).to_owned()).collect(),
-        }
-    }
 }
 
 impl Default for Settings {
@@ -270,7 +228,10 @@ impl Config {
                 self.document.get("rig").and_then(Item::as_table),
                 RigSettings::default(),
             ),
-            contact: contact_settings(&self.document),
+            contact: ContactSettings::read(
+                self.document.get("qso").and_then(Item::as_table),
+                ContactSettings::default(),
+            ),
         }
     }
 
@@ -367,7 +328,7 @@ impl Config {
             Some(value(settings.tx_mode.spec().name())),
         );
         settings.rig.write(table_mut(document, "rig"));
-        store_contact(document, &settings.contact);
+        settings.contact.write(table_mut(document, "qso"));
         self.error = self.write().err().map(|error| error.to_string());
     }
 
@@ -409,51 +370,6 @@ fn store_custom_variables(document: &mut DocumentMut, variables: &BTreeMap<Strin
     for (name, text) in variables {
         table[name.as_str()] = value(text);
     }
-}
-
-fn contact_settings(document: &DocumentMut) -> ContactSettings {
-    let defaults = ContactSettings::default();
-    ContactSettings {
-        lookup: boolean(document, Some("qso"), "lookup").unwrap_or(defaults.lookup),
-        wavelog_url: subtable(document, "qso", "wavelog")
-            .and_then(|table| table.get("url"))
-            .and_then(Item::as_str)
-            .map(str::trim)
-            .map(str::to_owned)
-            .unwrap_or(defaults.wavelog_url),
-        fields: contact_fields(document).unwrap_or(defaults.fields),
-    }
-}
-
-/// Reads the field list, or nothing when the file names none.
-///
-/// A list that is present is taken as written, an empty one included: an
-/// operator who wrote `fields = []` asked for a dialog holding only what the
-/// station already has, and handing the default back would be arguing with
-/// them. Entries that are not strings are dropped; what the remaining ones
-/// mean is `expand_fields`'s business.
-fn contact_fields(document: &DocumentMut) -> Option<Vec<String>> {
-    let array = get(document, Some("qso"), "fields")?.as_array()?;
-    Some(
-        array
-            .iter()
-            .filter_map(|entry| entry.as_str().map(str::trim).map(str::to_owned))
-            .collect(),
-    )
-}
-
-/// Writes the directory's half of the QSO section back, the instance's address
-/// included.
-///
-/// The address is written even while it is empty, for the same reason the rig
-/// ports are: this file is where it is edited, and an operator who has to
-/// invent the key before they can change it has no way to learn it exists.
-fn store_contact(document: &mut DocumentMut, contact: &ContactSettings) {
-    set(document, Some("qso"), "lookup", Some(value(contact.lookup)));
-    let mut fields = Array::new();
-    fields.extend(contact.fields.iter().map(String::as_str));
-    set(document, Some("qso"), "fields", Some(Item::Value(fields.into())));
-    subtable_mut(document, "qso", "wavelog")["url"] = value(contact.wavelog_url.as_str());
 }
 
 fn mode_by_name(name: &str) -> Option<Mode> {
@@ -516,22 +432,6 @@ fn set(document: &mut DocumentMut, table: Option<&str>, key: &str, item: Option<
         Some(name) => table_mut(document, name),
     };
     target[key] = item;
-}
-
-fn subtable<'a>(document: &'a DocumentMut, parent: &str, name: &str) -> Option<&'a Table> {
-    document.get(parent)?.as_table()?.get(name)?.as_table()
-}
-
-fn subtable_mut<'a>(document: &'a mut DocumentMut, parent: &str, name: &str) -> &'a mut Table {
-    child_table_mut(table_mut(document, parent), name)
-}
-
-fn child_table_mut<'a>(parent: &'a mut Table, name: &str) -> &'a mut Table {
-    let entry = parent.entry(name).or_insert(Item::Table(Table::new()));
-    if !entry.is_table() {
-        *entry = Item::Table(Table::new());
-    }
-    entry.as_table_mut().expect("the entry holds a table")
 }
 
 fn table_mut<'a>(document: &'a mut DocumentMut, name: &str) -> &'a mut Table {

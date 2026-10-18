@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
 use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
-use grayline_qso::DEFAULT_FIELDS;
+use grayline_qso::{ContactSettings, DEFAULT_FIELDS};
 use grayline_shell::log;
-use toml_edit::{Array, DocumentMut, Item, Table, value};
+use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::app::macros::{Station, valid_variable_name};
 
@@ -90,31 +90,22 @@ pub struct Settings {
     pub scope: bool,
 }
 
-/// Where the contact directory looks a callsign up.
+/// The contact directory a first run starts on.
 ///
-/// Written under `[qso]`, the section name the SSTV application already uses
-/// for the same three settings: one operator's two applications ask the same
-/// logger about the same stations, and a station set up once should not have
-/// to be set up twice.
-///
-/// The API key is deliberately absent, and is read from the family's own
-/// credentials file instead. This file is the one the operator is invited to
-/// open from the menu and the one the application rewrites at the end of any
-/// frame that changed a setting; a credential belongs in neither.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContactSettings {
-    /// Whether the operator's own logger is asked about a callsign the store
-    /// has nothing recent to say about.
-    pub lookup: bool,
-    /// The base URL of that logger.
-    pub wavelog_url: String,
-    /// Which fields the contact dialog offers, as written: keys, and groups
-    /// spelled `!name`.
-    ///
-    /// Kept as written rather than expanded, so the file the operator reads
-    /// back says `!ja` where they wrote `!ja`. What the dialog lays out is
-    /// `grayline_qso::expand_fields` of this.
-    pub fields: Vec<String>,
+/// The Latin spellings are offered as well as the core three, which is where
+/// this parts from SSTV. ITA2 carries no kanji, so the name this mode can
+/// actually send is the one `!latin` keeps; a station that files only a kanji
+/// name has nothing a macro could put on the air.
+fn default_contact() -> ContactSettings {
+    ContactSettings {
+        fields: DEFAULT_FIELDS
+            .iter()
+            .copied()
+            .chain(["!latin"])
+            .map(str::to_owned)
+            .collect(),
+        ..ContactSettings::default()
+    }
 }
 
 /// Where a transmission goes when it is keyed as FSK rather than played.
@@ -135,30 +126,6 @@ impl Default for KeyerSettings {
         Self {
             enabled: false,
             address: DEFAULT_KEYER_ADDRESS.to_owned(),
-        }
-    }
-}
-
-impl Default for ContactSettings {
-    fn default() -> Self {
-        Self {
-            // On, for the reason recorded beside the SSTV application's own
-            // copy: with no instance and no key there is nobody to ask and the
-            // store answers alone, so a switch that started off would only
-            // leave an operator who wrote a credentials file wondering why
-            // nothing happened.
-            lookup: true,
-            wavelog_url: String::new(),
-            // The Latin spellings as well as the core three, which is where
-            // this parts from SSTV. ITA2 carries no kanji, so the name this
-            // mode can actually send is the one `!latin` keeps; a station that
-            // files only a kanji name has nothing a macro could put on the air.
-            fields: DEFAULT_FIELDS
-                .iter()
-                .copied()
-                .chain(["!latin"])
-                .map(str::to_owned)
-                .collect(),
         }
     }
 }
@@ -192,7 +159,7 @@ impl Default for Settings {
             tx_level: 0.95,
             station: Station::default(),
             custom_variables: BTreeMap::new(),
-            contact: ContactSettings::default(),
+            contact: default_contact(),
             rig: RigSettings {
                 // Nothing here reads a frequency back yet, so the poll starts
                 // off rather than at the interval the SSTV application uses.
@@ -336,7 +303,13 @@ impl Config {
         // so the file is where they are changed, and rewriting the array on
         // every save would reformat what the operator had written in it.
         store_custom_variables(table, &settings.custom_variables);
-        store_contact(table, &settings.contact);
+        if let Some(qso) = table
+            .entry("qso")
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut()
+        {
+            settings.contact.write(qso);
+        }
         if let Some(rig) = table
             .entry("rig")
             .or_insert_with(|| Item::Table(Table::new()))
@@ -421,7 +394,7 @@ fn read(document: &DocumentMut) -> Settings {
         };
     }
     settings.custom_variables = read_custom_variables(table);
-    settings.contact = read_contact(table);
+    settings.contact = ContactSettings::read(table.get("qso").and_then(Item::as_table), Settings::default().contact);
     settings.rig = RigSettings::read(table.get("rig").and_then(Item::as_table), Settings::default().rig);
     settings.keyer = read_keyer(table);
     settings.clamped()
@@ -447,74 +420,6 @@ fn read_keyer(table: &Table) -> KeyerSettings {
             .filter(|address| !address.is_empty())
             .map_or(defaults.address, str::to_owned),
     }
-}
-
-fn read_contact(table: &Table) -> ContactSettings {
-    let defaults = ContactSettings::default();
-    let Some(qso) = table.get("qso").and_then(Item::as_table) else {
-        return defaults;
-    };
-    ContactSettings {
-        lookup: qso
-            .get("lookup")
-            .and_then(Item::as_value)
-            .and_then(|flag| flag.as_bool())
-            .unwrap_or(defaults.lookup),
-        wavelog_url: qso
-            .get("wavelog")
-            .and_then(Item::as_table)
-            .and_then(|wavelog| wavelog.get("url"))
-            .and_then(Item::as_value)
-            .and_then(|url| url.as_str())
-            .map(str::trim)
-            .map(str::to_owned)
-            .unwrap_or(defaults.wavelog_url),
-        fields: contact_fields(qso).unwrap_or(defaults.fields),
-    }
-}
-
-/// Reads the field list, or nothing when the file names none.
-///
-/// A list that is present is taken as written, an empty one included: an
-/// operator who wrote `fields = []` asked for a dialog holding only what the
-/// station already has, and handing the default back would be arguing with
-/// them. Entries that are not strings are dropped; what the remaining ones
-/// mean is `expand_fields`'s business.
-fn contact_fields(qso: &Table) -> Option<Vec<String>> {
-    let array = qso.get("fields")?.as_array()?;
-    Some(
-        array
-            .iter()
-            .filter_map(|entry| entry.as_str().map(str::trim).map(str::to_owned))
-            .collect(),
-    )
-}
-
-/// Writes the directory's settings back, the instance's address included.
-///
-/// The address is written even while it is empty: this file is where it is
-/// edited, and an operator who has to invent the key before they can change it
-/// has no way to learn it exists.
-fn store_contact(table: &mut Table, contact: &ContactSettings) {
-    let Some(qso) = table
-        .entry("qso")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
-    else {
-        return;
-    };
-    qso["lookup"] = value(contact.lookup);
-    let mut fields = Array::new();
-    fields.extend(contact.fields.iter().map(String::as_str));
-    qso["fields"] = Item::Value(fields.into());
-    let Some(wavelog) = qso
-        .entry("wavelog")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
-    else {
-        return;
-    };
-    wavelog["url"] = value(contact.wavelog_url.as_str());
 }
 
 /// Reads the operator's own fields.
@@ -877,14 +782,14 @@ grid = \"PM95UQ\"
 
         let (_, settings) = Config::load(path);
 
-        assert_eq!(settings.contact, ContactSettings::default());
+        assert_eq!(settings.contact, default_contact());
     }
 
     /// ITA2 has no kanji, so the spelling this mode can send is one the dialog has
     /// to offer somewhere to put.
     #[test]
     fn the_latin_spellings_are_offered_by_default() {
-        let offered = grayline_qso::expand_fields(ContactSettings::default().fields.iter().map(String::as_str));
+        let offered = grayline_qso::expand_fields(default_contact().fields.iter().map(String::as_str));
 
         for key in ["name", "name_latin", "qth", "qth_latin"] {
             assert!(offered.iter().any(|field| field == key), "{key} is not offered");
