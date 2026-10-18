@@ -35,3 +35,4 @@ windows-sys = { workspace = true, features = [
 [dev-dependencies]
 egui_kittest.workspace = true
 rstest.workspace = true
+tempfile.workspace = true

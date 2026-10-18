@@ -678,11 +678,11 @@ fn number(item: &toml_edit::Value) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn a_missing_file_starts_on_defaults_and_can_be_saved() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
         assert_eq!(settings, Settings::default());
@@ -695,7 +695,7 @@ mod tests {
 
     #[test]
     fn stored_settings_survive_a_round_trip() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let wanted = Settings {
             device: Some("Line In".to_owned()),
@@ -756,7 +756,7 @@ mod tests {
 
     #[test]
     fn the_rig_section_is_read_as_the_sstv_application_writes_it() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(
             &path,
@@ -798,7 +798,7 @@ mod tests {
     /// station that never touched them should still find them written out.
     #[test]
     fn a_first_save_writes_the_keying_settings_out() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
 
@@ -814,7 +814,7 @@ mod tests {
 
     #[test]
     fn a_blank_keyer_address_falls_back_to_the_default() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "[keyer]\nenabled = true\naddress = \"  \"\n").unwrap();
 
@@ -826,7 +826,7 @@ mod tests {
 
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "# the station's own note\nunknown = 7\nbaud = 75.0\n").unwrap();
 
@@ -841,7 +841,7 @@ mod tests {
 
     #[test]
     fn an_unparsable_file_is_never_written_over() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "this is not toml = = =\n").unwrap();
 
@@ -855,7 +855,7 @@ mod tests {
 
     #[test]
     fn unusable_values_fall_back_without_discarding_the_rest() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "mark_hz = \"low\"\nbaud = nan\nreverse = true\n").unwrap();
 
@@ -867,7 +867,7 @@ mod tests {
 
     #[test]
     fn stored_figures_are_brought_back_into_range() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(
             &path,
@@ -884,7 +884,7 @@ mod tests {
 
     #[test]
     fn a_whole_number_is_read_as_the_figure_it_is() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "shift_hz = 425\nbaud = 75\n").unwrap();
 
@@ -895,7 +895,7 @@ mod tests {
 
     #[test]
     fn operator_fields_survive_a_round_trip() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let wanted = Settings {
             custom_variables: BTreeMap::from([
@@ -912,7 +912,7 @@ mod tests {
 
     #[test]
     fn an_unusable_field_name_is_dropped() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(
             &path,
@@ -931,7 +931,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn a_removed_field_leaves_the_file() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let mut settings = Settings {
             custom_variables: BTreeMap::from([
@@ -953,7 +953,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn no_fields_leaves_no_table() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let mut settings = Settings {
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]),
@@ -969,7 +969,7 @@ grid = \"PM95UQ\"
     }
     #[test]
     fn a_file_that_says_nothing_about_the_directory_gets_the_defaults() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "baud = 75.0\n").unwrap();
 
@@ -991,7 +991,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn an_empty_field_list_is_taken_as_written() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "[qso]\nfields = []\n").unwrap();
 
@@ -1002,7 +1002,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn the_logger_address_is_written_out_even_while_it_is_empty() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
 

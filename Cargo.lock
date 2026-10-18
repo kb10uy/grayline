@@ -2129,6 +2129,7 @@ dependencies = [
  "rstest",
  "rusqlite",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "toml_edit",
  "ureq",
@@ -2159,6 +2160,7 @@ dependencies = [
  "grayline-rig",
  "mlua",
  "rstest",
+ "tempfile",
  "thiserror 2.0.21",
  "toml_edit",
 ]
@@ -2194,6 +2196,7 @@ dependencies = [
  "grayline-variables",
  "jiff",
  "rstest",
+ "tempfile",
  "thiserror 2.0.21",
  "toml_edit",
 ]
@@ -2223,6 +2226,7 @@ dependencies = [
  "muda",
  "raw-window-handle",
  "rstest",
+ "tempfile",
  "toml_edit",
  "unic-langid",
  "windows-sys 0.61.2",
@@ -2266,6 +2270,7 @@ dependencies = [
  "jiff",
  "png",
  "rstest",
+ "tempfile",
  "thiserror 2.0.21",
  "toml_edit",
 ]
@@ -2380,6 +2385,7 @@ dependencies = [
  "image",
  "jiff",
  "rstest",
+ "tempfile",
  "thiserror 2.0.21",
  "toml_edit",
 ]

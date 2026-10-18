@@ -184,11 +184,11 @@ fn read(document: &DocumentMut) -> Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn a_missing_file_starts_on_defaults_and_can_be_saved() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
         assert_eq!(settings, Settings::default());
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn stored_settings_survive_a_round_trip() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let wanted = Settings {
             device: Some("Line In".to_owned()),
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "# the station's own note\nunknown = 7\ninverted = true\n").unwrap();
 
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn an_unparsable_file_is_never_written_over() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "this is not toml = = =\n").unwrap();
 
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn unusable_values_fall_back_without_discarding_the_rest() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "ioc = 999\nlines_per_minute = 5\ninverted = true\n").unwrap();
 

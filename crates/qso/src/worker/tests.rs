@@ -1,9 +1,11 @@
 use std::sync::mpsc;
 
+use tempfile::TempDir;
+
 use super::{ContactPaths, ContactState, ContactWorker, Request, collapse_lookups};
 use crate::{
     Directory, QsoError, Record, Store,
-    test_util::{FakeWavelog, TEST_TIMEOUT, TempDir},
+    test_util::{FakeWavelog, TEST_TIMEOUT},
 };
 
 fn record(callsign: &str, name: &str) -> Record {
@@ -56,9 +58,9 @@ fn collapsing_keeps_the_last_lookup_and_every_save_in_order() {
 
 #[test]
 fn saves_publish_changes_and_drop_drains_writes_to_disk() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = ContactPaths {
-        store: Some(root.store()),
+        store: Some(root.path().join(crate::STORE_FILE)),
         credentials: None,
     };
     let (sent, received) = mpsc::channel();
@@ -78,7 +80,7 @@ fn saves_publish_changes_and_drop_drains_writes_to_disk() {
     worker.save(record("JA1BBB", "Second"), vec![]);
     worker.save(record("JA1CCC", "Third"), vec![]);
     drop(worker);
-    let store = Store::open(&root.store()).unwrap();
+    let store = Store::open(&root.path().join(crate::STORE_FILE)).unwrap();
     assert!(store.get("JA1AAA").unwrap().unwrap().is_empty());
     assert_eq!(store.get("JA1BBB").unwrap().unwrap().get("name"), Some("Second"));
     assert_eq!(store.get("JA1CCC").unwrap().unwrap().get("name"), Some("Third"));

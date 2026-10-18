@@ -28,9 +28,10 @@ toml_edit.workspace = true
 embed-resource.workspace = true
 
 [dev-dependencies]
-hound.workspace = true
 egui_kittest.workspace = true
+hound.workspace = true
 rstest.workspace = true
+tempfile.workspace = true
 
 # `cargo deb -p grayline-wefax-app` builds the Debian package from this. Asset
 # sources are relative to this directory, except target/release/ paths, which

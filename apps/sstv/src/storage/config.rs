@@ -627,7 +627,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     fn config_path(dir: &TempDir) -> PathBuf {
         dir.path().join(crate::storage::paths::CONFIG_FILE)
@@ -692,7 +692,7 @@ mod tests {
 
     #[test]
     fn a_missing_file_reads_as_the_defaults() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let config = Config::load(&config_path(&root));
         assert_eq!(config.settings(), Settings::default());
         assert!(config.error().is_none());
@@ -700,7 +700,7 @@ mod tests {
 
     #[test]
     fn stored_settings_survive_a_reload() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let settings = populated();
 
         let mut config = Config::load(&config_path(&root));
@@ -712,7 +712,7 @@ mod tests {
 
     #[test]
     fn a_field_list_is_stored_the_way_it_was_written() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let mut config = Config::load(&config_path(&root));
         config.store(&populated());
 
@@ -726,7 +726,7 @@ mod tests {
 
     #[test]
     fn an_empty_field_list_is_taken_as_written() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::create_dir_all(config_path(&root).parent().expect("a parent")).expect("a directory");
         fs::write(
             config_path(&root),
@@ -741,7 +741,7 @@ fields = []
 
     #[test]
     fn a_file_naming_no_fields_asks_for_the_default_ones() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
 
         assert_eq!(
             Config::load(&config_path(&root)).settings().contact.fields,
@@ -758,7 +758,7 @@ fields = []
 
     #[test]
     fn the_qso_section_names_its_instance_even_while_it_is_empty() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let mut config = Config::load(&config_path(&root));
         config.store(&Settings::default());
 
@@ -769,7 +769,7 @@ fields = []
 
     #[test]
     fn the_qso_section_carries_no_key() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let mut config = Config::load(&config_path(&root));
         config.store(&populated());
 
@@ -785,7 +785,7 @@ fields = []
     #[case("[rig]\npoll = nan\n")]
     #[case("[transmit]\nvolume = nan\n")]
     fn a_non_finite_number_reads_as_the_default(#[case] contents: &str) {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(config_path(&root), contents).unwrap();
 
         let settings = Config::load(&config_path(&root)).settings();
@@ -795,7 +795,7 @@ fields = []
 
     #[test]
     fn saving_keeps_comments_and_unrelated_keys() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(
             config_path(&root),
             "# rig settings, edited by hand\nrig-port = \"COM3\"\n",
@@ -813,7 +813,7 @@ fields = []
 
     #[test]
     fn a_setting_with_no_value_is_removed_rather_than_emptied() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let mut config = Config::load(&config_path(&root));
         config.store(&populated());
         config.store(&Settings::default());
@@ -826,7 +826,7 @@ fields = []
 
     #[test]
     fn a_malformed_file_reports_the_error_and_is_not_overwritten() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(config_path(&root), "input-device = \n").unwrap();
 
         let mut config = Config::load(&config_path(&root));
@@ -839,7 +839,7 @@ fields = []
 
     #[test]
     fn unrecognized_values_fall_back_to_the_defaults() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(
             config_path(&root),
             concat!(
@@ -859,7 +859,7 @@ fields = []
 
     #[test]
     fn the_default_port_is_written_out_under_the_name_the_script_reaches_it_by() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let mut config = Config::load(&config_path(&root));
         config.store(&Settings::default());
 
@@ -870,7 +870,7 @@ fields = []
 
     #[test]
     fn every_named_port_is_read_back() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(
             config_path(&root),
             concat!(
@@ -903,7 +903,7 @@ fields = []
 
     #[test]
     fn an_entry_that_is_not_a_section_is_not_a_port() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(config_path(&root), "[rig.ports]\nrig = 3\n").unwrap();
 
         assert!(Config::load(&config_path(&root)).settings().rig.ports.is_empty());
@@ -911,7 +911,7 @@ fields = []
 
     #[test]
     fn an_unrecognized_port_key_is_left_alone() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(
             config_path(&root),
             "[rig.ports.rig]\nnote = \"shack\"\naddress = \"192.168.0.8:4532\"\n",
@@ -935,7 +935,7 @@ fields = []
 
     #[test]
     fn a_ports_key_that_is_not_a_section_leaves_the_default_port() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(config_path(&root), "[rig]\nports = 3\n").unwrap();
 
         assert_eq!(
@@ -955,7 +955,7 @@ fields = []
         #[case] expected_poll: f32,
         #[case] expected_lead_in: f32,
     ) {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(config_path(&root), format!("[rig]\n{written}")).unwrap();
 
         let rig = Config::load(&config_path(&root)).settings().rig;
@@ -973,7 +973,7 @@ fields = []
 
     #[test]
     fn a_conflicting_table_name_is_replaced() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         fs::write(config_path(&root), "receive = 3\n").unwrap();
 
         let mut config = Config::load(&config_path(&root));

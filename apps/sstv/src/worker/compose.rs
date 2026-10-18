@@ -744,7 +744,7 @@ mod tests {
     /// same buffer coming back is proof that nothing was decoded again.
     #[test]
     fn a_prepared_background_is_reused_while_the_file_is_unchanged() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("background.png");
         image::RgbImage::from_pixel(8, 6, image::Rgb([10, 20, 30]))
             .save(&path)
@@ -759,7 +759,7 @@ mod tests {
 
     #[test]
     fn a_parsed_template_is_reused_while_the_file_is_unchanged() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("template.kdl");
         fs::write(
             &path,
@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn a_replaced_template_file_is_parsed_after_the_list_generation_changes() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("template.kdl");
         fs::write(
             &path,
@@ -797,7 +797,7 @@ mod tests {
 
     #[test]
     fn an_unchanged_stock_generation_does_not_touch_the_background_file() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("background.png");
         image::RgbImage::from_pixel(8, 6, image::Rgb([10, 20, 30]))
             .save(&path)
@@ -813,7 +813,7 @@ mod tests {
 
     #[test]
     fn a_replaced_background_file_is_prepared_again() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("background.png");
         image::RgbImage::from_pixel(8, 6, image::Rgb([10, 20, 30]))
             .save(&path)
@@ -831,7 +831,7 @@ mod tests {
 
     #[test]
     fn another_mode_prepares_the_background_again() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("background.png");
         image::RgbImage::from_pixel(8, 6, image::Rgb([10, 20, 30]))
             .save(&path)
@@ -847,7 +847,7 @@ mod tests {
 
     #[test]
     fn a_bmp_stock_is_decoded_directly_as_the_background_source() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("background.bmp");
         image::RgbImage::from_pixel(8, 6, image::Rgb([10, 20, 30]))
             .save(&path)
@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn template_assets_are_not_read_again_until_the_template_generation_changes() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("logo.png");
         fs::write(&path, b"asset").unwrap();
         let cache = AssetCache::default();
@@ -875,7 +875,7 @@ mod tests {
 
     #[test]
     fn a_missing_asset_candidate_is_not_checked_again_within_one_generation() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("logo.png");
         let cache = AssetCache::default();
 
@@ -888,7 +888,7 @@ mod tests {
 
     #[test]
     fn changing_templates_immediately_drops_assets_the_new_template_does_not_use() {
-        let directory = crate::test_util::TempDir::new();
+        let directory = tempfile::TempDir::new().unwrap();
         let path = directory.path().join("logo.png");
         fs::write(&path, b"asset").unwrap();
         let cache = AssetCache::default();

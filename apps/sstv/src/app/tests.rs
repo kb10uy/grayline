@@ -9,11 +9,11 @@ use std::{
 
 use grayline_sstv::image::Rgb8;
 use rstest::rstest;
+use tempfile::TempDir;
 
 use super::*;
-use crate::test_util::refused_port;
 use crate::{
-    test_util::TempDir,
+    test_util::refused_port,
     worker::{
         contact::{ContactPaths, ContactState},
         receive::{Frame, HistoryCandidate, RxSnapshot},
@@ -101,7 +101,7 @@ fn numbered(numbers: &[&str]) -> RxSnapshot {
 #[case(true, 1)]
 #[case(false, 0)]
 fn automatic_history_follows_its_setting(#[case] enabled: bool, #[case] expected_files: usize) {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     let received = paths.received_dir().to_owned();
     let settings = Settings {
@@ -133,7 +133,7 @@ fn automatic_history_follows_its_setting(#[case] enabled: bool, #[case] expected
 #[case(true)]
 #[case(false)]
 fn a_kept_reception_becomes_the_received_image(#[case] saving: bool) {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let settings = Settings {
         auto_history: saving,
         ..Settings::default()
@@ -273,7 +273,7 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
 
 #[test]
 fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let credentials = root.path().join("credentials.toml");
     let mut app = App::from_parts(
         AudioState::disconnected(),
@@ -980,7 +980,7 @@ fn locale_switching_replaces_the_bundle() {
 
 #[test]
 fn changed_settings_are_written_and_restored_on_the_next_start() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
 
     let mut app = disconnected(paths.clone(), &Settings::default());
@@ -1017,7 +1017,7 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
 
 #[test]
 fn a_stored_selection_that_disappeared_falls_back_to_the_first_entry() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     let settings = Settings {
         template: Some("gone.kdl".to_owned()),
@@ -1033,7 +1033,7 @@ fn a_stored_selection_that_disappeared_falls_back_to_the_first_entry() {
 
 #[test]
 fn transient_state_is_not_written_to_the_configuration_file() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
 
     let mut app = disconnected(paths.clone(), &Settings::default());
@@ -1049,7 +1049,7 @@ fn transient_state_is_not_written_to_the_configuration_file() {
 
 #[test]
 fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
 
     let mut app = disconnected(paths.clone(), &Settings::default());
@@ -1067,7 +1067,7 @@ fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
 
 #[test]
 fn library_refresh_lists_matching_files_and_preserves_selection() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = AppPaths::from_roots(
         root.path().join("config"),
         root.path().join("data"),
@@ -1151,7 +1151,7 @@ fn center(frame: &RgbImage) -> Rgb8 {
 
 #[test]
 fn a_composed_image_becomes_the_transmit_image() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     fs::write(
         paths.templates_dir().join("alpha.kdl"),
@@ -1179,7 +1179,7 @@ size width=(fw)100 height=(fh)100 fit="stretch"
 
 #[test]
 fn a_kept_reception_reaches_the_transmit_image() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     fs::write(
         paths.templates_dir().join("alpha.kdl"),
@@ -1220,7 +1220,7 @@ size width=(fw)100 height=(fh)100 fit="stretch"
 
 #[test]
 fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     image::RgbImage::from_pixel(8, 6, image::Rgb([200, 30, 30]))
         .save(paths.stocks_dir().join("first.png"))

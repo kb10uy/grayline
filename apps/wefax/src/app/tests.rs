@@ -218,7 +218,7 @@ fn a_recording_that_cannot_be_read_is_reported() {
 
 #[test]
 fn a_recording_is_decoded_into_the_strip() {
-    let root = crate::test_util::TempDir::new();
+    let root = tempfile::TempDir::new().unwrap();
     let path = root.path().join("chart.wav");
     let format = Format::MARINE;
     write_transmission(&path, 11_025, format);

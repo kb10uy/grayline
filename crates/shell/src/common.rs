@@ -232,34 +232,14 @@ fn read(document: &DocumentMut) -> CommonSettings {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use tempfile::TempDir;
 
     use super::*;
 
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("grayline-shell-{name}"));
-            let _ = fs::remove_dir_all(&path);
-            fs::create_dir_all(&path).expect("a scratch directory");
-            Self(path)
-        }
-
-        fn file(&self) -> PathBuf {
-            self.0.join(COMMON_FILE)
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
     #[test]
     fn a_missing_file_starts_on_defaults_and_can_be_saved() {
-        let root = TempDir::new("missing");
-        let mut config = CommonConfig::load(root.file());
+        let root = TempDir::new().unwrap();
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         assert_eq!(config.settings(), CommonSettings::default());
         assert!(config.error().is_none());
 
@@ -268,27 +248,27 @@ mod tests {
             ui_scale: 1.25,
         });
 
-        let written = fs::read_to_string(root.file()).expect("the file was written");
+        let written = fs::read_to_string(root.path().join(COMMON_FILE)).expect("the file was written");
         assert!(written.contains("language = \"ja\""), "{written}");
         assert!(written.contains("ui-scale = 1.25"), "{written}");
     }
 
     #[test]
     fn stored_settings_survive_a_round_trip() {
-        let root = TempDir::new("round-trip");
+        let root = TempDir::new().unwrap();
         let wanted = CommonSettings {
             locale: Locale::Ja,
             ui_scale: 1.5,
         };
-        CommonConfig::load(root.file()).save(&wanted);
+        CommonConfig::load(root.path().join(COMMON_FILE)).save(&wanted);
 
-        assert_eq!(CommonConfig::load(root.file()).settings(), wanted);
+        assert_eq!(CommonConfig::load(root.path().join(COMMON_FILE)).settings(), wanted);
     }
 
     #[test]
     fn the_family_directory_is_made_on_the_way_out() {
-        let root = TempDir::new("make-directory");
-        let path = root.0.join("not-there-yet").join(COMMON_FILE);
+        let root = TempDir::new().unwrap();
+        let path = root.path().join("not-there-yet").join(COMMON_FILE);
         CommonConfig::load(path.clone()).save(&CommonSettings {
             locale: Locale::Ja,
             ui_scale: DEFAULT_UI_SCALE,
@@ -299,42 +279,45 @@ mod tests {
 
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
-        let root = TempDir::new("comments");
+        let root = TempDir::new().unwrap();
         fs::write(
-            root.file(),
+            root.path().join(COMMON_FILE),
             "# the station's own note\nunknown = 7\nlanguage = \"ja\"\n",
         )
         .unwrap();
 
-        let mut config = CommonConfig::load(root.file());
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         assert_eq!(config.settings().locale, Locale::Ja);
         config.save(&CommonSettings {
             ui_scale: 1.1,
             ..config.settings()
         });
 
-        let written = fs::read_to_string(root.file()).unwrap();
+        let written = fs::read_to_string(root.path().join(COMMON_FILE)).unwrap();
         assert!(written.contains("# the station's own note"), "{written}");
         assert!(written.contains("unknown = 7"), "{written}");
     }
 
     #[test]
     fn a_save_that_changes_nothing_does_not_touch_the_file() {
-        let root = TempDir::new("unchanged");
-        fs::write(root.file(), "language = \"ja\"\n").unwrap();
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), "language = \"ja\"\n").unwrap();
 
-        let mut config = CommonConfig::load(root.file());
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         config.save(&config.settings());
 
-        assert_eq!(fs::read_to_string(root.file()).unwrap(), "language = \"ja\"\n");
+        assert_eq!(
+            fs::read_to_string(root.path().join(COMMON_FILE)).unwrap(),
+            "language = \"ja\"\n"
+        );
     }
 
     #[test]
     fn an_unparsable_file_is_never_written_over() {
-        let root = TempDir::new("unparsable");
-        fs::write(root.file(), "this is not toml = = =\n").unwrap();
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), "this is not toml = = =\n").unwrap();
 
-        let mut config = CommonConfig::load(root.file());
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         assert!(config.error().is_some());
         assert_eq!(config.settings(), CommonSettings::default());
 
@@ -342,28 +325,34 @@ mod tests {
             locale: Locale::Ja,
             ui_scale: 2.0,
         });
-        assert_eq!(fs::read_to_string(root.file()).unwrap(), "this is not toml = = =\n");
+        assert_eq!(
+            fs::read_to_string(root.path().join(COMMON_FILE)).unwrap(),
+            "this is not toml = = =\n"
+        );
     }
 
     #[test]
     fn unusable_values_fall_back_and_a_scale_is_brought_into_range() {
-        let root = TempDir::new("unusable");
-        fs::write(root.file(), "language = 7\nui-scale = 99\n").unwrap();
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), "language = 7\nui-scale = 99\n").unwrap();
 
-        let settings = CommonConfig::load(root.file()).settings();
+        let settings = CommonConfig::load(root.path().join(COMMON_FILE)).settings();
         assert_eq!(settings.locale, Locale::default());
         assert_eq!(settings.ui_scale, *UI_SCALE_RANGE.end());
     }
 
     /// TOML spells `nan` and `inf`, and a NaN passes a range clamp unchanged.
     #[rstest]
-    #[case("nan", "ui-scale = nan\n")]
-    #[case("inf", "ui-scale = inf\n")]
-    fn a_non_finite_scale_reads_as_the_default(#[case] name: &str, #[case] contents: &str) {
-        let root = TempDir::new(&format!("non-finite-{name}"));
-        fs::write(root.file(), contents).unwrap();
+    #[case("ui-scale = nan\n")]
+    #[case("ui-scale = inf\n")]
+    fn a_non_finite_scale_reads_as_the_default(#[case] contents: &str) {
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), contents).unwrap();
 
-        assert_eq!(CommonConfig::load(root.file()).settings().ui_scale, DEFAULT_UI_SCALE);
+        assert_eq!(
+            CommonConfig::load(root.path().join(COMMON_FILE)).settings().ui_scale,
+            DEFAULT_UI_SCALE
+        );
     }
 
     #[test]

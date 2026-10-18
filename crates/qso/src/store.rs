@@ -350,7 +350,7 @@ fn store_error(error: rusqlite::Error) -> QsoError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     fn record(callsign: &str, fields: &[(&str, &str)]) -> Record {
         let mut record = Record::new(callsign).expect("that is a callsign");
@@ -381,16 +381,16 @@ mod tests {
 
     #[test]
     fn a_store_survives_being_put_down_and_opened_again() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         {
-            let mut store = Store::open(&directory.store()).expect("a store");
+            let mut store = Store::open(&directory.path().join(crate::STORE_FILE)).expect("a store");
             store
                 .merge(&record("JA1ABC", &[("name", "Taro")]), Origin::Manual)
                 .expect("a write");
             store.checkpoint().expect("a checkpoint");
         }
 
-        let store = Store::open(&directory.store()).expect("the same store");
+        let store = Store::open(&directory.path().join(crate::STORE_FILE)).expect("the same store");
         let read = store.get("JA1ABC").expect("a read").expect("it was filed");
         assert_eq!(read.get("name"), Some("Taro"));
     }
@@ -537,9 +537,9 @@ mod tests {
 
     #[test]
     fn two_processes_may_hold_the_same_store() {
-        let directory = TempDir::new();
-        let mut one = Store::open(&directory.store()).expect("a store");
-        let mut two = Store::open(&directory.store()).expect("the same store");
+        let directory = TempDir::new().unwrap();
+        let mut one = Store::open(&directory.path().join(crate::STORE_FILE)).expect("a store");
+        let mut two = Store::open(&directory.path().join(crate::STORE_FILE)).expect("the same store");
 
         one.merge(&record("JA1ABC", &[("name", "Taro")]), Origin::Manual)
             .expect("a write");
@@ -552,16 +552,16 @@ mod tests {
 
     #[test]
     fn a_store_a_newer_build_wrote_is_refused_rather_than_opened() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         {
-            let store = Store::open(&directory.store()).expect("a store");
+            let store = Store::open(&directory.path().join(crate::STORE_FILE)).expect("a store");
             store
                 .connection
                 .execute_batch("PRAGMA user_version = 2;")
                 .expect("a version bump");
         }
 
-        let error = Store::open(&directory.store()).expect_err("a refusal");
+        let error = Store::open(&directory.path().join(crate::STORE_FILE)).expect_err("a refusal");
         assert!(matches!(error, QsoError::Version { found: 2, known: 1 }), "{error}");
     }
 

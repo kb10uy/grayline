@@ -1,54 +1,20 @@
 //! What more than one module's tests need, and nothing ships.
 
 use std::{
-    fs,
     io::{BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
-    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use crate::wavelog::Wavelog;
 
 /// How long a test gives a stand-in that is answering from the same machine.
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// A directory that removes itself, so a test that writes a real store leaves
-/// nothing behind it.
-pub struct TempDir(PathBuf);
-
-impl TempDir {
-    pub fn new() -> Self {
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("after 1970")
-            .as_nanos();
-        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("grayline-qso-{stamp}-{unique}"));
-        fs::create_dir_all(&path).expect("a temporary directory");
-        Self(path)
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.0
-    }
-
-    pub fn store(&self) -> PathBuf {
-        self.0.join("contacts.sqlite3")
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 /// One request the stand-in served.
 #[derive(Clone, Debug)]

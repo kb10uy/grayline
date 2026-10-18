@@ -33,9 +33,6 @@ pub mod script;
 mod settings;
 mod worker;
 
-#[cfg(test)]
-mod test_util;
-
 pub use error::RigControlError;
 pub use grayline_rig::{DEFAULT_ADDRESS, RigError};
 pub use script::Keying;

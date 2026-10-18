@@ -134,11 +134,11 @@ fn credentials_error(path: &Path, detail: &str) -> QsoError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn a_file_that_is_not_there_reads_as_no_credentials_at_all() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
 
         let credentials = Credentials::read(&directory.path().join("nothing.toml")).expect("a read");
 
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn what_the_file_says_is_read_back() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         let path = directory.path().join("credentials.toml");
         fs::write(
             &path,
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn an_empty_entry_is_the_same_as_no_entry() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         let path = directory.path().join("credentials.toml");
         fs::write(&path, "[wavelog]\nurl = \"\"\nkey = \"   \"\n").expect("a write");
 
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn a_written_file_reads_back_and_is_not_replaced() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         let path = directory.path().join("credentials.toml");
 
         Credentials::write(&path, Some("https://log.example.org/"), " secret ").expect("a write");
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn a_written_file_keeps_the_note_explaining_itself() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         let path = directory.path().join("credentials.toml");
 
         Credentials::write(&path, None, "secret").expect("a write");

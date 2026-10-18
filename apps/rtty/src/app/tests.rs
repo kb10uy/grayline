@@ -264,7 +264,7 @@ fn only_a_printing_watch_keeps_the_machine_awake() {
 
 #[test]
 fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
-    let root = crate::test_util::TempDir::new();
+    let root = tempfile::TempDir::new().unwrap();
     let shared = root.path().join(COMMON_FILE);
     fs::write(&shared, "language = \"ja\"\n").unwrap();
 
@@ -872,7 +872,7 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
 
 #[test]
 fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = crate::test_util::TempDir::new();
+    let root = tempfile::TempDir::new().unwrap();
     let credentials = root.path().join("credentials.toml");
     let settings = Settings::default();
     let mut app = App::from_parts(

@@ -137,11 +137,11 @@ fn create_default_config(path: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn initialize_creates_application_directories_and_default_config() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let paths = AppPaths::from_roots(
             root.path().join("config"),
             root.path().join("pictures"),
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn initialize_does_not_replace_existing_config() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let paths = AppPaths::from_roots(
             root.path().join("config"),
             root.path().join("pictures"),

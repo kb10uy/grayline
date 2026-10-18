@@ -193,7 +193,9 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::{test_util::TempDir, worker::receive::Frame};
+    use tempfile::TempDir;
+
+    use crate::worker::receive::Frame;
 
     fn candidate() -> HistoryCandidate {
         HistoryCandidate {
@@ -233,7 +235,7 @@ mod tests {
     #[case(HistoryFormat::Png, "png")]
     #[case(HistoryFormat::Jpeg, "jpg")]
     fn saves_each_format_with_xmp(#[case] format: HistoryFormat, #[case] extension: &str) {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
 
         let path = save(directory.path(), candidate(), format).unwrap();
 
@@ -251,7 +253,7 @@ mod tests {
 
     #[test]
     fn the_same_reception_second_uses_the_same_path() {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         let first = save(directory.path(), candidate(), HistoryFormat::Webp).unwrap();
         let second = save(directory.path(), candidate(), HistoryFormat::Webp).unwrap();
         assert_eq!(first, second);
