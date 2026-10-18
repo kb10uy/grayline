@@ -22,7 +22,7 @@ image-webp.workspace = true
 jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
 grayline-sstv-rx = { path = "../../crates/sstv-rx" }
-grayline-dsp = { path = "../../crates/dsp" }
+grayline-dsp = { path = "../../crates/dsp", features = ["std"] }
 grayline-qso = { path = "../../crates/qso" }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-tone-tx = { path = "../../crates/tone-tx" }
