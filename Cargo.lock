@@ -2192,7 +2192,6 @@ dependencies = [
  "grayline-rtty",
  "grayline-shell",
  "grayline-variables",
- "image",
  "jiff",
  "rstest",
  "thiserror 2.0.21",

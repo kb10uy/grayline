@@ -33,7 +33,6 @@ embed-resource.workspace = true
 
 [dev-dependencies]
 egui_kittest.workspace = true
-image.workspace = true
 rstest.workspace = true
 
 # `cargo deb -p grayline-rtty-app` builds the Debian package from this. Asset

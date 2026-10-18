@@ -14,6 +14,9 @@
 // integration calls the Win32 API directly, which is the whole reason this
 // module is separated from everything that can be written safely.
 
+/// Assertions an application's tests make about the catalogue and icon it
+/// carries.
+pub mod check;
 /// The settings shared by every application in the family, and their file.
 pub mod common;
 /// Fluent-backed message lookup, and the languages an application offers.
