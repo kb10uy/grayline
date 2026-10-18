@@ -169,6 +169,7 @@ pub struct App {
     pub tx_modes: Vec<Mode>,
     pub qso: Qso,
     pub station: Station,
+    pub station_dialog_open: bool,
     pub variables_dialog_open: bool,
     /// The rows that dialog is editing.
     ///
@@ -303,7 +304,6 @@ pub struct Station {
     pub callsign: String,
     pub qth: String,
     pub grid: String,
-    pub open: bool,
 }
 
 /// The lists the operator picks a template and a background from.
@@ -474,8 +474,8 @@ impl App {
                 callsign: settings.station_callsign.trim().to_ascii_uppercase(),
                 qth: settings.station_qth.trim().to_owned(),
                 grid: settings.station_grid.trim().to_owned(),
-                open: false,
             },
+            station_dialog_open: false,
             variables_dialog_open: false,
             variables_draft: Vec::new(),
             library: Library {

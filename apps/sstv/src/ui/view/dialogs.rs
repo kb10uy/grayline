@@ -12,7 +12,7 @@ use super::*;
 /// then left alone, while the panel beside the image is for the station on the
 /// air right now.
 pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
-    if !app.station.open {
+    if !app.station_dialog_open {
         return;
     }
 
@@ -47,7 +47,7 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
         app.normalize_station();
     }
     if closing {
-        app.station.open = false;
+        app.station_dialog_open = false;
     }
 }
 

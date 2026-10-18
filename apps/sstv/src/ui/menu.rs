@@ -218,7 +218,7 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),
-        Action::ShowStation => app.station.open = true,
+        Action::ShowStation => app.station_dialog_open = true,
         Action::ShowCustomVariables => app.open_custom_variables(),
         Action::ToggleSendFskid => app.settings.send_fskid = !app.settings.send_fskid,
         Action::ToggleContestMode => app.settings.contest_mode = !app.settings.contest_mode,

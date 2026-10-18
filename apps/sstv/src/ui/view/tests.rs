@@ -575,7 +575,7 @@ fn the_library_fits_the_height_it_is_given() {
 #[test]
 fn the_station_dialog_closes_from_its_own_button() {
     let mut app = App::headless();
-    app.station.open = true;
+    app.station_dialog_open = true;
     let title = app.i18n.text("station-title");
     let close = app.i18n.text("station-close");
 
@@ -590,7 +590,7 @@ fn the_station_dialog_closes_from_its_own_button() {
         harness.run();
     }
 
-    assert!(!app.station.open);
+    assert!(!app.station_dialog_open);
 }
 
 #[test]
