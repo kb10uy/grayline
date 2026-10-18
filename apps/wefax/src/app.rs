@@ -4,7 +4,11 @@
 //! draws. Keeping the two apart is what lets the whole of the state be driven
 //! from a test without a window.
 
-use std::time::Duration;
+use std::{
+    path::PathBuf,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
@@ -71,6 +75,8 @@ pub struct App {
     common: CommonConfig,
     platform: Box<dyn Platform>,
     activity: Activity,
+    /// Charts still being encoded and written, reported once each is done.
+    chart_writers: Vec<JoinHandle<Result<PathBuf, String>>>,
     /// The session the strip on screen belongs to.
     ///
     /// A device change starts a new worker whose lines begin again at zero, so
@@ -123,6 +129,7 @@ impl App {
             common,
             platform,
             activity: Activity::Idle,
+            chart_writers: Vec::new(),
         }
     }
 
@@ -199,8 +206,9 @@ impl App {
         if let Some(chart) = self.audio.take_chart()
             && self.settings.auto_save
         {
-            self.write_chart(&chart);
+            self.write_chart(chart);
         }
+        self.report_written_charts();
 
         let activity = if self.progress().is_active() {
             Activity::Receiving
@@ -218,6 +226,9 @@ impl App {
     /// The worker asks for a frame itself when it has something worth showing,
     /// so this only covers the readouts nothing else would redraw.
     pub fn repaint_after(&self) -> Option<Duration> {
+        if !self.chart_writers.is_empty() {
+            return Some(Duration::from_millis(100));
+        }
         self.audio.is_capturing().then(|| Duration::from_secs(1))
     }
 
@@ -330,19 +341,39 @@ impl App {
             height: self.strip.lines(),
             gray: self.strip.gray().to_vec(),
         };
-        self.write_chart(&chart);
+        self.write_chart(chart);
     }
 
-    fn write_chart(&mut self, chart: &Chart) {
+    /// Encodes and writes `chart` without making the interface wait.
+    ///
+    /// A full chart is thousands of lines, and encoding it takes longer than a
+    /// frame has; it would land exactly when the operator is looking at the
+    /// finished picture. The result is reported on the frame after it is done.
+    fn write_chart(&mut self, chart: Chart) {
+        let directory = self.paths.received_dir().to_path_buf();
         // The picture is line-major, which is how it was decoded: the quarter
         // turn belongs to the display, not to the file.
-        match history::save(
-            self.paths.received_dir(),
-            chart.format,
-            chart.width,
-            chart.height,
-            &chart.gray,
-        ) {
+        let write = move || history::save(&directory, chart.format, chart.width, chart.height, &chart.gray);
+        match thread::Builder::new()
+            .name("grayline-wefax-chart".to_owned())
+            .spawn(write)
+        {
+            Ok(writer) => self.chart_writers.push(writer),
+            Err(_) => self.notice = Some(self.i18n.text("error-save-failed")),
+        }
+    }
+
+    /// Reports every chart that has finished being written.
+    fn report_written_charts(&mut self) {
+        let (finished, running): (Vec<_>, Vec<_>) = self.chart_writers.drain(..).partition(JoinHandle::is_finished);
+        self.chart_writers = running;
+        for writer in finished {
+            self.report_chart(writer.join().unwrap_or_else(|_| Err("the writer stopped".to_owned())));
+        }
+    }
+
+    fn report_chart(&mut self, written: Result<PathBuf, String>) {
+        match written {
             Ok(path) => {
                 let message = self.i18n.text("status-saved");
                 self.notice = Some(format!("{message}: {}", path.display()));
@@ -351,6 +382,13 @@ impl App {
                 let message = self.i18n.text("error-save-failed");
                 self.notice = Some(format!("{message}: {error}"));
             }
+        }
+    }
+
+    #[cfg(test)]
+    fn wait_for_chart_writers(&mut self) {
+        for writer in std::mem::take(&mut self.chart_writers) {
+            self.report_chart(writer.join().unwrap_or_else(|_| Err("the writer stopped".to_owned())));
         }
     }
 
@@ -393,6 +431,16 @@ fn worker_settings(settings: &Settings) -> WorkerSettings {
         slant_tracking: settings.slant_tracking,
         inverted: settings.inverted,
         narrow_shift: settings.narrow_shift,
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        // A chart may still be on its way to disk, and the interface going
+        // down is the last chance to wait for it.
+        for writer in self.chart_writers.drain(..) {
+            let _ = writer.join();
+        }
     }
 }
 

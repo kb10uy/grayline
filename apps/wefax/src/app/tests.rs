@@ -141,6 +141,7 @@ fn a_received_chart_is_written_where_the_operator_browses() {
     app.format = Some(Format::MARINE);
 
     app.save_chart();
+    app.wait_for_chart_writers();
 
     let notice = app.notice.clone().expect("the save was reported");
     assert!(notice.starts_with(&app.i18n.text("status-saved")), "{notice}");
