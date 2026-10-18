@@ -1,5 +1,3 @@
-app-title = Grayline SSTV
-
 menu-file = ファイル
 menu-view = 表示
 menu-settings = 設定
