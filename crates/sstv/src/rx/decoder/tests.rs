@@ -1167,3 +1167,5 @@ fn a_matched_raster_is_left_alone() {
     let (untracked, _) = drive_configured(mode, &frequency, &sync, config(false, frequency.len()));
     assert_eq!(tracked.image(), untracked.image());
 }
+
+mod fingerprint;
