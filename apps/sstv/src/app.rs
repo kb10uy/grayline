@@ -1152,6 +1152,7 @@ impl App {
         }
         self.poll_rig();
         self.poll_contact();
+        self.poll_composition();
         self.poll_transmit();
         // Reception stops for as long as anything is going out. The station's
         // own signal comes back off the antenna, and what would be decoded from
@@ -1569,7 +1570,9 @@ impl App {
         }
     }
 
-    fn poll_transmit(&mut self) {
+    /// Adopts the picture the composer finished, if it is the one asked for
+    /// last.
+    fn poll_composition(&mut self) {
         if let Some(result) = self.composition.composer.latest()
             && result.generation == self.composition.generation
         {
@@ -1588,7 +1591,9 @@ impl App {
                 }
             }
         }
+    }
 
+    fn poll_transmit(&mut self) {
         // Checked before the worker is read, because the tone it produces never
         // runs out on its own and the deadline is the only thing that ends it.
         if let Some(deadline) = self.tune_until
