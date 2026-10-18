@@ -185,6 +185,17 @@ instead — one card appears once per PCM and once per plugin, all of them calle
 PulseAudio client is pure Rust, so asking for it costs the Linux build no
 system dependency.
 
+Both directions ask the device for a buffer measured in time — 20 ms for
+capture, 40 ms for playback — clamped to the range the device reports, and
+leave the size to the host only when it reports none. Left to itself,
+PulseAudio, and the PipeWire server answering for it, picks fragments of a
+large fraction of a second or more. On capture, every one of them is that long
+behind the antenna before a decoder hears it, which held RTTY text half a
+second behind the rig's own decoder. On playback, they are the end of a
+transmission still waiting in the server after the application thinks it has
+been sent. WASAPI shared mode calls back once per device period whatever it is
+asked for, so the request costs Windows nothing.
+
 Enumeration then gives every device a name no other device in the list carries.
 A device is chosen by name — by the menu, and by the configuration that
 remembers the choice — so a shared name would leave the second device
