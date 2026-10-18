@@ -39,6 +39,7 @@ use crate::{
 };
 
 pub mod macros;
+pub mod text;
 pub mod transmit;
 
 /// How far one point of drag moves the mark tone, in hertz.
@@ -529,7 +530,7 @@ impl App {
     /// pasted text and an expanded macro can, and this is what holds the send
     /// button until the operator has dealt with it.
     pub fn unsendable_character(&self) -> Option<char> {
-        crate::ui::input::first_unsendable(&self.transmit.draft)
+        text::first_unsendable(&self.transmit.draft)
     }
 
     /// Opens the window naming this station, with its fields loaded.
@@ -588,7 +589,7 @@ impl App {
                 now: &now,
             },
         )
-        .map(|text| crate::ui::input::normalize(&text))
+        .map(|text| text::normalize(&text))
         .map_err(AppError::from)
     }
 
@@ -661,7 +662,7 @@ impl App {
     /// itself: a callsign double-clicked out of the received text is as much a
     /// station being worked as one that was typed.
     pub fn set_contact_callsign(&mut self, callsign: &str) {
-        self.contact.callsign = crate::ui::input::normalize(callsign);
+        self.contact.callsign = text::normalize(callsign);
         self.look_up_contact();
     }
 
@@ -897,8 +898,8 @@ impl App {
     fn sendable_field(&self, keys: [&str; 2]) -> Option<String> {
         keys.into_iter()
             .filter_map(|key| self.contact_snapshot.fields.get(key))
-            .map(|value| crate::ui::input::normalize(value.trim()))
-            .find(|value| !value.is_empty() && crate::ui::input::first_unsendable(value).is_none())
+            .map(|value| text::normalize(value.trim()))
+            .find(|value| !value.is_empty() && text::first_unsendable(value).is_none())
     }
 
     /// Whether there is a message to send and a way to send it.
