@@ -43,9 +43,10 @@ lose the reservation and cache nothing, which is why only the largest writes.
 These three run on Linux alone. That is a deliberate asymmetry rather than full
 coverage: Linux selects `platform/other.rs` and the in-window menu bar, which
 is the configuration least likely to be exercised during development on
-Windows, so CI covers the side the author does not. macOS compiles nowhere
-until a release builds it, and `platform/macos.rs` is the code this leaves
-unchecked.
+Windows, so CI covers the side the author does not. macOS shares
+`platform/other.rs` with Linux and differs from it only in a few constants, so
+those `cfg(target_os = "macos")` constants are all a Linux build leaves
+unchecked until a release builds for macOS.
 
 Only ALSA needs a system package to build. The window, the graphics context,
 and the Wayland and X11 clients are all opened at run time rather than linked,

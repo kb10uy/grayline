@@ -1,23 +1,27 @@
-//! Integration for the platforms without a dedicated implementation.
+//! Integration for every platform without a dedicated implementation.
 //!
-//! Linux is the platform this is written for; anything else the project has
-//! not been tried on lands here too and gets the same neutral answers.
+//! macOS and Linux are the platforms this is written for; anything else the
+//! project has not been tried on lands here too and gets the neutral answers
+//! Linux does.
+
+use std::{fs::OpenOptions, path::Path};
 
 use egui::IconData;
 
+use super::{Activity, Platform};
 use crate::Identity;
 
-pub const UI_FONTS: [&str; 3] = ["Noto Sans CJK JP", "Noto Sans", "DejaVu Sans"];
+#[cfg(target_os = "macos")]
+pub const UI_FONTS: &[&str] = &["Hiragino Sans", "Helvetica Neue"];
 
-/// The coding fonts to look for, in the order they are preferred.
-///
-/// Monaspace leads the list on every platform. It is the one family here that
-/// an operator installs on purpose rather than finds already present, and the
-/// one that covers the arrows and box drawing a teleprinter transcript is
-/// annotated with: neither Consolas, Courier New, nor Segoe UI carries U+21B5,
-/// the mark a transmit message shows a line ending with, so without it that
-/// mark is drawn by a bundled fallback at a scale of its own.
-pub const MONOSPACE_FONTS: [&str; 5] = [
+#[cfg(not(target_os = "macos"))]
+pub const UI_FONTS: &[&str] = &["Noto Sans CJK JP", "Noto Sans", "DejaVu Sans"];
+
+#[cfg(target_os = "macos")]
+pub const MONOSPACE_FONTS: &[&str] = &["Monaspace Neon", "SF Mono", "Menlo", "Monaco"];
+
+#[cfg(not(target_os = "macos"))]
+pub const MONOSPACE_FONTS: &[&str] = &[
     "Monaspace Neon",
     "Noto Sans Mono CJK JP",
     "Noto Sans Mono",
@@ -25,10 +29,12 @@ pub const MONOSPACE_FONTS: [&str; 5] = [
     "Liberation Mono",
 ];
 
-/// Only Linux has a file manager this can name. Another platform reaching
-/// here reports that revealing a directory is unsupported rather than
-/// spawning a command that does not exist.
-pub const FILE_MANAGER: Option<&str> = if cfg!(target_os = "linux") {
+/// macOS and Linux have a shell opener this can name. Another platform
+/// reaching here reports that revealing a directory is unsupported rather
+/// than spawning a command that does not exist.
+pub const FILE_MANAGER: Option<&str> = if cfg!(target_os = "macos") {
+    Some("open")
+} else if cfg!(target_os = "linux") {
     Some("xdg-open")
 } else {
     None
@@ -43,18 +49,52 @@ pub const FAMILY_DIRECTORY: &str = if cfg!(target_os = "linux") {
     "Grayline"
 };
 
+/// macOS themes the window from the system appearance and the menu bar is
+/// drawn inside the window, and Linux needs nothing either, so nothing has to
+/// be arranged in advance.
 pub fn prepare_process(_identity: &Identity) {}
 
 pub fn prepare_window(_cc: &eframe::CreationContext<'_>) {}
 
-/// Keeping the machine awake needs the desktop's inhibit service, which is not
-/// wired up yet, so activity is accepted and discarded.
-pub type Host = super::InertPlatform;
+/// Keeping the machine awake needs an `IOPMAssertion` on macOS and the
+/// desktop's inhibit service on Linux, neither of which is wired up yet, so
+/// activity is accepted and discarded. Everything else, such as opening a
+/// directory, still reaches the shared implementation.
+#[derive(Default)]
+pub struct Host;
 
-pub type Claim = super::FileLock;
+impl Platform for Host {
+    fn set_activity(&mut self, _activity: Activity) {}
+}
+
+/// A claim backed by a locked file.
+///
+/// The lock is released by the operating system when the process ends, so a
+/// copy that crashed does not keep the next launch out.
+pub struct Claim {
+    #[expect(dead_code, reason = "held open to hold the lock")]
+    file: std::fs::File,
+}
+
+impl Claim {
+    /// Nothing is published: raising another process's window needs a
+    /// compositor-specific route that this application does not have yet, so
+    /// a second launch reports the situation and exits instead.
+    pub fn publish_window(&self, _cc: &eframe::CreationContext<'_>) {}
+}
 
 pub fn claim_single_instance(identity: &Identity) -> Option<Claim> {
-    super::lock_file_claim(identity)
+    let directory = directories::BaseDirs::new()
+        .and_then(|directories| directories.runtime_dir().map(Path::to_path_buf))
+        .unwrap_or_else(std::env::temp_dir);
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(directory.join(format!("{}.lock", identity.process_name)))
+        .ok()?;
+    file.try_lock().ok()?;
+    Some(Claim { file })
 }
 
 pub fn window_icon(identity: &Identity) -> Option<IconData> {

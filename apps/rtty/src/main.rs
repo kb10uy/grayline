@@ -39,8 +39,8 @@ fn install_fonts(ctx: &egui::Context) {
 
 fn font_definitions(database: &fontdb::Database) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
-    let ui = install_faces(&mut definitions, database, &UI_FONTS);
-    let monospace = install_faces(&mut definitions, database, &MONOSPACE_FONTS);
+    let ui = install_faces(&mut definitions, database, UI_FONTS);
+    let monospace = install_faces(&mut definitions, database, MONOSPACE_FONTS);
 
     if ui.is_empty() {
         log::note("no system UI font matched; using the bundled fonts");
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn a_matched_family_is_installed_ahead_of_the_bundled_fonts() {
         let database = system_database();
-        let Some(wanted) = first_available(&database, &UI_FONTS) else {
+        let Some(wanted) = first_available(&database, UI_FONTS) else {
             return;
         };
 
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn the_monospaced_family_is_led_by_a_coding_font() {
         let database = system_database();
-        let Some(wanted) = first_available(&database, &MONOSPACE_FONTS) else {
+        let Some(wanted) = first_available(&database, MONOSPACE_FONTS) else {
             return;
         };
 
@@ -336,7 +336,7 @@ mod tests {
 
         // The UI face stays in the family, behind it, for the characters a
         // coding font has no glyph for.
-        if let Some(ui) = first_available(&database, &UI_FONTS) {
+        if let Some(ui) = first_available(&database, UI_FONTS) {
             assert!(
                 installed.iter().position(|family| *family == ui) > Some(0),
                 "the UI face should sit behind the coding font: {installed:?}"
@@ -347,10 +347,10 @@ mod tests {
     #[test]
     fn the_proportional_family_is_not_led_by_a_coding_font() {
         let database = system_database();
-        let Some(wanted) = first_available(&database, &MONOSPACE_FONTS) else {
+        let Some(wanted) = first_available(&database, MONOSPACE_FONTS) else {
             return;
         };
-        if first_available(&database, &UI_FONTS).is_none() {
+        if first_available(&database, UI_FONTS).is_none() {
             return;
         }
 
