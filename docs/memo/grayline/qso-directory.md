@@ -32,10 +32,10 @@ A key is one identifier segment: a letter or underscore, then letters, digits
 and underscores. The rule is not arbitrary. A key is read from a template as
 `${contact.<key>}`, so a key holding a hyphen or a dot would be filed perfectly
 well and then be unreachable from the only place it is wanted. `grayline-qso`
-restates the rule that `grayline_sstv_template::valid_variable_name` applies to
-each segment rather than depending on that crate, which would drag the SVG stack
-into a command-line tool; the SSTV application is where both are in view, and it
-carries the test that holds them to each other. The key `callsign` is refused
+restates the rule that `grayline_variables::valid_variable_name` applies to
+each segment rather than depending on that crate, so the directory depends on
+nothing in the workspace; the SSTV application is where both are in view, and
+it carries the test that holds them to each other. The key `callsign` is refused
 outright, so a record can never shadow the field the operator typed.
 
 ### The keys this crate names

@@ -153,10 +153,10 @@ When columns do return, cross-column diff highlighting and an aligned save can
 both use the `sample` field that every `RxEvent::Character` carries to line the
 columns up against each other.
 
-Per-column headers can read `ReceivePipeline::signal_strength`,
-`ReceivePipeline::case`, and `ReceivePipeline::tones` as they stand. The
-mark-minus-space figure is not exposed today and arrives with the monitor tap
-below.
+Per-column headers read `ReceivePipeline::signal_strength`,
+`ReceivePipeline::case`, and `ReceivePipeline::tones`. The mark-minus-space
+figure is `ReceivePipeline::channels().difference()`, published as
+`ColumnSnapshot::difference`; the header does not draw it, the scope does.
 
 As built, a header carries the path's name at one end and, at the other, the
 pair it is actually detecting, the case, and the signal reading. The tone the
@@ -294,7 +294,7 @@ the worker, the script host, and the band plan moved out of the SSTV
 application into `grayline-rig-control`, which both applications now depend on,
 and this one calls `transmit` and `receive` on either side of a transmission.
 VOX remains what a station gets with `enabled = false`, which is the default.
-Only keying was taken: there is no `[rig]` editor, no band selector, and no
+Only keying was taken: there is no Connect switch, no band selector, and no
 tuning control here, and the frequency readout is still deferred — it needs the
 poll this application starts with switched off.
 
@@ -326,12 +326,14 @@ hole where a callsign belongs. The braces cost nothing on the air, being
 outside ITA2; the dollar sign is FIGS-D in the Bell table and so sendable, but
 a name is never written without its braces.
 
-The names are the SSTV templates' too — `station.callsign`, `station.qth`,
-`station.grid`, `contact.callsign`, `contact.name`, `contact.qth`,
+The names are the SSTV templates' too — `station.callsign`, `station.name`,
+`station.qth`, `station.grid`, `contact.callsign`, `contact.name`,
+`contact.qth`,
 `report.sent`, `report.received`, `application.version`, and
 `tx.timestamp.{utc,local}`. Three of SSTV's are missing because this
-application has nothing to answer with: `radio.*` wants the rig control that is
-not written, `rx.timestamp.*` wants a reception with a beginning and an end,
+application has nothing to answer with: `radio.*` wants the frequency poll
+this application does not run, `rx.timestamp.*` wants a reception with a
+beginning and an end,
 and `report.number` wants the contest serial the plan deferred. One is added,
 `greeting`, which is MMTTY's `%g` and which no template ever wanted.
 `contact.name` keeps MMTTY's `OM` fallback, which is not the kind of
@@ -355,11 +357,14 @@ Macro buttons answer to F1 through F12. A press expands at that moment and
 writes the result into the field at the caret, so the time a message names is
 the time it was written and what is about to go out can still be edited; a
 macro marked `send = true` goes out as a message of its own and leaves a
-half-written reply alone. Definitions live in the configuration TOML, written
-once on first run and then never rewritten, because the file is where they are
-edited and rewriting the array on every save would reformat what the operator
-put in it. A callsign reaches the contact field by being double-clicked out of
-the line that printed it.
+half-written reply alone. Definitions live in `macros.toml` beside
+`config.toml`, written once on first run from what ships and then never
+rewritten, because the file is where they are edited and rewriting the array
+on every save would reformat what the operator put in it. A second file,
+`templates.toml`, holds set messages offered in a list beside the buttons and
+on Ctrl+F1 through Ctrl+F9; picking one replaces the draft rather than
+joining it, and it is never sent on its own. A callsign reaches the contact
+field by being double-clicked out of the line that printed it.
 
 Deliberately skipped: `%L`/`%F` raw shift insertion, `%E` (a buffered send ends
 by itself), the CW identifier, the `%R`/`%N` contest split, and an

@@ -55,7 +55,7 @@ platform integration, and application behavior.
 | Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-rig-control` |
 | Integration | Composition of core stages for a particular environment | `gl-sstv`, `gl-wefax`, `gl-rtty`, and `web-demo` |
 | Template composition | KDL scene parsing, variables, RGBA overlay rendering, and RGB composition | `grayline-sstv-template` |
-| Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv` receive interface; designed in [gui-design.md](gui-design.md) |
+| Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv-app`, `grayline-wefax-app`, and `grayline-rtty-app`; designed in [gui-design.md](gui-design.md) |
 
 These are responsibility boundaries, not a requirement that every row become a
 separate crate. Closely related protocol types currently live together in
@@ -111,8 +111,7 @@ worker thread fed by `grayline-audio` instead of a WAV reader.
 or a separate complete demodulated array. Its packet size defaults to 1024 mono
 samples and is configurable with `--packet-size`. Demodulation and raster
 decoding run sequentially in one thread, while bounded staging may retain
-demodulated samples for the optional whole-image refinement pass. There is no
-live audio source yet.
+demodulated samples for the optional whole-image refinement pass.
 
 ### Current Transmit Flow
 
@@ -354,7 +353,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twenty-two packages:
+The workspace currently contains twenty-four packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -683,6 +682,7 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
+cargo build -p grayline-dsp --no-default-features
 cargo build -p grayline-wefax --no-default-features
 cargo build -p grayline-rtty --no-default-features
 cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown

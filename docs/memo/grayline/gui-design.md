@@ -68,8 +68,8 @@ way to read a page before it is published.
 
 ## Platform Integration
 
-Everything that only makes sense on one operating system lives in the
-`platform` module, which selects one implementation file per target with
+Everything that only makes sense on one operating system lives in
+`grayline_shell::platform`, which selects one implementation file per target with
 `#[path]`. Because every target supplies the same set of items, adding an
 operation forces an answer on each platform before the build passes, even if
 the answer is to do nothing. Font family names, revealing a directory in the
@@ -154,7 +154,11 @@ not add SSTV or DSP behavior.
 | Package | Role | Status |
 | --- | --- | --- |
 | `grayline-sstv-app` | Composition root: window, state, views, worker supervision | Receive and transmit implemented |
+| `grayline-shell` | Platform integration, localization, the log, the menu model, and the family-shared settings | Implemented |
 | `grayline-audio` | Capture and playback adapters over the host audio API | Implemented |
+| `grayline-qso` | The contact directory and its worker | Implemented |
+| `grayline-rig` | The `rigctld` transport | Implemented |
+| `grayline-rig-control` | The keying worker, the Lua host, and the band plan | Implemented |
 
 `grayline-audio` splits an open input device into a `Capture` and
 `CaptureReader`, and an output device into a `Playback` and `PlaybackWriter`.
@@ -190,9 +194,11 @@ for queue space without dropping samples. Completion is reported only after
 the consumer empties the queue, and dropping the source stops and joins the
 feeder thread.
 
-The interface depends on `grayline-audio`, `grayline-sstv`, `grayline-sstv-rx`,
-`grayline-tone-tx`, `grayline-sstv-fskid`, and `grayline-sstv-template`. No core crate gains
-a dependency on the interface.
+The interface depends on the core crates — `grayline-dsp`, `grayline-sstv`,
+`grayline-sstv-rx`, `grayline-tone-tx`, `grayline-sstv-fskid`, and
+`grayline-sstv-template` — and on the platform crates `grayline-audio`,
+`grayline-shell`, `grayline-qso`, `grayline-rig`, and `grayline-rig-control`.
+No core crate gains a dependency on the interface.
 
 ## Execution Model
 
@@ -386,6 +392,7 @@ the first row instead of waiting for a fixed fraction of the image.
 | `RasterAcquired` | Mode and effective sample rate become known; progress starts |
 | `RowDecoded` | Row count advances; drives the progress bar |
 | `PhaseAdjusted` | Recorded for diagnostics only |
+| `SlantAdjusted` | Effective sample rate updated; otherwise diagnostics only |
 | `Stopped` | Session ends with a synchronization-lost status |
 
 The interface shows whether a reception is running as a bar that is always full
@@ -460,7 +467,11 @@ App
   tx: TxState                    // selected mode, prepared frame, progress
   library: LibraryState          // template list, stock list
   qso: QsoState                  // DX call, report received, report and serial sent
-  locale: Locale
+  station: Station               // callsign, QTH, grid
+  custom_variables               // the operator's own ${custom.*}
+  rig: RigState                  // the rig worker and its last snapshot
+  contact: ContactState          // the directory worker and its last snapshot
+  i18n: I18n
 ```
 
 Tab switching only changes which view is built. It never tears down a live
@@ -481,9 +492,8 @@ a decoded frame. Because each snapshot fully describes the receive state, one
 slot is sufficient, and it bounds the handoff by construction: an interface
 that stops polling cannot make the worker accumulate megabyte frames.
 
-The interface invalidates the canvas cache only when the raster, the detected
-mode, or the decoded fraction actually changed, so an idle receiver does not
-retessellate every frame.
+The interface uploads to the raster texture only when a frame with a new
+revision arrived, so an idle receiver does not re-upload every frame.
 
 Frames are asked for by whoever produced something to show rather than drawn
 at the monitor's rate. The receive worker holds a waker over the egui context
@@ -515,20 +525,20 @@ marked shared are built once and reused across tabs.
 | --- | --- | --- |
 | Menu bar | Shared | `muda` native menu or an egui in-window menu |
 | Tab selector | Shared | Two selectable buttons above the first side-panel box |
-| Input device selector | Shared | `pick_list` over enumerated capture devices |
-| Main image view | Per tab | `canvas`; see below |
+| Input device selector | Shared | `ComboBox` over enumerated capture devices |
+| Main image view | Per tab | Painted directly; see below |
 | State line | Shared | Mode, size, and what the tab is doing, under the image |
-| Level bar | Per tab | Signal-colored `progress_bar`; clicked to reset the reception while receiving, dragged to set the level while transmitting |
-| Mode panel | Shared | `toggler` for automatic detection plus `pick_list` |
-| Radio panel | Shared | Connect and its state, then a band `pick_list`, the frequency, and two step buttons |
+| Level bar | Per tab | Signal-colored `ProgressBar`; clicked to reset the reception while receiving, dragged to set the level while transmitting |
+| Mode panel | Shared | A checkbox for automatic detection plus a `ComboBox` |
+| Radio panel | Shared | Connect and its state, then a band `ComboBox`, the frequency, and two step buttons |
 | DSP panel | Receive | Three toggle buttons |
 | Transmit trigger | Transmit | The TX button with the tune tone beside it, where the DSP toggles sit |
-| QSO panel | Shared | `text_input` for the DX call with the contact-details button beside it and the received report under it, then the sent report with its list and its serial, and the two serial buttons |
-| Station dialog | Modal | `text_input` for the callsign, QTH, and grid locator |
-| Template variable dialog | Modal | Rows of `text_input` naming and valuing `${custom.*}` |
-| Contact dialog | Modal | A labelled `text_input` per contact field the settings ask for, then rows naming and valuing anything else the directory holds |
-| Template list | Shared | `scrollable` of selectable rows |
-| Stock image list | Shared | `scrollable` of selectable rows with thumbnails |
+| QSO panel | Shared | `TextEdit` for the DX call with the contact-details button beside it and the received report under it, then the sent report with its list and its serial, and the two serial buttons |
+| Station dialog | Modal | `TextEdit` for the callsign, QTH, and grid locator |
+| Template variable dialog | Modal | Rows of `TextEdit` naming and valuing `${custom.*}` |
+| Contact dialog | Modal | A labelled `TextEdit` per contact field the settings ask for, then rows naming and valuing anything else the directory holds |
+| Template list | Shared | `ScrollArea` of selectable rows |
+| Stock image list | Shared | `ScrollArea` of selectable rows with thumbnails |
 | Status bar | Shared | Faults from the left; sample rates and decoded callsigns from the right |
 
 Only controls that do something are built. A feature that has not arrived yet
@@ -538,8 +548,10 @@ the exception, where a disabled entry either names a whole area still to be
 filled in or is something the menu only has to say — the rig's address, what its
 connection is doing, an empty device list.
 
-Labels are inert throughout, dialogs included, and the two applications say so
-through one call in `grayline_shell::inert_labels`. Several labels sit inside
+Labels are inert throughout, dialogs included, and the SSTV and WEFAX
+applications say so through one call in `grayline_shell::inert_labels`; the
+RTTY application sets it itself, because its scrollback is the one place text
+is meant to be selected. Several labels sit inside
 rows that sense the click themselves, where a selectable one takes the text
 cursor and swallows the press, and none of this text is worth dragging a
 selection across. It is set as the interface is drawn rather than as the
@@ -609,8 +621,12 @@ missing-variable error against a template that never asked for it.
 Settings that are chosen once and then left alone live in the menu rather than
 beside the image: whether a transmission ends with the station identifier,
 whether a VIS header may start a reception over, whether a VIS detection
-requires the header's leader tone as well, whether receptions are kept, and in
-what format. Each is a check entry under Settings, grouped by what it affects.
+requires the header's leader tone as well, whether the FSKID carries a contest
+number, whether a callsign is looked up in the contact directory, whether
+receptions are kept, and in what format. Each is a check entry under Settings,
+grouped by what it affects. Beside them sit the commands that write out the
+contact credentials file, `rigcontrol.lua`, and `bands.toml`, and a View menu
+zooms the interface in and out through the family-shared `ui-scale`.
 
 The tab selector sits on top of the side panel's first box rather than in a bar
 of its own, and that box carries no title: the tab it selects is what the title
@@ -663,9 +679,9 @@ the operator aims for, which is the one pressed on every transmission.
 
 ### Main Image Canvas
 
-The main image view is a `canvas` rather than an `image` widget. The received
-raster is only one of several things drawn in that area, and the rest cannot be
-expressed by a plain image view:
+The main image view is painted directly rather than being an `Image` widget.
+The received raster is only one of several things drawn in that area, and the
+rest cannot be expressed by a plain image view:
 
 - The undecoded region below the current scan position, and the boundary line
   marking that position.
@@ -676,18 +692,20 @@ expressed by a plain image view:
 - Letterboxing of the mode's aspect ratio inside a resizable area, without
   distorting the raster.
 
-Drawing goes through `canvas::Image`, whose `filter_method` is set to nearest
-neighbor. SSTV rasters are small and are displayed at non-integer scales;
-linear filtering would blur individual scan lines and hide exactly the artifacts
-an operator needs to see when judging synchronization.
+The raster is an egui texture uploaded with `TextureOptions::NEAREST`. SSTV
+rasters are small and are displayed at non-integer scales; linear filtering
+would blur individual scan lines and hide exactly the artifacts an operator
+needs to see when judging synchronization. The undecoded region is excluded by
+clipping the painter to the decoded part of the raster rather than by covering
+it, so the boundary stays exact at any viewport scale.
 
-The canvas keeps a `canvas::Cache` that is invalidated on
-`RxDecoder::image_revision` change or overlay state change, so a redraw is not
-performed per frame. Because the canvas already owns pointer input and view
-transforms, later additions such as zoom, pan, and slant preview extend it
-rather than replacing it.
+The texture is updated in place through `TextureHandle::set` when a frame with
+a new revision arrives, and only then, so an upload is not performed per frame.
+Because the view already owns its area and its letterbox transform, later
+additions such as zoom, pan, and slant preview extend it rather than replacing
+it.
 
-The list thumbnails have no overlays and remain plain `image` widgets.
+The list thumbnails have no overlays and remain plain `Image` widgets.
 
 Two mock behaviors are deliberately reduced relative to the original MMSSTV
 interface, as recorded in the reference breakdown:
@@ -717,11 +735,13 @@ is the second.
   rate values keep their conventional units.
 - The GUI default is `Yu Gothic UI` on Windows, `Hiragino Sans` on macOS, and
   `Noto Sans CJK JP` on Linux. These families cover Japanese UI text without an
-  embedded CJK font; `cosmic-text` retains its system-font fallback when the
-  preferred family is unavailable.
+  embedded CJK font; egui falls back to its bundled fonts when the preferred
+  family is unavailable.
 
-Locale selection is explicit in application configuration, defaulting to the
-system locale when it matches an available translation.
+Locale selection is stored once for the family in `common.toml`, owned by
+`grayline_shell::common` beside the interface scale, so every application
+opens in the language the last one was switched to. It defaults to the system
+locale when that matches an available translation.
 
 ## Current Implementation
 
@@ -802,8 +822,9 @@ the tone instead of a row. The two ways of keying the rig refuse each other
 rather than interrupting: whichever is running is what the other's disabled
 hover text reports.
 
-Rig control is implemented against `rigctld`. A worker thread owns the
-transports and a Lua state, keys the rig around a transmission, and reads the
+Rig control is implemented against `rigctld`. A worker thread,
+`grayline_rig_control::RigWorker`, owns the transports and a Lua state, keys
+the rig around a transmission, and reads the
 frequency between transmissions; the interface starts playback only once the
 rig has reported that it has switched over, and a script that failed to key
 stops the transmission rather than sending into a receiver. What is sent at
@@ -828,8 +849,9 @@ receive controls that act on stored entries remain to be implemented.
 
 The application storage directories and an empty default configuration file
 are initialized at startup as described in [architecture.md](architecture.md).
-Rig control reads the same file: the Rig Control menu switches the connection
-on and reports what it is doing, and everything the rig is told is written under
+Rig control reads the same file: the radio panel switches the connection on
+and reports what it is doing, the Settings menu only writes `rigcontrol.lua`
+and `bands.toml` out, and everything the rig is told is written under
 `[rig]`, as described in [rig-control.md](rig-control.md). The contact
 directory reads it too, under `[qso]`, though not the key it needs, which
 sits in a file of its own; [qso-directory.md](qso-directory.md) says why.

@@ -17,7 +17,10 @@ system packages nor the compiled dependencies the other jobs wait for, so a
 misformatted change is reported in under a minute instead of behind a build.
 
 `core` runs Clippy with warnings denied, the tests, and a build over the
-workspace with the applications excluded, followed by the `no_std` builds.
+workspace with the applications excluded, followed by the `no_std` builds and
+by builds of `grayline-tone-tx` and `grayline-sstv-rx` on their own, since
+those ask for no `std` of their dependencies and the workspace would turn it
+on around them.
 The exclusion list is named once in the job's environment and reused by the
 three commands, so a member that leaves the core cannot be dropped from one of
 them alone. The browser demo stays in this job: its host build is cheap,

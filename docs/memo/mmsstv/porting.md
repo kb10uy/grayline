@@ -7,21 +7,26 @@ references are available for the [DSP implementation](dsp.md) and
 [supported SSTV formats](../sstv/modes.md). MMSSTV's six-bit station identifier
 is documented separately in [fskid.md](fskid.md).
 
+These boundaries have since been implemented. The crates and modules that
+realize each one are listed in
+[grayline/architecture.md](../grayline/architecture.md); the names below are
+the conceptual vocabulary, not crate or module paths.
+
 ## Proposed Module Boundaries
 
 The original source can be divided into the following conceptual Rust modules:
 
-| Rust module | Original implementation |
-| --- | --- |
-| `dsp` | Numerical portions of `fir.cpp` and `Fft.cpp` |
-| `sstv_modes` | Mode definitions, geometry, and `CSSTVSET` timing |
-| `demodulator` | `CSSTVDEM`, PLL, FQC, Hilbert, VIS, sync, AFC, FSK |
-| `rx_decoder` | `SyncSSTV()` and `DrawSSTV*()` logic from `Main.cpp` |
-| `tx_encoder` | VIS/header generation and `LineXXX()` functions from `Main.cpp` |
-| `modulator` | `CSSTVMOD` and `CVCO` |
-| `audio` | Platform-independent audio stream interfaces replacing `CWave` |
-| `image` | Owned RGB buffers and color-space conversion |
-| `application` | UI, history, logging, PTT, CAT, and external integrations |
+| Rust module | Original implementation | Realized as |
+| --- | --- | --- |
+| `dsp` | Numerical portions of `fir.cpp` and `Fft.cpp` | `grayline-dsp` |
+| `sstv_modes` | Mode definitions, geometry, and `CSSTVSET` timing | `grayline_sstv::mode` |
+| `demodulator` | `CSSTVDEM`, PLL, FQC, Hilbert, VIS, sync, AFC, FSK | `grayline-sstv-rx` and `grayline-sstv-fskid` |
+| `rx_decoder` | `SyncSSTV()` and `DrawSSTV*()` logic from `Main.cpp` | `grayline_sstv::rx` |
+| `tx_encoder` | VIS/header generation and `LineXXX()` functions from `Main.cpp` | `grayline_sstv::tx` |
+| `modulator` | `CSSTVMOD` and `CVCO` | `grayline-tone-tx` |
+| `audio` | Platform-independent audio stream interfaces replacing `CWave` | `grayline-audio` |
+| `image` | Owned RGB buffers and color-space conversion | `grayline_sstv::image` and `grayline_sstv::color` |
+| `application` | UI, history, logging, PTT, CAT, and external integrations | `apps/sstv` |
 
 ## Required Core Scope
 

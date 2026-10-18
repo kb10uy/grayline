@@ -156,8 +156,9 @@ This repository uses a Cargo workspace. Run commands from the workspace root.
 
 - Build all workspace members with `cargo build --workspace`.
 - Run all tests with `cargo test --workspace`.
-- Check that `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` still
-  build without `std` using `cargo build -p grayline-sstv
+- Check that `grayline-sstv`, `grayline-dsp`, `grayline-wefax`, and
+  `grayline-rtty` still build without `std` using `cargo build -p
+  grayline-sstv --no-default-features`, `cargo build -p grayline-dsp
   --no-default-features`, `cargo build -p grayline-wefax
   --no-default-features`, and `cargo build -p grayline-rtty
   --no-default-features`. A workspace build does
@@ -185,6 +186,7 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
+cargo build -p grayline-dsp --no-default-features
 cargo build -p grayline-wefax --no-default-features
 cargo build -p grayline-rtty --no-default-features
 cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown
