@@ -15,6 +15,25 @@ pub enum Diddle {
     Blank,
 }
 
+impl Diddle {
+    /// Every filler, in the order the tools offer them.
+    pub const ALL: [Self; 3] = [Self::None, Self::Ltrs, Self::Blank];
+
+    /// Returns the name the keyer protocol and the tools spell this with.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Ltrs => "ltrs",
+            Self::Blank => "blank",
+        }
+    }
+
+    /// Reads back what [`name`](Self::name) spells.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|diddle| diddle.name() == name)
+    }
+}
+
 /// Everything a transmitter needs to know.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TxConfig {
@@ -78,5 +97,18 @@ impl Default for TxConfig {
             lead_in_seconds: 0.5,
             tail_seconds: 0.5,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_diddle_reads_back_its_name() {
+        for diddle in Diddle::ALL {
+            assert_eq!(Diddle::from_name(diddle.name()), Some(diddle));
+        }
+        assert_eq!(Diddle::from_name("LTRS"), None);
     }
 }

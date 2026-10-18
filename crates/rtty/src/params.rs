@@ -129,6 +129,23 @@ pub enum StopElement {
 }
 
 impl StopElement {
+    /// Every element, shortest first.
+    pub const ALL: [Self; 3] = [Self::One, Self::OneAndAHalf, Self::Two];
+
+    /// Returns the length in bits as the keyer protocol and the tools spell it.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::One => "1",
+            Self::OneAndAHalf => "1.5",
+            Self::Two => "2",
+        }
+    }
+
+    /// Reads back what [`name`](Self::name) spells.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|element| element.name() == name)
+    }
+
     /// Returns how much of the element extends beyond the first bit.
     pub const fn extra_bits(self) -> f64 {
         match self {
@@ -200,6 +217,25 @@ pub enum Parity {
 }
 
 impl Parity {
+    /// Every parity, in the order the tools offer them.
+    pub const ALL: [Self; 5] = [Self::None, Self::Even, Self::Odd, Self::Mark, Self::Space];
+
+    /// Returns the name the keyer protocol and the tools spell this with.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Even => "even",
+            Self::Odd => "odd",
+            Self::Mark => "mark",
+            Self::Space => "space",
+        }
+    }
+
+    /// Reads back what [`name`](Self::name) spells.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|parity| parity.name() == name)
+    }
+
     /// Returns the bit a transmitter sends for `data_marks` mark data bits,
     /// or nothing when parity is off.
     pub const fn transmitted_bit(self, data_marks: u32) -> Option<bool> {
@@ -283,6 +319,18 @@ pub struct RxFraming {
 mod tests {
     use super::*;
     use rstest::rstest;
+
+    #[test]
+    fn every_stop_element_and_parity_reads_back_its_name() {
+        for element in StopElement::ALL {
+            assert_eq!(StopElement::from_name(element.name()), Some(element));
+        }
+        for parity in Parity::ALL {
+            assert_eq!(Parity::from_name(parity.name()), Some(parity));
+        }
+        assert_eq!(StopElement::from_name("3"), None);
+        assert_eq!(Parity::from_name("Even"), None);
+    }
 
     #[test]
     fn center_and_shift_round_trip() {

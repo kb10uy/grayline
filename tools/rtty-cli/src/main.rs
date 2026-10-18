@@ -7,7 +7,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{
+    ArgAction, Args, Parser, Subcommand, ValueEnum,
+    builder::{PossibleValuesParser, TypedValueParser},
+};
 use grayline_rtty::{
     RxConfig, TxConfig,
     code::{Case, CodeSet},
@@ -71,8 +74,8 @@ struct CommonArgs {
     code_set: CodeSetArgument,
 
     /// Parity bit between the data bits and the stop element.
-    #[arg(long, value_enum, value_name = "PARITY", default_value_t)]
-    parity: ParityArgument,
+    #[arg(long, value_name = "PARITY", value_parser = named(&Parity::ALL, Parity::name, Parity::from_name), default_value = Parity::default().name())]
+    parity: Parity,
 }
 
 impl CommonArgs {
@@ -98,16 +101,6 @@ enum CodeSetArgument {
     SBell,
     #[value(name = "j-bell")]
     JBell,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum ParityArgument {
-    #[default]
-    None,
-    Even,
-    Odd,
-    Mark,
-    Space,
 }
 
 #[derive(Debug, Args)]
@@ -230,12 +223,12 @@ struct EncodeArgs {
     sample_rate: u32,
 
     /// Stop element to send, in bits.
-    #[arg(long, value_enum, value_name = "BITS", default_value_t = StopElementArgument::OneAndAHalf)]
-    stop: StopElementArgument,
+    #[arg(long, value_name = "BITS", value_parser = named(&StopElement::ALL, StopElement::name, StopElement::from_name), default_value = StopElement::OneAndAHalf.name())]
+    stop: StopElement,
 
     /// What fills the character gap, when --char-gap leaves one.
-    #[arg(long, value_enum, value_name = "KIND", default_value_t)]
-    diddle: DiddleArgument,
+    #[arg(long, value_name = "KIND", value_parser = named(&Diddle::ALL, Diddle::name, Diddle::from_name), default_value = Diddle::default().name())]
+    diddle: Diddle,
 
     /// Idle inserted between characters, in bit periods.
     #[arg(long, value_name = "BITS", default_value_t = 0.0)]
@@ -288,24 +281,6 @@ struct EncodeArgs {
     output: Option<PathBuf>,
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
-enum StopElementArgument {
-    #[value(name = "1")]
-    One,
-    #[value(name = "1.5")]
-    OneAndAHalf,
-    #[value(name = "2")]
-    Two,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum DiddleArgument {
-    #[default]
-    None,
-    Ltrs,
-    Blank,
-}
-
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
@@ -351,7 +326,7 @@ fn decode(arguments: DecodeArgs) -> Result<ExitCode> {
         ..RxConfig::default()
     };
     config.framing.baud = arguments.common.baud()?;
-    config.framing.parity = arguments.common.parity.into();
+    config.framing.parity = arguments.common.parity;
     config.framing.stop = arguments.stop.into();
     if arguments.no_squelch {
         config.squelch_threshold = None;
@@ -432,7 +407,7 @@ fn encode(arguments: EncodeArgs) -> Result<ExitCode> {
         code_set: arguments.common.code_set.into(),
         double_shift: arguments.double_shift,
         tx_unshift_on_space: arguments.tx_uos,
-        diddle: arguments.diddle.into(),
+        diddle: arguments.diddle,
         char_gap_bits: arguments.char_gap,
         smoothing_hz: (!arguments.no_smoothing).then_some(arguments.smoothing),
         band_pass: arguments.tx_filter,
@@ -441,8 +416,8 @@ fn encode(arguments: EncodeArgs) -> Result<ExitCode> {
         ..TxConfig::default()
     };
     config.framing.baud = arguments.common.baud()?;
-    config.framing.parity = arguments.common.parity.into();
-    config.framing.stop = arguments.stop.into();
+    config.framing.parity = arguments.common.parity;
+    config.framing.stop = arguments.stop;
 
     let options = EncodeOptions {
         sample_rate_hz: arguments.sample_rate,
@@ -469,18 +444,6 @@ impl From<CodeSetArgument> for CodeSet {
     }
 }
 
-impl From<ParityArgument> for Parity {
-    fn from(value: ParityArgument) -> Self {
-        match value {
-            ParityArgument::None => Self::None,
-            ParityArgument::Even => Self::Even,
-            ParityArgument::Odd => Self::Odd,
-            ParityArgument::Mark => Self::Mark,
-            ParityArgument::Space => Self::Space,
-        }
-    }
-}
-
 impl From<StopToleranceArgument> for StopTolerance {
     fn from(value: StopToleranceArgument) -> Self {
         match value {
@@ -488,16 +451,6 @@ impl From<StopToleranceArgument> for StopTolerance {
             StopToleranceArgument::Ratio142 => Self::Ratio142,
             StopToleranceArgument::OneAndAHalf => Self::OneAndAHalf,
             StopToleranceArgument::Two => Self::Two,
-        }
-    }
-}
-
-impl From<StopElementArgument> for StopElement {
-    fn from(value: StopElementArgument) -> Self {
-        match value {
-            StopElementArgument::One => Self::One,
-            StopElementArgument::OneAndAHalf => Self::OneAndAHalf,
-            StopElementArgument::Two => Self::Two,
         }
     }
 }
@@ -513,14 +466,14 @@ impl From<AfcModeArgument> for AfcMode {
     }
 }
 
-impl From<DiddleArgument> for Diddle {
-    fn from(value: DiddleArgument) -> Self {
-        match value {
-            DiddleArgument::None => Self::None,
-            DiddleArgument::Ltrs => Self::Ltrs,
-            DiddleArgument::Blank => Self::Blank,
-        }
-    }
+/// Offers `all` by the names `name` gives them and reads the chosen one back.
+fn named<T: Copy + Send + Sync + 'static>(
+    all: &'static [T],
+    name: fn(T) -> &'static str,
+    from_name: fn(&str) -> Option<T>,
+) -> impl TypedValueParser<Value = T> {
+    PossibleValuesParser::new(all.iter().map(|value| name(*value)))
+        .map(move |chosen| from_name(&chosen).expect("clap accepts only the offered names"))
 }
 
 fn default_packet_size() -> NonZeroUsize {

@@ -9,27 +9,13 @@ use grayline_rtty::{
 /// audio transmitter's: a keyed line has two states and the rig decides what
 /// they sound like.
 pub(crate) fn encode_open(config: &TxConfig) -> String {
-    let stop = match config.framing.stop {
-        StopElement::One => "1",
-        StopElement::OneAndAHalf => "1.5",
-        StopElement::Two => "2",
-    };
-    let parity = match config.framing.parity {
-        Parity::None => "none",
-        Parity::Even => "even",
-        Parity::Odd => "odd",
-        Parity::Mark => "mark",
-        Parity::Space => "space",
-    };
-    let diddle = match config.diddle {
-        Diddle::None => "none",
-        Diddle::Ltrs => "ltrs",
-        Diddle::Blank => "blank",
-    };
     format!(
-        "baud={} stop={stop} parity={parity} gap={} diddle={diddle} lead_in={} tail={}",
+        "baud={} stop={} parity={} gap={} diddle={} lead_in={} tail={}",
         config.framing.baud.bits_per_second(),
+        config.framing.stop.name(),
+        config.framing.parity.name(),
         config.char_gap_bits,
+        config.diddle.name(),
         config.lead_in_seconds,
         config.tail_seconds,
     )
@@ -45,33 +31,10 @@ pub fn decode_open(arguments: &[&str]) -> Option<TxConfig> {
         let (key, value) = argument.split_once('=')?;
         match key {
             "baud" => config.framing.baud = BaudRate::new(value.parse().ok()?).ok()?,
-            "stop" => {
-                config.framing.stop = match value {
-                    "1" => StopElement::One,
-                    "1.5" => StopElement::OneAndAHalf,
-                    "2" => StopElement::Two,
-                    _ => return None,
-                }
-            }
-            "parity" => {
-                config.framing.parity = match value {
-                    "none" => Parity::None,
-                    "even" => Parity::Even,
-                    "odd" => Parity::Odd,
-                    "mark" => Parity::Mark,
-                    "space" => Parity::Space,
-                    _ => return None,
-                }
-            }
+            "stop" => config.framing.stop = StopElement::from_name(value)?,
+            "parity" => config.framing.parity = Parity::from_name(value)?,
             "gap" => config.char_gap_bits = value.parse().ok()?,
-            "diddle" => {
-                config.diddle = match value {
-                    "none" => Diddle::None,
-                    "ltrs" => Diddle::Ltrs,
-                    "blank" => Diddle::Blank,
-                    _ => return None,
-                }
-            }
+            "diddle" => config.diddle = Diddle::from_name(value)?,
             "lead_in" => config.lead_in_seconds = value.parse().ok()?,
             "tail" => config.tail_seconds = value.parse().ok()?,
             _ => return None,
