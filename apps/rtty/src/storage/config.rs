@@ -46,6 +46,22 @@ pub const MAXIMUM_SQUELCH: f64 = 1.0;
 pub const MINIMUM_TX_LEVEL: f64 = 0.0;
 pub const MAXIMUM_TX_LEVEL: f64 = 1.0;
 
+/// The top-level keys, each named once so the reader and the writer cannot
+/// spell one differently.
+const DEVICE: &str = "device";
+const OUTPUT_DEVICE: &str = "output_device";
+const MARK_HZ: &str = "mark_hz";
+const SHIFT_HZ: &str = "shift_hz";
+const BAUD: &str = "baud";
+const REVERSE: &str = "reverse";
+const AFC: &str = "afc";
+const SQUELCH_THRESHOLD: &str = "squelch_threshold";
+const UNSHIFT_ON_SPACE: &str = "unshift_on_space";
+const ATC: &str = "atc";
+const TX_UNSHIFT_ON_SPACE: &str = "tx_unshift_on_space";
+const TX_LEVEL: &str = "tx_level";
+const SCOPE: &str = "scope";
+
 /// Everything the application remembers between sessions.
 ///
 /// The language and the interface scale are not here: they are the same in
@@ -268,7 +284,7 @@ impl Config {
             return;
         }
         let table = self.document.as_table_mut();
-        for (key, name) in [("device", &settings.device), ("output_device", &settings.output_device)] {
+        for (key, name) in [(DEVICE, &settings.device), (OUTPUT_DEVICE, &settings.output_device)] {
             match name {
                 Some(name) => table[key] = value(name.as_str()),
                 None => {
@@ -276,17 +292,17 @@ impl Config {
                 }
             }
         }
-        table["mark_hz"] = value(settings.mark_hz);
-        table["shift_hz"] = value(settings.shift_hz);
-        table["baud"] = value(settings.baud);
-        table["reverse"] = value(settings.reverse);
-        table["afc"] = value(settings.afc);
-        table["squelch_threshold"] = value(settings.squelch_threshold);
-        table["unshift_on_space"] = value(settings.unshift_on_space);
-        table["atc"] = value(settings.atc);
-        table["tx_unshift_on_space"] = value(settings.tx_unshift_on_space);
-        table["tx_level"] = value(settings.tx_level);
-        table["scope"] = value(settings.scope);
+        table[MARK_HZ] = value(settings.mark_hz);
+        table[SHIFT_HZ] = value(settings.shift_hz);
+        table[BAUD] = value(settings.baud);
+        table[REVERSE] = value(settings.reverse);
+        table[AFC] = value(settings.afc);
+        table[SQUELCH_THRESHOLD] = value(settings.squelch_threshold);
+        table[UNSHIFT_ON_SPACE] = value(settings.unshift_on_space);
+        table[ATC] = value(settings.atc);
+        table[TX_UNSHIFT_ON_SPACE] = value(settings.tx_unshift_on_space);
+        table[TX_LEVEL] = value(settings.tx_level);
+        table[SCOPE] = value(settings.scope);
 
         let station = table
             .entry("station")
@@ -344,8 +360,8 @@ fn read(document: &DocumentMut) -> Settings {
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
     for (key, target) in [
-        ("device", &mut settings.device),
-        ("output_device", &mut settings.output_device),
+        (DEVICE, &mut settings.device),
+        (OUTPUT_DEVICE, &mut settings.output_device),
     ] {
         if let Some(name) = get(key).and_then(|value| value.as_str()) {
             *target = Some(name.to_owned());
@@ -355,23 +371,23 @@ fn read(document: &DocumentMut) -> Settings {
     // a hand-edited `shift_hz = 170` is not thrown away for having no point
     // in it.
     for (key, target) in [
-        ("mark_hz", &mut settings.mark_hz),
-        ("shift_hz", &mut settings.shift_hz),
-        ("baud", &mut settings.baud),
-        ("squelch_threshold", &mut settings.squelch_threshold),
-        ("tx_level", &mut settings.tx_level),
+        (MARK_HZ, &mut settings.mark_hz),
+        (SHIFT_HZ, &mut settings.shift_hz),
+        (BAUD, &mut settings.baud),
+        (SQUELCH_THRESHOLD, &mut settings.squelch_threshold),
+        (TX_LEVEL, &mut settings.tx_level),
     ] {
         if let Some(number) = get(key).and_then(number) {
             *target = number;
         }
     }
     for (key, target) in [
-        ("reverse", &mut settings.reverse),
-        ("afc", &mut settings.afc),
-        ("unshift_on_space", &mut settings.unshift_on_space),
-        ("atc", &mut settings.atc),
-        ("tx_unshift_on_space", &mut settings.tx_unshift_on_space),
-        ("scope", &mut settings.scope),
+        (REVERSE, &mut settings.reverse),
+        (AFC, &mut settings.afc),
+        (UNSHIFT_ON_SPACE, &mut settings.unshift_on_space),
+        (ATC, &mut settings.atc),
+        (TX_UNSHIFT_ON_SPACE, &mut settings.tx_unshift_on_space),
+        (SCOPE, &mut settings.scope),
     ] {
         if let Some(flag) = get(key).and_then(|value| value.as_bool()) {
             *target = flag;
