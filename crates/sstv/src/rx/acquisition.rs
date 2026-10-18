@@ -1,13 +1,15 @@
 use alloc::vec::Vec;
 
-use crate::{SstvError, time::SstvDuration};
+use crate::{
+    SstvError,
+    time::{SstvDuration, rate_spanning, samples_spanned},
+};
 
 use super::{
     clock::RasterClock,
-    config::sync_detector_delay_samples,
     input::{SampleBuffer, load_sync},
     raster::RasterProfile,
-    sync::{RUN_THRESHOLD, refine_center},
+    sync::{RUN_THRESHOLD, refine_or_estimate},
 };
 
 pub(super) const ACQUISITION_PERIODS: u64 = 32;
@@ -116,20 +118,19 @@ fn acquire_inner(
                     ((start + index) / 2) as u64
                 };
                 let envelope_center = input.first() + relative;
-                centers.push(
-                    refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay).unwrap_or_else(
-                        || {
-                            (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay))
-                                .max(0.0) as u64
-                        },
-                    ),
-                );
+                centers.push(refine_or_estimate(
+                    input,
+                    profile,
+                    envelope_center,
+                    sample_rate_hz,
+                    sync_detector_delay,
+                ));
             }
             index += 1;
         }
     }
 
-    let nominal = profile.period_ps as f64 * f64::from(sample_rate_hz) / 1_000_000_000_000.0;
+    let nominal = samples_spanned(f64::from(sample_rate_hz), profile.period_ps);
     let tolerance = nominal * 0.08 + 2.0;
     let mut best: Option<(Vec<u64>, f64, f64)> = None;
     for &first in &centers {
@@ -184,7 +185,7 @@ fn acquire_inner(
     } else {
         fitted_samples_per_period
     };
-    let effective = samples_per_period * 1.0e12 / profile.period_ps as f64;
+    let effective = rate_spanning(samples_per_period, profile.period_ps);
     let rate_error = (effective / f64::from(sample_rate_hz) - 1.0).abs();
     if rate_error > MAX_RATE_ERROR || residual_squared > tolerance * tolerance / 4.0 {
         return Err(SstvError::RasterNotAcquired);
@@ -208,7 +209,7 @@ fn acquire_inner(
             / steps;
         sequence[0] as f64 + mean_offset
     };
-    let epoch = fitted_first - effective * profile.sync_center_ps as f64 / 1.0e12;
+    let epoch = fitted_first - samples_spanned(effective, profile.sync_center_ps);
     RasterClock::from_estimate(epoch, effective)
 }
 

@@ -6,7 +6,7 @@ use crate::{
     image::{ImageSize, Rgb8, RgbImage},
     mode::{Mode, RasterOrganization, ScanChannel, Support},
     signal::Frequency,
-    time::SstvDuration,
+    time::{SstvDuration, samples_spanned},
 };
 
 use super::{
@@ -487,7 +487,7 @@ impl RxDecoder {
     fn clock_at_input_start(&self) -> Result<RasterClock, SstvError> {
         let first = self.input.as_ref().expect("input initialized").first();
         let rate = f64::from(self.sample_rate_hz);
-        let epoch = first as f64 + rate * self.profile.leading_ps as f64 / 1.0e12;
+        let epoch = first as f64 + samples_spanned(rate, self.profile.leading_ps);
         RasterClock::from_estimate(epoch, rate)
     }
 

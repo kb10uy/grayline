@@ -1,4 +1,4 @@
-use crate::SstvError;
+use crate::{SstvError, time::samples_spanned};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RasterClock {
@@ -23,7 +23,7 @@ impl RasterClock {
 
     /// Returns the fractional sample position of a protocol instant.
     pub(super) fn position_at(&self, protocol_ps: u64) -> Result<f64, SstvError> {
-        let position = self.source_epoch + self.effective_sample_rate_hz * protocol_ps as f64 / 1.0e12;
+        let position = self.source_epoch + samples_spanned(self.effective_sample_rate_hz, protocol_ps);
         if !position.is_finite() || position < 0.0 || position > u64::MAX as f64 {
             return Err(SstvError::SamplePositionOverflow);
         }
@@ -40,7 +40,7 @@ impl RasterClock {
     }
 
     pub(super) fn samples_for(&self, protocol_ps: u64) -> Result<u64, SstvError> {
-        let samples = self.effective_sample_rate_hz * protocol_ps as f64 / 1.0e12;
+        let samples = samples_spanned(self.effective_sample_rate_hz, protocol_ps);
         if !samples.is_finite() || samples < 0.0 || samples > u64::MAX as f64 {
             return Err(SstvError::SamplePositionOverflow);
         }
