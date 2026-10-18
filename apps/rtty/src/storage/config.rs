@@ -2,7 +2,6 @@ use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
 use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
 use grayline_qso::DEFAULT_FIELDS;
-use grayline_rig_control::DEFAULT_ADDRESS;
 use grayline_shell::log;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
@@ -14,7 +13,7 @@ use crate::app::macros::{Station, valid_variable_name};
 /// what the settings in it mean belongs to rig control. The section is spelled
 /// as the SSTV application spells it, so a station that keys both can copy one
 /// block between the two files.
-pub use grayline_rig_control::{PortSettings, RigSettings};
+pub use grayline_rig_control::RigSettings;
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -46,15 +45,6 @@ pub const MAXIMUM_SQUELCH: f64 = 1.0;
 /// Bounds on the transmit level, as fader travel.
 pub const MINIMUM_TX_LEVEL: f64 = 0.0;
 pub const MAXIMUM_TX_LEVEL: f64 = 1.0;
-
-/// The longest either side of a transmission may be padded by, in seconds.
-pub const KEYING_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=5.0;
-/// How far apart frequency reads may be asked to be, in seconds.
-///
-/// Zero turns reading off, which is what this application starts on: nothing
-/// here shows a frequency yet, so asking for one would put CAT traffic on the
-/// wire for a reading nobody sees.
-pub const POLL_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=60.0;
 
 /// Everything the application remembers between sessions.
 ///
@@ -347,7 +337,13 @@ impl Config {
         // every save would reformat what the operator had written in it.
         store_custom_variables(table, &settings.custom_variables);
         store_contact(table, &settings.contact);
-        store_rig(table, &settings.rig);
+        if let Some(rig) = table
+            .entry("rig")
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut()
+        {
+            settings.rig.write(rig);
+        }
         store_keyer(table, &settings.keyer);
 
         self.write();
@@ -426,66 +422,9 @@ fn read(document: &DocumentMut) -> Settings {
     }
     settings.custom_variables = read_custom_variables(table);
     settings.contact = read_contact(table);
-    settings.rig = read_rig(table);
+    settings.rig = RigSettings::read(table.get("rig").and_then(Item::as_table), Settings::default().rig);
     settings.keyer = read_keyer(table);
     settings.clamped()
-}
-
-/// Reads the `[rig]` section, which is the whole of rig control's settings.
-///
-/// There is no editor for these: keying is wired once for a station and then
-/// left alone, so the file is where it is set up, and the application only
-/// reads it.
-fn read_rig(table: &Table) -> RigSettings {
-    let defaults = Settings::default().rig;
-    let Some(rig) = table.get("rig").and_then(Item::as_table) else {
-        return defaults;
-    };
-    let seconds = |key: &str, range: &core::ops::RangeInclusive<f32>, default: f32| {
-        rig.get(key)
-            .and_then(Item::as_value)
-            .and_then(number)
-            .map(|seconds| (seconds as f32).clamp(*range.start(), *range.end()))
-            .unwrap_or(default)
-    };
-    RigSettings {
-        enabled: rig
-            .get("enabled")
-            .and_then(Item::as_value)
-            .and_then(|flag| flag.as_bool())
-            .unwrap_or(defaults.enabled),
-        ports: read_ports(rig).unwrap_or(defaults.ports),
-        poll_seconds: seconds("poll-interval", &POLL_SECONDS_RANGE, defaults.poll_seconds),
-        lead_in_seconds: seconds("lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
-        tail_seconds: seconds("tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
-    }
-}
-
-/// Reads the ports to connect to, or nothing when the file names none.
-///
-/// A section that is present is taken as written: an entry that is not a
-/// section is dropped, and a section that leaves nothing behind leaves the
-/// script with no port to reach rather than being quietly given the default
-/// one back.
-fn read_ports(rig: &Table) -> Option<BTreeMap<String, PortSettings>> {
-    let ports = rig.get("ports")?.as_table()?;
-    Some(
-        ports
-            .iter()
-            .filter_map(|(name, item)| {
-                let address = item
-                    .as_table()?
-                    .get("address")
-                    .and_then(Item::as_value)
-                    .and_then(|address| address.as_str())
-                    .map(str::trim)
-                    .filter(|address| !address.is_empty())
-                    .unwrap_or(DEFAULT_ADDRESS)
-                    .to_owned();
-                Some((name.to_owned(), PortSettings { address }))
-            })
-            .collect(),
-    )
 }
 
 /// Reads the `[keyer]` section.
@@ -616,45 +555,6 @@ fn store_custom_variables(table: &mut Table, variables: &BTreeMap<String, String
     }
 }
 
-/// Writes the rig section back, ports and all.
-///
-/// Written even at its defaults, and even though nothing here edits it: the
-/// file is the only place keying is set up, so an operator who had to invent
-/// the keys before they could change them would have no way to learn the keys
-/// exist.
-fn store_rig(table: &mut Table, rig: &RigSettings) {
-    let section = table
-        .entry("rig")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut();
-    let Some(section) = section else { return };
-    section["enabled"] = value(rig.enabled);
-    for (key, seconds) in [
-        ("poll-interval", rig.poll_seconds),
-        ("lead-in", rig.lead_in_seconds),
-        ("tail", rig.tail_seconds),
-    ] {
-        // Rounded to the millisecond on the way out, so a widened f32 does not
-        // write 0.20000000298023224 into a file meant to be read.
-        section[key] = value((f64::from(seconds) * 1_000.0).round() / 1_000.0);
-    }
-    let ports = section
-        .entry("ports")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut();
-    let Some(ports) = ports else { return };
-    ports.retain(|name, _| rig.ports.contains_key(name));
-    for (name, port) in &rig.ports {
-        let entry = ports
-            .entry(name.as_str())
-            .or_insert_with(|| Item::Table(Table::new()))
-            .as_table_mut();
-        if let Some(entry) = entry {
-            entry["address"] = value(port.address.as_str());
-        }
-    }
-}
-
 /// Writes the `[keyer]` section back, at its defaults too, for the reason the
 /// `[rig]` section is.
 fn store_keyer(table: &mut Table, keyer: &KeyerSettings) {
@@ -677,8 +577,10 @@ fn number(item: &toml_edit::Value) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use grayline_rig_control::PortSettings;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn a_missing_file_starts_on_defaults_and_can_be_saved() {
@@ -783,7 +685,7 @@ mod tests {
 
         assert!(rig.enabled);
         // Clamped where it is read, as every other hand-edited figure is.
-        assert_eq!(rig.lead_in_seconds, *KEYING_SECONDS_RANGE.end());
+        assert_eq!(rig.lead_in_seconds, *grayline_rig_control::KEYING_SECONDS_RANGE.end());
         assert_eq!(rig.tail_seconds, 0.08);
         assert_eq!(rig.poll_seconds, 2.0);
         assert_eq!(

@@ -11,7 +11,6 @@ use std::{
 };
 
 use grayline_qso::DEFAULT_FIELDS;
-use grayline_rig_control::DEFAULT_ADDRESS;
 use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
@@ -22,7 +21,7 @@ use crate::storage::history::HistoryFormat;
 ///
 /// Re-exported rather than defined here: the file is the application's, while
 /// what the settings in it mean belongs to rig control.
-pub use grayline_rig_control::{PortSettings, RigSettings};
+pub use grayline_rig_control::RigSettings;
 
 /// The serial number a fresh log starts from.
 ///
@@ -55,14 +54,6 @@ pub const DEFAULT_TX_MODE: Mode = Mode::Scottie2;
 /// Full scale, because the modulator already produces normalized PCM and the
 /// operator's own output mixer is what the level is usually set against.
 pub const DEFAULT_TX_VOLUME: f32 = 1.0;
-/// The longest either side of a transmission may be padded by, in seconds.
-pub const KEYING_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=5.0;
-/// How far apart polls may be asked to be, in seconds.
-///
-/// Zero is a value rather than a floor: it turns polling off, which is what an
-/// operator wants who keys through rig control but reads the frequency off the
-/// front panel.
-pub const POLL_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=60.0;
 
 /// Everything the application restores on the next start.
 ///
@@ -275,7 +266,10 @@ impl Config {
             history_format: string(&self.document, Some("receive"), "history-format")
                 .and_then(HistoryFormat::from_config)
                 .unwrap_or(defaults.history_format),
-            rig: rig_settings(&self.document),
+            rig: RigSettings::read(
+                self.document.get("rig").and_then(Item::as_table),
+                RigSettings::default(),
+            ),
             contact: contact_settings(&self.document),
         }
     }
@@ -372,7 +366,7 @@ impl Config {
             "mode",
             Some(value(settings.tx_mode.spec().name())),
         );
-        store_rig(document, &settings.rig);
+        settings.rig.write(table_mut(document, "rig"));
         store_contact(document, &settings.contact);
         self.error = self.write().err().map(|error| error.to_string());
     }
@@ -414,17 +408,6 @@ fn store_custom_variables(document: &mut DocumentMut, variables: &BTreeMap<Strin
     table.retain(|name, _| variables.contains_key(name));
     for (name, text) in variables {
         table[name.as_str()] = value(text);
-    }
-}
-
-fn rig_settings(document: &DocumentMut) -> RigSettings {
-    let defaults = RigSettings::default();
-    RigSettings {
-        enabled: boolean(document, Some("rig"), "enabled").unwrap_or(defaults.enabled),
-        ports: rig_ports(document).unwrap_or(defaults.ports),
-        poll_seconds: seconds(document, "poll-interval", &POLL_SECONDS_RANGE, defaults.poll_seconds),
-        lead_in_seconds: seconds(document, "lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
-        tail_seconds: seconds(document, "tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
     }
 }
 
@@ -471,68 +454,6 @@ fn store_contact(document: &mut DocumentMut, contact: &ContactSettings) {
     fields.extend(contact.fields.iter().map(String::as_str));
     set(document, Some("qso"), "fields", Some(Item::Value(fields.into())));
     subtable_mut(document, "qso", "wavelog")["url"] = value(contact.wavelog_url.as_str());
-}
-
-fn seconds(document: &DocumentMut, key: &str, range: &core::ops::RangeInclusive<f32>, default: f32) -> f32 {
-    float(document, Some("rig"), key)
-        .map(|seconds| seconds.clamp(*range.start(), *range.end()))
-        .unwrap_or(default)
-}
-
-/// Reads the ports to connect to, or nothing when the file names none.
-///
-/// A section that is present is taken as written: an entry that is not a
-/// section is dropped, and a section that leaves nothing behind leaves the
-/// script with no port to reach rather than being quietly given the default
-/// one back.
-fn rig_ports(document: &DocumentMut) -> Option<BTreeMap<String, PortSettings>> {
-    let table = subtable(document, "rig", "ports")?;
-    Some(
-        table
-            .iter()
-            .filter_map(|(name, item)| Some((name.to_owned(), port_settings(item.as_table()?))))
-            .collect(),
-    )
-}
-
-fn port_settings(table: &Table) -> PortSettings {
-    PortSettings {
-        address: table
-            .get("address")
-            .and_then(Item::as_str)
-            .map(str::trim)
-            .filter(|address| !address.is_empty())
-            .unwrap_or(DEFAULT_ADDRESS)
-            .to_owned(),
-    }
-}
-
-/// Writes the rig section back, ports and all.
-///
-/// The ports are written even at their defaults, because the configuration
-/// file is where they are edited: an operator who has to add the keys before
-/// changing them has no way to learn the keys exist.
-fn store_rig(document: &mut DocumentMut, rig: &RigSettings) {
-    set(document, Some("rig"), "enabled", Some(value(rig.enabled)));
-    for (key, seconds) in [
-        ("poll-interval", rig.poll_seconds),
-        ("lead-in", rig.lead_in_seconds),
-        ("tail", rig.tail_seconds),
-    ] {
-        set(
-            document,
-            Some("rig"),
-            key,
-            // Rounded to the millisecond on the way out, so a widened f32 does
-            // not write 0.20000000298023224 into a file meant to be read.
-            Some(value((f64::from(seconds) * 1_000.0).round() / 1_000.0)),
-        );
-    }
-    let ports = subtable_mut(document, "rig", "ports");
-    ports.retain(|name, _| rig.ports.contains_key(name));
-    for (name, port) in &rig.ports {
-        child_table_mut(ports, name)["address"] = value(port.address.as_str());
-    }
 }
 
 fn mode_by_name(name: &str) -> Option<Mode> {
@@ -623,11 +544,11 @@ fn table_mut<'a>(document: &'a mut DocumentMut, name: &str) -> &'a mut Table {
 
 #[cfg(test)]
 mod tests {
-    use grayline_rig_control::{DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS};
+    use grayline_rig_control::{DEFAULT_ADDRESS, DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS, PortSettings};
     use rstest::rstest;
+    use tempfile::TempDir;
 
     use super::*;
-    use tempfile::TempDir;
 
     fn config_path(dir: &TempDir) -> PathBuf {
         dir.path().join(grayline_shell::paths::CONFIG_FILE)

@@ -74,11 +74,13 @@ description of how to talk to a rig. They moved out of the SSTV application
 once a second application needed to key a rig, which is the rule the rest of
 this repository's crates were drawn by.
 
-The application still owns the moments and the settings. It supplies the
-`[rig]` section it parsed out of its own configuration file, the directory the
-script and the plan are read from, and a function the script's `log` writes
-to — rig control keeps no log of its own, because which log a message belongs
-in is the application's to know.
+The application still owns the moments and the file the settings live in. It
+finds the `[rig]` section in its own configuration file and hands it to
+`RigSettings::read`, which is rig control's, so the two applications cannot
+read the same section two ways; `RigSettings::write` puts it back. It also
+supplies the directory the script and the plan are read from, and a function
+the script's `log` writes to — rig control keeps no log of its own, because
+which log a message belongs in is the application's to know.
 
 Each application reads its own configuration directory, so a station that keys
 both has a `rigcontrol.lua` per application rather than one the two could

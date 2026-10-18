@@ -37,7 +37,8 @@ pub use error::RigControlError;
 pub use grayline_rig::{DEFAULT_ADDRESS, RigError};
 pub use script::Keying;
 pub use settings::{
-    DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS, DEFAULT_PORT_NAME, DEFAULT_TAIL_SECONDS, PortSettings, RigSettings,
+    DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS, DEFAULT_PORT_NAME, DEFAULT_TAIL_SECONDS, KEYING_SECONDS_RANGE,
+    POLL_SECONDS_RANGE, PortSettings, RigSettings,
 };
 pub use worker::{Reading, RigSnapshot, RigState, RigWorker};
 
