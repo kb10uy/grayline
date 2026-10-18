@@ -7,7 +7,7 @@
 use std::{collections::BTreeMap, path::Path};
 
 use grayline_qso::ContactSettings;
-use grayline_shell::config::Document;
+use grayline_shell::config::{self, Document};
 use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
 use toml_edit::{Item, Table, value};
@@ -204,7 +204,7 @@ impl Config {
             station_qth: owned(document, STATION_QTH).unwrap_or_default(),
             station_grid: owned(document, STATION_GRID).unwrap_or_default(),
             qso_number: owned(document, QSO_NUMBER).unwrap_or(defaults.qso_number),
-            custom_variables: custom_variables(document),
+            custom_variables: config::read_strings(document, "variables", valid_variable_name),
             template: owned(document, LIBRARY_TEMPLATE),
             stock: owned(document, LIBRARY_STOCK),
             rx_mode: string(document, RECEIVE_MODE)
@@ -256,7 +256,7 @@ impl Config {
                 set(document, key, (!text.is_empty()).then(|| value(text)));
             }
             set(document, QSO_NUMBER, Some(value(settings.qso_number.as_str())));
-            store_custom_variables(document, &settings.custom_variables);
+            config::write_strings(document, "variables", &settings.custom_variables);
             set(document, LIBRARY_TEMPLATE, settings.template.as_deref().map(value));
             set(document, LIBRARY_STOCK, settings.stock.as_deref().map(value));
             set(document, RECEIVE_MODE, Some(value(settings.rx_mode.spec().name())));
@@ -283,38 +283,6 @@ impl Config {
             settings.rig.write(table_mut(document, "rig"));
             settings.contact.write(table_mut(document, "qso"));
         });
-    }
-}
-
-/// Reads the operator's own template variables.
-///
-/// A name no `${...}` expression could ever hold is dropped rather than
-/// carried around unreadable, which is the same treatment every other
-/// unusable value in the file gets.
-fn custom_variables(document: &Table) -> BTreeMap<String, String> {
-    let Some(table) = document.get("variables").and_then(Item::as_table) else {
-        return BTreeMap::new();
-    };
-    table
-        .iter()
-        .filter(|(name, _)| valid_variable_name(name))
-        .filter_map(|(name, item)| Some((name.to_owned(), item.as_str()?.to_owned())))
-        .collect()
-}
-
-/// Writes the variable table back, leaving the keys that survived in place.
-///
-/// Keys are assigned rather than the table being rebuilt, so a comment written
-/// beside one by hand outlives a save that did not touch it.
-fn store_custom_variables(document: &mut Table, variables: &BTreeMap<String, String>) {
-    if variables.is_empty() {
-        document.remove("variables");
-        return;
-    }
-    let table = table_mut(document, "variables");
-    table.retain(|name, _| variables.contains_key(name));
-    for (name, text) in variables {
-        table[name.as_str()] = value(text);
     }
 }
 

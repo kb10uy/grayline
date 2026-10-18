@@ -1,6 +1,6 @@
-use std::{fs, io, path::PathBuf};
+use std::{collections::BTreeMap, fs, io, path::PathBuf};
 
-use toml_edit::{DocumentMut, Table};
+use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::log;
 
@@ -102,6 +102,44 @@ impl Document {
     }
 }
 
+/// Reads the table `name` as text keyed by name, keeping the names `keep`
+/// accepts.
+///
+/// A name the application could never use is dropped rather than carried
+/// around unreachable, which is the treatment every other unusable value in a
+/// settings file gets; so is an entry that is not text.
+pub fn read_strings(table: &Table, name: &str, keep: impl Fn(&str) -> bool) -> BTreeMap<String, String> {
+    let Some(strings) = table.get(name).and_then(Item::as_table) else {
+        return BTreeMap::new();
+    };
+    strings
+        .iter()
+        .filter(|(key, _)| keep(key))
+        .filter_map(|(key, item)| Some((key.to_owned(), item.as_str()?.to_owned())))
+        .collect()
+}
+
+/// Writes `strings` as the table `name`, leaving the keys that survived in
+/// place, or removes the table when there is nothing to put in it.
+///
+/// Keys are assigned rather than the table being rebuilt, so a comment written
+/// beside one by hand outlives a save that did not touch it.
+pub fn write_strings(table: &mut Table, name: &str, strings: &BTreeMap<String, String>) {
+    if strings.is_empty() {
+        table.remove(name);
+        return;
+    }
+    let entry = table.entry(name).or_insert(Item::Table(Table::new()));
+    if !entry.is_table() {
+        *entry = Item::Table(Table::new());
+    }
+    let stored = entry.as_table_mut().expect("the entry holds a table");
+    stored.retain(|key, _| strings.contains_key(key));
+    for (key, text) in strings {
+        stored[key.as_str()] = value(text.as_str());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
@@ -146,6 +184,22 @@ mod tests {
 
         assert!(document.error().is_some());
         assert_eq!(fs::read_to_string(path).unwrap(), "this is not toml = = =\n");
+    }
+
+    #[test]
+    fn a_string_table_reads_back_what_was_written_and_what_was_kept() {
+        let mut document: DocumentMut = "[names]\n# kept\nold = \"x\"\nbad = 3\n".parse().unwrap();
+        let strings = BTreeMap::from([("old".to_owned(), "y".to_owned()), ("new".to_owned(), "z".to_owned())]);
+
+        write_strings(document.as_table_mut(), "names", &strings);
+
+        assert!(document.to_string().contains("# kept\nold = \"y\""), "{document}");
+        assert_eq!(
+            read_strings(document.as_table(), "names", |key| key != "new"),
+            BTreeMap::from([("old".to_owned(), "y".to_owned())])
+        );
+        write_strings(document.as_table_mut(), "names", &BTreeMap::new());
+        assert!(document.get("names").is_none());
     }
 
     #[test]

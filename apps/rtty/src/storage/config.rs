@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
 use grayline_qso::{ContactSettings, DEFAULT_FIELDS};
-use grayline_shell::config::Document;
+use grayline_shell::config::{self, Document};
 use toml_edit::{Item, Table, value};
 
 use crate::app::macros::{Station, valid_variable_name};
@@ -275,7 +275,7 @@ impl Config {
             // Written once and then left alone. There is no editor for them here,
             // so the file is where they are changed, and rewriting the array on
             // every save would reformat what the operator had written in it.
-            store_custom_variables(table, &settings.custom_variables);
+            config::write_strings(table, "variables", &settings.custom_variables);
             if let Some(qso) = table
                 .entry("qso")
                 .or_insert_with(|| Item::Table(Table::new()))
@@ -354,7 +354,7 @@ fn read(table: &Table) -> Settings {
             grid: field("grid"),
         };
     }
-    settings.custom_variables = read_custom_variables(table);
+    settings.custom_variables = config::read_strings(table, "variables", valid_variable_name);
     settings.contact = ContactSettings::read(table.get("qso").and_then(Item::as_table), Settings::default().contact);
     settings.rig = RigSettings::read(table.get("rig").and_then(Item::as_table), Settings::default().rig);
     settings.keyer = read_keyer(table);
@@ -380,44 +380,6 @@ fn read_keyer(table: &Table) -> KeyerSettings {
             .map(str::trim)
             .filter(|address| !address.is_empty())
             .map_or(defaults.address, str::to_owned),
-    }
-}
-
-/// Reads the operator's own fields.
-///
-/// A name no `${...}` expression could ever hold is dropped rather than
-/// carried around unreachable, which is the treatment every other unusable
-/// value in the file gets.
-fn read_custom_variables(table: &toml_edit::Table) -> BTreeMap<String, String> {
-    let Some(variables) = table.get("variables").and_then(Item::as_table) else {
-        return BTreeMap::new();
-    };
-    variables
-        .iter()
-        .filter(|(name, _)| valid_variable_name(name))
-        .filter_map(|(name, item)| Some((name.to_owned(), item.as_value()?.as_str()?.to_owned())))
-        .collect()
-}
-
-/// Writes the fields back, leaving the keys that survived in place.
-///
-/// Keys are assigned rather than the table being rebuilt, so a comment written
-/// beside one by hand outlives a save that did not touch it.
-fn store_custom_variables(table: &mut Table, variables: &BTreeMap<String, String>) {
-    if variables.is_empty() {
-        table.remove("variables");
-        return;
-    }
-    let Some(stored) = table
-        .entry("variables")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
-    else {
-        return;
-    };
-    stored.retain(|name, _| variables.contains_key(name));
-    for (name, text) in variables {
-        stored[name.as_str()] = value(text.as_str());
     }
 }
 
