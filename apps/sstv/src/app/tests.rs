@@ -37,7 +37,8 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
         Waker::default(),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
-    app.saved = app.settings();
+    app.sync_settings();
+    app.saved = app.settings.clone();
     app
 }
 
@@ -167,7 +168,10 @@ fn a_reception_without_a_candidate_leaves_the_received_image_alone() {
     app.audio.set_snapshot(decoding(10, 100));
     app.poll_workers();
 
-    assert_eq!(*app.composition.received_image, test_pattern_image(app.rx_mode));
+    assert_eq!(
+        *app.composition.received_image,
+        test_pattern_image(app.settings.rx_mode)
+    );
 }
 
 #[test]
@@ -353,11 +357,11 @@ fn an_identifier_after_a_restart_is_adopted_again() {
 #[test]
 fn sync_start_scope_follows_automatic_mode_detection() {
     let mut app = App::headless();
-    app.auto_mode = true;
+    app.settings.auto_mode = true;
     app.poll_workers();
     assert_eq!(app.audio.sync_start(), SyncStart::Any);
 
-    app.auto_mode = false;
+    app.settings.auto_mode = false;
     app.select_rx_mode(Mode::Scottie1);
     app.poll_workers();
     assert_eq!(app.audio.sync_start(), SyncStart::Only(Mode::Scottie1));
@@ -385,11 +389,11 @@ fn a_rig_worker_exists_exactly_while_rig_control_is_switched_on() {
     let mut app = App::headless();
     assert!(app.rig_worker.is_none());
 
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.poll_rig();
     assert!(app.rig_worker.is_some());
 
-    app.rig.enabled = false;
+    app.settings.rig.enabled = false;
     app.poll_rig();
     assert!(app.rig_worker.is_none());
     assert_eq!(app.rig_snapshot.state, RigState::Disconnected);
@@ -428,7 +432,7 @@ fn rig_control_that_is_not_ready_stops_a_transmission(
     #[case] blocked: bool,
 ) {
     let mut app = App::headless();
-    app.rig.enabled = enabled;
+    app.settings.rig.enabled = enabled;
     app.rig_snapshot.state = state;
 
     assert_eq!(app.rig_problem().is_some(), blocked);
@@ -437,7 +441,7 @@ fn rig_control_that_is_not_ready_stops_a_transmission(
 #[test]
 fn a_rig_failure_is_reported_in_the_rig_s_own_words() {
     let mut app = App::headless();
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Failed;
     app.rig_snapshot.error = Some(refused_port());
 
@@ -447,7 +451,7 @@ fn a_rig_failure_is_reported_in_the_rig_s_own_words() {
 }
 
 fn tuned_to(app: &mut App, frequency_hz: u64) {
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Receiving;
     app.rig_snapshot.reading = Some(Reading {
         frequency_hz,
@@ -717,7 +721,7 @@ fn waiting_receiver_keeps_the_retained_frame_fraction() {
 fn selecting_a_mode_replaces_the_raster() {
     let mut app = App::headless();
     app.select_rx_mode(Mode::Robot36);
-    assert_eq!(app.rx_mode, Mode::Robot36);
+    assert_eq!(app.settings.rx_mode, Mode::Robot36);
     assert_eq!(app.rx_raster.size().width(), Mode::Robot36.spec().width() as usize);
     assert_eq!(app.rx_raster.size().height(), Mode::Robot36.spec().height() as usize);
 }
@@ -729,7 +733,7 @@ fn selecting_a_mode_replaces_the_raster() {
 fn dsp_toggles_flip_one_flag(#[case] dsp: Dsp, #[case] expected: bool) {
     let mut app = App::headless();
     app.toggle_dsp(dsp);
-    assert_eq!(app.dsp.get(dsp), expected);
+    assert_eq!(app.settings.dsp.get(dsp), expected);
     if dsp == Dsp::Slant {
         assert_eq!(app.audio.live_slant(), expected);
     }
@@ -761,7 +765,7 @@ fn an_unusable_custom_variable_name_is_kept_out_of_the_composition() {
     app.commit_custom_variables();
 
     assert_eq!(
-        app.custom_variables,
+        app.settings.custom_variables,
         BTreeMap::from([("club".to_owned(), "JARL".to_owned())])
     );
     assert_eq!(app.variables_draft.len(), 2);
@@ -770,14 +774,14 @@ fn an_unusable_custom_variable_name_is_kept_out_of_the_composition() {
 #[test]
 fn slant_is_enabled_by_default_in_the_ui_and_worker_settings() {
     let app = App::headless();
-    assert!(app.dsp.live_slant);
+    assert!(app.settings.dsp.live_slant);
     assert!(app.audio.live_slant());
 }
 
 #[test]
 fn the_vis_restart_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
-    assert!(app.vis_restart);
+    assert!(app.settings.vis_restart);
     assert!(app.audio.vis_restart());
 
     app.set_vis_restart(false);
@@ -788,7 +792,7 @@ fn the_vis_restart_setting_reaches_the_receive_worker() {
 #[test]
 fn the_vis_strict_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
-    assert!(!app.vis_strict);
+    assert!(!app.settings.vis_strict);
     assert!(!app.audio.vis_strict());
 
     app.set_vis_strict(true);
@@ -800,10 +804,10 @@ fn the_vis_strict_setting_reaches_the_receive_worker() {
 fn the_identifier_setting_decides_only_whether_the_callsign_is_sent() {
     let mut app = App::headless();
     app.station.callsign = "!".to_owned();
-    assert!(app.send_fskid);
+    assert!(app.settings.send_fskid);
     assert!(matches!(app.station_id(), Some(Err(_))));
 
-    app.send_fskid = false;
+    app.settings.send_fskid = false;
 
     assert!(app.station_id().is_none());
     let problem = app.transmit_problem().expect("an unusable callsign");
@@ -824,7 +828,8 @@ fn station_details_are_kept_and_normalized() {
     app.normalize_station();
 
     assert_eq!(app.station.callsign, "JA1ABC");
-    let settings = app.settings();
+    app.sync_settings();
+    let settings = app.settings.clone();
     assert_eq!(settings.station_callsign, "JA1ABC");
     assert_eq!(settings.station_qth, "Chiyoda, Tokyo");
     assert_eq!(settings.station_grid, "PM95uq");
@@ -853,7 +858,10 @@ fn custom_variables_are_kept_exactly_as_they_were_entered() {
 
     app.commit_custom_variables();
 
-    assert_eq!(app.custom_variables.get("club").map(String::as_str), Some("  JARL  "));
+    assert_eq!(
+        app.settings.custom_variables.get("club").map(String::as_str),
+        Some("  JARL  ")
+    );
 }
 
 #[test]
@@ -892,7 +900,8 @@ fn a_serial_that_is_not_a_number_is_left_alone() {
 fn the_serial_number_is_reset_and_kept() {
     let mut app = App::headless();
     app.qso.number = "042".to_owned();
-    assert_eq!(app.settings().qso_number, "042");
+    app.sync_settings();
+    assert_eq!(app.settings.qso_number, "042");
 
     app.reset_number();
     assert_eq!(app.qso.number, FIRST_QSO_NUMBER);
@@ -907,7 +916,7 @@ fn the_serial_number_is_reset_and_kept() {
 #[case("123456789", None)]
 fn the_contest_number_is_sent_as_the_record_can_hold_it(#[case] typed: &str, #[case] expected: Option<&str>) {
     let mut app = App::headless();
-    app.contest_mode = true;
+    app.settings.contest_mode = true;
     app.qso.number = typed.to_owned();
 
     let number = app.contest_number();
@@ -920,7 +929,7 @@ fn no_contest_number_is_sent_outside_contest_mode() {
     let mut app = App::headless();
     app.qso.number = "001".to_owned();
 
-    assert!(!app.contest_mode);
+    assert!(!app.settings.contest_mode);
     assert_eq!(app.contest_number(), None);
 }
 
@@ -980,9 +989,9 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
     app.select_locale(Locale::Ja);
     app.select_rx_mode(Mode::Robot36);
     app.toggle_dsp(Dsp::Lms);
-    app.auto_mode = false;
-    app.auto_history = false;
-    app.history_format = crate::storage::history::HistoryFormat::Jpeg;
+    app.settings.auto_mode = false;
+    app.settings.auto_history = false;
+    app.settings.history_format = crate::storage::history::HistoryFormat::Jpeg;
     app.select_tx_mode(Mode::Martin1);
     app.station.callsign = "JA1ABC".to_owned();
     app.library.template = Some(1);
@@ -996,12 +1005,15 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
     next.restore_selection(&restored);
 
     assert_eq!(next.i18n.locale(), Locale::Ja);
-    assert_eq!(next.rx_mode, Mode::Robot36);
-    assert_eq!(next.tx_mode, Mode::Martin1);
-    assert!(next.dsp.lms_filter);
-    assert!(!next.auto_mode);
-    assert!(!next.auto_history);
-    assert_eq!(next.history_format, crate::storage::history::HistoryFormat::Jpeg);
+    assert_eq!(next.settings.rx_mode, Mode::Robot36);
+    assert_eq!(next.settings.tx_mode, Mode::Martin1);
+    assert!(next.settings.dsp.lms_filter);
+    assert!(!next.settings.auto_mode);
+    assert!(!next.settings.auto_history);
+    assert_eq!(
+        next.settings.history_format,
+        crate::storage::history::HistoryFormat::Jpeg
+    );
     assert_eq!(next.station.callsign, "JA1ABC");
     assert_eq!(next.library.templates[next.library.template.unwrap()].name, "beta.kdl");
     assert_eq!(next.library.stocks[next.library.stock.unwrap()].name, "second.png");
@@ -1030,7 +1042,8 @@ fn transient_state_is_not_written_to_the_configuration_file() {
 
     let mut app = disconnected(paths.clone(), &Settings::default());
     app.refresh_library();
-    app.saved = app.settings();
+    app.sync_settings();
+    app.saved = app.settings.clone();
     app.tab = Tab::Transmit;
     app.qso.call = "JA1XYZ".to_owned();
     app.poll_workers();
@@ -1046,7 +1059,8 @@ fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
 
     let mut app = disconnected(paths.clone(), &Settings::default());
     app.refresh_library();
-    app.saved = app.settings();
+    app.sync_settings();
+    app.saved = app.settings.clone();
     app.select_locale(Locale::Ja);
     app.persist();
     let written = fs::metadata(paths.config_file()).unwrap().modified().unwrap();
@@ -1159,8 +1173,14 @@ size width=(fw)100 height=(fh)100 fit="stretch"
 
     composed(&mut app);
 
-    assert_eq!(app.tx_raster.size().width(), app.tx_mode.spec().width() as usize);
-    assert_eq!(app.tx_raster.size().height(), app.tx_mode.spec().height() as usize);
+    assert_eq!(
+        app.tx_raster.size().width(),
+        app.settings.tx_mode.spec().width() as usize
+    );
+    assert_eq!(
+        app.tx_raster.size().height(),
+        app.settings.tx_mode.spec().height() as usize
+    );
     assert!(app.transmit_problem().is_none() || app.audio.output_device.is_none());
 }
 
@@ -1250,7 +1270,7 @@ fn a_running_tone_schedules_frames() {
 #[test]
 fn the_shortest_interval_wins() {
     let mut app = App::headless();
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     assert_eq!(app.repaint_after(), Some(WATCH_INTERVAL));
 
     app.tune_for_test();

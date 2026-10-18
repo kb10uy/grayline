@@ -33,7 +33,7 @@ use grayline_shell::{
 use crate::{
     error::AppError,
     storage::{
-        config::{Config, ContactSettings, RigSettings, Settings},
+        config::{Config, Settings},
         paths::{AppPaths, Folder},
     },
     ui::raster::{Raster, test_pattern_image},
@@ -156,35 +156,19 @@ pub struct App {
     pub tab: Tab,
     pub i18n: I18n,
     pub audio: AudioState,
-    pub auto_mode: bool,
-    pub rx_mode: Mode,
-    pub tx_mode: Mode,
+    /// What the operator chose, as it is saved.
+    ///
+    /// The panels and the menus edit this directly. The station, the serial
+    /// number, the library selection, and the devices are kept where they are
+    /// worked with and copied in when the settings are persisted. Only whether
+    /// to connect the rig and whether to look a contact up are the interface's
+    /// to change: the rest of those two sections belongs to the station and is
+    /// edited in the configuration file.
+    pub settings: Settings,
     pub rx_modes: Vec<Mode>,
     pub tx_modes: Vec<Mode>,
-    pub dsp: DspFlags,
-    /// Whether a VIS header may start a reception over.
-    pub vis_restart: bool,
-    /// Whether a VIS detection requires the header's leader tone as well.
-    pub vis_strict: bool,
-    pub send_fskid: bool,
-    /// Whether the serial number is worked and sent with that identifier.
-    ///
-    /// One switch for the whole exchange: a station giving out numbers sends
-    /// them, and a station that is not has no serial to count either, so the
-    /// panel's number field and its buttons follow this too.
-    pub contest_mode: bool,
-    /// How far along its travel the transmit level fader sits, in `0.0..=1.0`.
-    ///
-    /// Held here for the interface, and converted into the amplitude a
-    /// transmission is scaled by in [`App::tx_gain`], which is what a running
-    /// transmission reads.
-    pub tx_volume: f32,
-    pub auto_history: bool,
-    pub history_format: crate::storage::history::HistoryFormat,
     pub qso: Qso,
     pub station: Station,
-    /// The operator's own template variables, offered as `${custom.<name>}`.
-    pub custom_variables: BTreeMap<String, String>,
     pub variables_dialog_open: bool,
     /// The rows that dialog is editing.
     ///
@@ -214,19 +198,6 @@ pub struct App {
     /// Held here rather than read from egui because it has to be restored
     /// before the first frame is laid out.
     pub ui_scale: f32,
-    /// How the rig is reached and what it is told.
-    ///
-    /// Only whether to connect is the interface's to change; the address, the
-    /// timings, and the commands are edited in the configuration file, because
-    /// what a rig needs is a station's own business rather than something a
-    /// menu could offer a list of.
-    pub rig: RigSettings,
-    /// Where the contact directory looks a callsign up.
-    ///
-    /// Only whether to look one up is the interface's to change, for the same
-    /// reason the rig's address is not: the instance and the key belong to the
-    /// station rather than to a list a menu could offer.
-    pub contact_settings: ContactSettings,
     /// The thread that reads and writes the contact directory.
     pub contact: ContactWorker,
     /// What that thread last found, read once per frame.
@@ -437,7 +408,8 @@ impl App {
         app.refresh_library();
         app.restore_selection(&settings);
         app.request_composition();
-        app.saved = app.settings();
+        app.sync_settings();
+        app.saved = app.settings.clone();
         app
     }
 
@@ -488,20 +460,10 @@ impl App {
             tab: Tab::default(),
             i18n: I18n::new(shared.locale, &crate::locales::CATALOG),
             audio,
-            auto_mode: settings.auto_mode,
-            rx_mode: settings.rx_mode,
-            tx_mode: settings.tx_mode,
+            settings: settings.clone(),
             rx_modes: modes(|mode| mode.spec().decode_support()),
             tx_modes: modes(|mode| mode.spec().encode_support()),
-            dsp: settings.dsp,
-            vis_restart: settings.vis_restart,
-            vis_strict: settings.vis_strict,
-            send_fskid: settings.send_fskid,
-            contest_mode: settings.contest_mode,
-            tx_volume: settings.tx_volume,
             tx_gain: Arc::new(TxGain::from_travel(settings.tx_volume)),
-            auto_history: settings.auto_history,
-            history_format: settings.history_format,
             qso: Qso {
                 number: settings.qso_number.trim().to_owned(),
                 ..Qso::default()
@@ -512,7 +474,6 @@ impl App {
                 grid: settings.station_grid.trim().to_owned(),
                 open: false,
             },
-            custom_variables: settings.custom_variables.clone(),
             variables_dialog_open: false,
             variables_draft: Vec::new(),
             library: Library {
@@ -531,7 +492,6 @@ impl App {
             tx_error: None,
             device_fault: None,
             ui_scale: shared.ui_scale,
-            rig: settings.rig.clone(),
             contact: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
@@ -539,7 +499,6 @@ impl App {
             contact_paths,
             contact_waker: waker,
             contact_requested: String::new(),
-            contact_settings: settings.contact.clone(),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -587,31 +546,18 @@ impl App {
         self.library.stock = index_of(&self.library.stocks, settings.stock.as_deref()).or(self.library.stock);
     }
 
-    fn settings(&self) -> Settings {
-        Settings {
-            input_device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
-            output_device: self.audio.output_device.as_ref().map(|device| device.name().to_owned()),
-            station_callsign: self.station.callsign.clone(),
-            station_qth: self.station.qth.clone(),
-            station_grid: self.station.grid.clone(),
-            qso_number: self.qso.number.clone(),
-            custom_variables: self.custom_variables.clone(),
-            template: selected_name(&self.library.templates, self.library.template),
-            stock: selected_name(&self.library.stocks, self.library.stock),
-            rx_mode: self.rx_mode,
-            tx_mode: self.tx_mode,
-            auto_mode: self.auto_mode,
-            dsp: self.dsp,
-            vis_restart: self.vis_restart,
-            vis_strict: self.vis_strict,
-            send_fskid: self.send_fskid,
-            contest_mode: self.contest_mode,
-            tx_volume: self.tx_volume,
-            auto_history: self.auto_history,
-            history_format: self.history_format,
-            rig: self.rig.clone(),
-            contact: self.contact_settings.clone(),
-        }
+    /// Copies what is kept elsewhere into the settings: the devices that are
+    /// actually open, the station, the serial number, and the library
+    /// selection.
+    fn sync_settings(&mut self) {
+        self.settings.input_device = self.audio.device.as_ref().map(|device| device.name().to_owned());
+        self.settings.output_device = self.audio.output_device.as_ref().map(|device| device.name().to_owned());
+        self.settings.station_callsign.clone_from(&self.station.callsign);
+        self.settings.station_qth.clone_from(&self.station.qth);
+        self.settings.station_grid.clone_from(&self.station.grid);
+        self.settings.qso_number.clone_from(&self.qso.number);
+        self.settings.template = selected_name(&self.library.templates, self.library.template);
+        self.settings.stock = selected_name(&self.library.stocks, self.library.stock);
     }
 
     /// Writes the settings back when anything the interface owns has changed.
@@ -625,10 +571,10 @@ impl App {
             locale: self.i18n.locale(),
             ui_scale: self.ui_scale,
         });
-        let settings = self.settings();
-        if settings != self.saved {
-            self.config.store(&settings);
-            self.saved = settings;
+        self.sync_settings();
+        if self.settings != self.saved {
+            self.config.store(&self.settings);
+            self.saved = self.settings.clone();
         }
     }
 
@@ -683,15 +629,15 @@ impl App {
     }
 
     pub fn select_rx_mode(&mut self, mode: Mode) {
-        if mode != self.rx_mode {
-            self.rx_mode = mode;
+        if mode != self.settings.rx_mode {
+            self.settings.rx_mode = mode;
             self.rx_raster = Raster::blank(mode);
         }
     }
 
     pub fn select_tx_mode(&mut self, mode: Mode) {
-        if mode != self.tx_mode {
-            self.tx_mode = mode;
+        if mode != self.settings.tx_mode {
+            self.settings.tx_mode = mode;
             self.tx_raster = Raster::test_pattern(mode);
             self.composition.frame = None;
             self.request_composition();
@@ -703,7 +649,7 @@ impl App {
     /// Pushed to the receive worker at once rather than on the next frame, so
     /// the change applies to the reception in progress.
     pub fn set_vis_restart(&mut self, enabled: bool) {
-        self.vis_restart = enabled;
+        self.settings.vis_restart = enabled;
         self.audio.set_vis_restart(enabled);
     }
 
@@ -712,7 +658,7 @@ impl App {
     /// Pushed to the receive worker at once rather than on the next frame, so
     /// the change applies to the signal search in progress.
     pub fn set_vis_strict(&mut self, enabled: bool) {
-        self.vis_strict = enabled;
+        self.settings.vis_strict = enabled;
         self.audio.set_vis_strict(enabled);
     }
 
@@ -728,9 +674,9 @@ impl App {
     }
 
     pub fn toggle_dsp(&mut self, dsp: Dsp) {
-        self.dsp.toggle(dsp);
+        self.settings.dsp.toggle(dsp);
         if dsp == Dsp::Slant {
-            self.audio.set_live_slant(self.dsp.live_slant);
+            self.audio.set_live_slant(self.settings.dsp.live_slant);
         }
     }
 
@@ -815,7 +761,7 @@ impl App {
     /// A control that would do nothing is not offered: with the lookup off, or
     /// with no instance and no key configured, there is nobody to ask again.
     pub fn can_refresh_contact(&self) -> bool {
-        self.contact_settings.lookup && grayline_qso::normalize_callsign(&self.qso.call).is_some()
+        self.settings.contact.lookup && grayline_qso::normalize_callsign(&self.qso.call).is_some()
     }
 
     /// Opens the dialog on what is filed under the callsign being worked.
@@ -827,7 +773,7 @@ impl App {
     /// Anything else already filed follows, under its own name.
     pub fn open_contact(&mut self) {
         let known = &self.contact_snapshot.fields;
-        let offered = grayline_qso::expand_fields(self.contact_settings.fields.iter().map(String::as_str));
+        let offered = grayline_qso::expand_fields(self.settings.contact.fields.iter().map(String::as_str));
         let mut draft: Vec<ContactRow> = offered
             .iter()
             .map(|key| ContactRow {
@@ -898,11 +844,11 @@ impl App {
     /// directory composed over a logger or over nothing, and which of those it
     /// is was decided when it was built.
     pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.contact_settings.lookup == lookup {
+        if self.settings.contact.lookup == lookup {
             return;
         }
-        self.contact_settings.lookup = lookup;
-        self.contact = contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+        self.settings.contact.lookup = lookup;
+        self.contact = contact::spawn(&self.settings.contact, &self.contact_paths, self.contact_waker.clone());
         self.contact_snapshot = ContactSnapshot::default();
         self.contact_requested.clear();
         self.look_up_contact();
@@ -919,7 +865,7 @@ impl App {
         let written = if path.exists() {
             Ok(path)
         } else {
-            grayline_qso::Credentials::write(&path, Some(&self.contact_settings.wavelog_url), "")
+            grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
                 .map(|()| path)
                 .map_err(|error| io::Error::other(error.to_string()))
         };
@@ -969,6 +915,7 @@ impl App {
 
     pub fn open_custom_variables(&mut self) {
         self.variables_draft = self
+            .settings
             .custom_variables
             .iter()
             .map(|(name, value)| (name.clone(), value.clone()))
@@ -993,8 +940,8 @@ impl App {
             .filter(|(name, _)| valid_variable_name(name))
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect();
-        if variables != self.custom_variables {
-            self.custom_variables = variables;
+        if variables != self.settings.custom_variables {
+            self.settings.custom_variables = variables;
             self.request_composition();
         }
     }
@@ -1079,7 +1026,7 @@ impl App {
     /// down, so quitting right after a reception still keeps it.
     fn save_history_in_background(&mut self, candidate: crate::worker::receive::HistoryCandidate) {
         let directory = self.paths.received_dir().to_path_buf();
-        let format = self.history_format;
+        let format = self.settings.history_format;
         let spawned = thread::Builder::new()
             .name("grayline-sstv-history".to_owned())
             .spawn(move || {
@@ -1162,7 +1109,7 @@ impl App {
         }
         // Nothing in a snapshot reports a device that stopped, and a rig is
         // read by polling, so both are watched for rather than waited on.
-        if self.audio.is_capturing() || self.rig.enabled {
+        if self.audio.is_capturing() || self.settings.rig.enabled {
             at_most(WATCH_INTERVAL);
         }
         soonest
@@ -1180,7 +1127,7 @@ impl App {
         }
         if let Some(candidate) = self.audio.take_history() {
             self.adopt_received_image(&candidate.frame);
-            if self.auto_history {
+            if self.settings.auto_history {
                 self.save_history_in_background(candidate);
             }
         }
@@ -1194,10 +1141,10 @@ impl App {
         self.adopt_decoded_callsign();
         self.adopt_decoded_number();
         self.audio.set_sync_start(self.sync_start());
-        self.audio.set_vis_restart(self.vis_restart);
-        self.audio.set_vis_strict(self.vis_strict);
-        self.tx_gain.set_travel(self.tx_volume);
-        if self.auto_mode
+        self.audio.set_vis_restart(self.settings.vis_restart);
+        self.audio.set_vis_strict(self.settings.vis_strict);
+        self.tx_gain.set_travel(self.settings.tx_volume);
+        if self.settings.auto_mode
             && let Some(mode) = self.audio.snapshot().mode
         {
             self.select_rx_mode(mode);
@@ -1222,10 +1169,10 @@ impl App {
     /// here rather than through a path of its own: a worker exists exactly
     /// while the operator has asked for one.
     fn poll_rig(&mut self) {
-        match (self.rig.enabled, self.rig_worker.is_some()) {
+        match (self.settings.rig.enabled, self.rig_worker.is_some()) {
             (true, false) => {
                 let worker = RigWorker::spawn(
-                    &self.rig,
+                    &self.settings.rig,
                     self.paths.config_dir(),
                     Arc::clone(&self.bands),
                     grayline_shell::log::note,
@@ -1256,7 +1203,7 @@ impl App {
     /// worker, and switching off mid-transmission is what gives the keying
     /// back before the connection goes.
     pub const fn set_rig_enabled(&mut self, enabled: bool) {
-        self.rig.enabled = enabled;
+        self.settings.rig.enabled = enabled;
     }
 
     /// Makes the connection again after it failed.
@@ -1383,10 +1330,10 @@ impl App {
     /// mode may be inferred, and with it off only the selected mode is
     /// considered, which confirms rather than overrides that choice.
     const fn sync_start(&self) -> SyncStart {
-        if self.auto_mode {
+        if self.settings.auto_mode {
             SyncStart::Any
         } else {
-            SyncStart::Only(self.rx_mode)
+            SyncStart::Only(self.settings.rx_mode)
         }
     }
 
@@ -1538,8 +1485,8 @@ impl App {
 
     pub const fn active_mode(&self) -> Mode {
         match self.tab {
-            Tab::Transmit => self.tx_mode,
-            Tab::Receive => self.rx_mode,
+            Tab::Transmit => self.settings.tx_mode,
+            Tab::Receive => self.settings.rx_mode,
         }
     }
 
@@ -1599,7 +1546,7 @@ impl App {
             template_path: template.path.clone(),
             background_path: stock.path.clone(),
             assets_dir: self.paths.assets_dir().to_path_buf(),
-            mode: self.tx_mode,
+            mode: self.settings.tx_mode,
             received_image: self.composition.received_image.clone(),
             received_at: self.composition.received_at.clone(),
             station_callsign: self.station.callsign.clone(),
@@ -1610,7 +1557,7 @@ impl App {
             report: self.qso.rsv.clone(),
             number: self.qso.number.clone(),
             report_received: self.qso.rsv_received.clone(),
-            custom: self.custom_variables.clone(),
+            custom: self.settings.custom_variables.clone(),
             radio: self.composition.reading.clone(),
         });
     }
@@ -1734,7 +1681,7 @@ impl App {
     /// A rig that was asked to key and did not leaves a transmission nobody
     /// hears, so it stops one rather than being let through quietly.
     fn rig_problem(&self) -> Option<String> {
-        if !self.rig.enabled || self.rig_snapshot.state.is_ready() {
+        if !self.settings.rig.enabled || self.rig_snapshot.state.is_ready() {
             return None;
         }
         let detail = self.rig_snapshot.error.as_ref().map_or_else(
@@ -1748,7 +1695,9 @@ impl App {
     }
 
     fn station_id(&self) -> Option<Result<FskId, grayline_sstv_fskid::FskIdError>> {
-        self.send_fskid.then(|| FskId::new(self.station.callsign.trim()))
+        self.settings
+            .send_fskid
+            .then(|| FskId::new(self.station.callsign.trim()))
     }
 
     /// Returns the contest number that identifier would carry, if any.
@@ -1758,7 +1707,7 @@ impl App {
     /// that still does not fit is left off rather than refused: the picture is
     /// what the transmission is for.
     fn contest_number(&self) -> Option<FskNumber> {
-        if !self.contest_mode {
+        if !self.settings.contest_mode {
             return None;
         }
         let text: String = self
@@ -1796,7 +1745,7 @@ impl App {
         };
         self.tx.attach_worker(TxWorker::spawn(
             writer,
-            self.tx_mode,
+            self.settings.tx_mode,
             frame,
             identification,
             Arc::clone(&self.tx_gain),
@@ -1822,7 +1771,7 @@ impl App {
         };
         self.tx_error = None;
         self.tx.begin(playback);
-        self.tx_gain.set_travel(self.tx_volume);
+        self.tx_gain.set_travel(self.settings.tx_volume);
         // Asked for before the audio is generated, so the lead-in the rig
         // needs runs alongside filling the queue rather than after it.
         if let Some(worker) = self.rig_worker.as_ref() {

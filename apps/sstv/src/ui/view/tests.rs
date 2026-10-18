@@ -56,7 +56,7 @@ fn every_locale_renders(#[case] locale: Locale) {
 #[test]
 fn the_variable_dialog_renders_a_row_for_every_name() {
     let mut app = App::headless();
-    app.custom_variables = std::collections::BTreeMap::from([
+    app.settings.custom_variables = std::collections::BTreeMap::from([
         ("club".to_owned(), "JARL".to_owned()),
         ("rig".to_owned(), "FT-991A".to_owned()),
     ]);
@@ -97,7 +97,7 @@ fn the_contact_dialog_renders_every_kind_of_row() {
 #[test]
 fn the_dialog_offers_the_fields_the_settings_asked_for() {
     let mut app = App::headless();
-    app.contact_settings.fields = vec!["!ja".to_owned()];
+    app.settings.contact.fields = vec!["!ja".to_owned()];
     app.qso.call = "JA1ABC".to_owned();
     app.contact_snapshot.callsign = "JA1ABC".to_owned();
 
@@ -114,7 +114,7 @@ fn the_dialog_offers_the_fields_the_settings_asked_for() {
 #[test]
 fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
     let mut app = App::headless();
-    app.contact_settings.fields = vec!["oblast".to_owned()];
+    app.settings.contact.fields = vec!["oblast".to_owned()];
     app.qso.call = "JA1ABC".to_owned();
     app.contact_snapshot.callsign = "JA1ABC".to_owned();
 
@@ -172,7 +172,7 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
         harness.get_by_label(&retry);
     }
 
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Receiving;
     app.rig_snapshot.reading = Some(grayline_rig_control::Reading {
         frequency_hz: 7_100_000,
@@ -203,7 +203,7 @@ fn the_transmit_tab_keeps_mode_detection_visible_but_inactive() {
     let mut app = App::headless();
     app.tab = Tab::Transmit;
     let automatic = app.i18n.text("label-auto-vis");
-    let before = app.auto_mode;
+    let before = app.settings.auto_mode;
 
     {
         let mut harness = render(&mut app);
@@ -211,7 +211,7 @@ fn the_transmit_tab_keeps_mode_detection_visible_but_inactive() {
         harness.run();
     }
 
-    assert_eq!(app.auto_mode, before);
+    assert_eq!(app.settings.auto_mode, before);
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn the_qso_panel_reads_from_the_call_down_to_the_report_being_sent() {
 #[test]
 fn the_serial_number_buttons_work_it() {
     let mut app = App::headless();
-    app.contest_mode = true;
+    app.settings.contest_mode = true;
     app.qso.number = "007".to_owned();
     let increment = app.i18n.text("qso-nr-increment");
     let reset = app.i18n.text("qso-nr-reset");
@@ -256,7 +256,7 @@ fn the_serial_number_buttons_work_it() {
 #[test]
 fn the_serial_number_is_inert_outside_contest_mode() {
     let mut app = App::headless();
-    assert!(!app.contest_mode);
+    assert!(!app.settings.contest_mode);
     let increment = app.i18n.text("qso-nr-increment");
     let reset = app.i18n.text("qso-nr-reset");
 

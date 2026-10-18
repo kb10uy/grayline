@@ -89,12 +89,12 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-send-fskid"),
-                            checked: app.send_fskid,
+                            checked: app.settings.send_fskid,
                             action: Action::ToggleSendFskid,
                         },
                         Item::Check {
                             label: text("action-contest-mode"),
-                            checked: app.contest_mode,
+                            checked: app.settings.contest_mode,
                             action: Action::ToggleContestMode,
                         },
                     ],
@@ -104,12 +104,12 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-vis-restart"),
-                            checked: app.vis_restart,
+                            checked: app.settings.vis_restart,
                             action: Action::ToggleVisRestart,
                         },
                         Item::Check {
                             label: text("action-vis-strict"),
-                            checked: app.vis_strict,
+                            checked: app.settings.vis_strict,
                             action: Action::ToggleVisStrict,
                         },
                     ],
@@ -123,7 +123,7 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-contact-lookup"),
-                            checked: app.contact_settings.lookup,
+                            checked: app.settings.contact.lookup,
                             action: Action::ToggleContactLookup,
                         },
                         Item::Command {
@@ -179,14 +179,14 @@ fn history_items(app: &App) -> Vec<Item> {
     let mut items = vec![
         Item::Check {
             label: app.i18n.text("action-auto-history"),
-            checked: app.auto_history,
+            checked: app.settings.auto_history,
             action: Action::ToggleAutoHistory,
         },
         Item::Separator,
     ];
     items.extend(HistoryFormat::ALL.into_iter().map(|format| Item::Check {
         label: app.i18n.text(format.label_key()),
-        checked: app.history_format == format,
+        checked: app.settings.history_format == format,
         action: Action::SelectHistoryFormat(format),
     }));
     items
@@ -220,16 +220,16 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::SelectLocale(locale) => app.select_locale(locale),
         Action::ShowStation => app.station.open = true,
         Action::ShowCustomVariables => app.open_custom_variables(),
-        Action::ToggleSendFskid => app.send_fskid = !app.send_fskid,
-        Action::ToggleContestMode => app.contest_mode = !app.contest_mode,
-        Action::ToggleVisRestart => app.set_vis_restart(!app.vis_restart),
-        Action::ToggleVisStrict => app.set_vis_strict(!app.vis_strict),
-        Action::ToggleContactLookup => app.set_contact_lookup(!app.contact_settings.lookup),
+        Action::ToggleSendFskid => app.settings.send_fskid = !app.settings.send_fskid,
+        Action::ToggleContestMode => app.settings.contest_mode = !app.settings.contest_mode,
+        Action::ToggleVisRestart => app.set_vis_restart(!app.settings.vis_restart),
+        Action::ToggleVisStrict => app.set_vis_strict(!app.settings.vis_strict),
+        Action::ToggleContactLookup => app.set_contact_lookup(!app.settings.contact.lookup),
         Action::WriteContactCredentials => app.write_contact_credentials(),
         Action::WriteRigScript => app.write_rig_script(),
         Action::WriteBandPlan => app.write_band_plan(),
-        Action::ToggleAutoHistory => app.auto_history = !app.auto_history,
-        Action::SelectHistoryFormat(format) => app.history_format = format,
+        Action::ToggleAutoHistory => app.settings.auto_history = !app.settings.auto_history,
+        Action::SelectHistoryFormat(format) => app.settings.history_format = format,
         Action::OpenManual => app.open_manual(),
         Action::ZoomIn => app.zoom_by(shared_menu::ZOOM_STEP),
         Action::ZoomOut => app.zoom_by(-shared_menu::ZOOM_STEP),
