@@ -1,3 +1,5 @@
+use grayline_dsp::stream::ceil_sample;
+
 use crate::{SstvError, time::samples_spanned};
 
 #[derive(Clone, Copy, Debug)]
@@ -64,12 +66,6 @@ impl RasterClock {
         self.source_epoch = epoch;
         Ok(())
     }
-}
-
-/// Returns the first whole sample at or after a non-negative sample position.
-pub(super) fn ceil_sample(position: f64) -> u64 {
-    let whole = position as u64;
-    whole + u64::from((whole as f64) < position)
 }
 
 #[cfg(test)]

@@ -2237,6 +2237,7 @@ name = "grayline-sstv"
 version = "0.6.0-beta.1"
 dependencies = [
  "criterion",
+ "grayline-dsp",
  "grayline-sstv-fskid",
  "libm",
  "proptest",

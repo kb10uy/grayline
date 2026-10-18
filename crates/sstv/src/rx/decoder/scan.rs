@@ -1,5 +1,7 @@
 use core::ops::Range;
 
+use grayline_dsp::stream::guarded_window;
+
 use super::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -27,10 +29,6 @@ impl Raster {
     }
 
     /// Returns the half-open sample range averaged for one transmitted pixel.
-    ///
-    /// A narrow edge guard excludes samples that can belong to an adjacent
-    /// component after sub-sample rounding. Pixels too short to contain a
-    /// guarded sample fall back to the reading nearest their centre.
     pub(super) fn pixel_window(
         &self,
         clock: RasterClock,
@@ -45,17 +43,7 @@ impl Raster {
             let protocol = u64::try_from(protocol).map_err(|_| SstvError::TimeOverflow)?;
             clock.position_at(protocol)
         };
-        let left = edge(x as u128)?;
-        let right = edge(x as u128 + 1)?;
-        let guard = (right - left) * PIXEL_GUARD;
-        let first = ceil_sample(left + guard);
-        let end = ceil_sample(right - guard);
-        if end > first {
-            Ok((first, end))
-        } else {
-            let center = ceil_sample((left + right) * 0.5 - 0.5);
-            Ok((center, center + 1))
-        }
+        Ok(guarded_window(edge(x as u128)?, edge(x as u128 + 1)?))
     }
 
     pub(super) fn selector_window(&self, clock: RasterClock, unit: usize) -> Result<(u64, u64), SstvError> {

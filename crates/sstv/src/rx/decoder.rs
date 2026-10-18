@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     acquisition::{acquire_full, acquire_startup, startup_window_samples},
-    clock::{RasterClock, ceil_sample},
+    clock::RasterClock,
     config::{RasterStart, RxConfig, Staging},
     event::{RxEvent, RxOutcome, RxProcessResult, RxState, StopReason},
     input::{DemodulatedBlock, SampleBuffer},
@@ -44,7 +44,6 @@ const LIVE_SLANT_MIN_THRESHOLD_PPM: f64 = 8.0;
 const PHASE_AGREEMENT: usize = 3;
 const PHASE_HOLDOFF_UNITS: usize = 6;
 const MIN_PHASE_DISPLACEMENT: u64 = 2;
-const PIXEL_GUARD: f64 = 0.1875;
 
 /// Result of rebuilding an image from staged immutable samples.
 #[derive(Clone, Copy, Debug, PartialEq)]

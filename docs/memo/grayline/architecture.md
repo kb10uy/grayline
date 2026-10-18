@@ -408,7 +408,7 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-keyer-protocol` | `grayline-rig`, `grayline-rtty` |
 | `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
 | `grayline-shell` | None |
-| `grayline-sstv` | `grayline-sstv-fskid` |
+| `grayline-sstv` | `grayline-dsp`, `grayline-sstv-fskid` |
 | `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
 | `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx`, `grayline-wav` |
 | `grayline-sstv-fskid` | None |
@@ -491,6 +491,12 @@ of the WAV receive path; that path uses the Hilbert phase-difference
 discriminator. The moving average and the peak normalizer are the RTTY
 integrator and level stage, the latter lifted from the SSTV front end when the
 second caller for it appeared.
+
+`stream::SampleRing` and `stream::guarded_window` are what the SSTV and WEFAX
+decoders read pixels from: demodulated values held at absolute stream
+positions and read back as at most two contiguous runs, and the guarded sample
+range a pixel is averaged over. The two decoders had each carried their own copy
+of both, with the same guard and the same centre fallback.
 
 `frequency::HilbertDiscriminator` and `detector::ToneDetector` were the SSTV
 front end's own until a second mode needed them, which is the point at which

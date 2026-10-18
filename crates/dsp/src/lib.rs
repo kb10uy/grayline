@@ -21,6 +21,9 @@ pub mod frequency;
 pub mod level;
 /// Oscillators and voltage-controlled oscillators.
 pub mod oscillator;
+/// Demodulated samples retained at absolute stream positions, and the sample
+/// ranges a pixel is averaged over.
+pub mod stream;
 /// Discrete Fourier and Hilbert transforms.
 pub mod transform;
 

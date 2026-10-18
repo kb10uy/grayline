@@ -1,4 +1,4 @@
-use alloc::collections::VecDeque;
+use grayline_dsp::stream::SampleRing;
 
 use crate::SstvError;
 
@@ -103,16 +103,6 @@ pub(super) fn load_sync(stored: u8) -> f32 {
     f32::from(stored) / f32::from(u8::MAX)
 }
 
-fn split_runs<'a, T>(head: &'a [T], tail: &'a [T], start: usize, stop: usize) -> [&'a [T]; 2] {
-    if stop <= head.len() {
-        [&head[start..stop], &[]]
-    } else if start >= head.len() {
-        [&tail[start - head.len()..stop - head.len()], &[]]
-    } else {
-        [&head[start..], &tail[..stop - head.len()]]
-    }
-}
-
 /// Demodulated samples at contiguous absolute positions, in a retained form.
 ///
 /// The values are quantized on the way in and read back as the floats every
@@ -120,17 +110,15 @@ fn split_runs<'a, T>(head: &'a [T], tail: &'a [T], start: usize, stop: usize) ->
 /// [`FREQUENCY_SCALE`] for what that resolution buys.
 #[derive(Clone, Debug)]
 pub(super) struct SampleBuffer {
-    first: u64,
-    frequency: VecDeque<u16>,
-    sync: VecDeque<u8>,
+    frequency: SampleRing<u16>,
+    sync: SampleRing<u8>,
 }
 
 impl SampleBuffer {
     pub(super) fn new(first: u64) -> Self {
         Self {
-            first,
-            frequency: VecDeque::new(),
-            sync: VecDeque::new(),
+            frequency: SampleRing::new(first),
+            sync: SampleRing::new(first),
         }
     }
 
@@ -142,18 +130,17 @@ impl SampleBuffer {
     /// keeps the peak down to what is actually held.
     pub(super) fn with_capacity(first: u64, samples: usize) -> Self {
         Self {
-            first,
-            frequency: VecDeque::with_capacity(samples),
-            sync: VecDeque::with_capacity(samples),
+            frequency: SampleRing::with_capacity(first, samples),
+            sync: SampleRing::with_capacity(first, samples),
         }
     }
 
     pub(super) fn first(&self) -> u64 {
-        self.first
+        self.frequency.first()
     }
 
     pub(super) fn end(&self) -> u64 {
-        self.first + self.frequency.len() as u64
+        self.frequency.end()
     }
 
     pub(super) fn len(&self) -> usize {
@@ -171,8 +158,7 @@ impl SampleBuffer {
     }
 
     pub(super) fn frequency(&self, sample: u64) -> Option<f32> {
-        let index = usize::try_from(sample.checked_sub(self.first)?).ok()?;
-        self.frequency.get(index).copied().map(load_frequency)
+        self.frequency.get(sample).map(load_frequency)
     }
 
     /// Returns how many synchronization strengths are retained.
@@ -182,8 +168,7 @@ impl SampleBuffer {
 
     #[cfg(test)]
     pub(super) fn sync(&self, sample: u64) -> Option<f32> {
-        let index = usize::try_from(sample.checked_sub(self.first)?).ok()?;
-        self.sync.get(index).copied().map(load_sync)
+        self.sync.get(sample).map(load_sync)
     }
 
     /// Returns the retained raw frequencies covering `[first, end)`, oldest
@@ -193,16 +178,12 @@ impl SampleBuffer {
     /// translation per sample with one per range, which is what the per-unit
     /// averaging and scanning loops spend their time on otherwise.
     pub(super) fn frequency_runs(&self, first: u64, end: u64) -> Option<[&[u16]; 2]> {
-        let (start, stop) = self.range_indices(first, end)?;
-        let (head, tail) = self.frequency.as_slices();
-        Some(split_runs(head, tail, start, stop))
+        self.frequency.runs(first, end)
     }
 
     /// Returns the retained raw synchronization strengths covering `[first, end)`.
     pub(super) fn sync_runs(&self, first: u64, end: u64) -> Option<[&[u8]; 2]> {
-        let (start, stop) = self.range_indices(first, end)?;
-        let (head, tail) = self.sync.as_slices();
-        Some(split_runs(head, tail, start, stop))
+        self.sync.runs(first, end)
     }
 
     /// Sums the retained frequencies over `[first, end)`, in hertz.
@@ -219,44 +200,21 @@ impl SampleBuffer {
         Some(sum as f64 / f64::from(FREQUENCY_SCALE))
     }
 
-    fn range_indices(&self, first: u64, end: u64) -> Option<(usize, usize)> {
-        if first < self.first || end < first || end > self.end() {
-            return None;
-        }
-        let start = usize::try_from(first - self.first).ok()?;
-        let stop = usize::try_from(end - self.first).ok()?;
-        Some((start, stop))
-    }
-
     /// Copies the samples at `sample` and later into a new buffer.
     ///
     /// Live slant correction rebuilds the decoding window from retained
     /// samples after the raster clock moves, and only the undecoded remainder
     /// is needed, so this copies a short tail rather than the whole buffer.
     pub(super) fn tail_from(&self, sample: u64) -> Self {
-        let skip = usize::try_from(sample.saturating_sub(self.first))
-            .unwrap_or(usize::MAX)
-            .min(self.len());
-        fn tail_of<T: Copy>(source: &VecDeque<T>, skip: usize) -> VecDeque<T> {
-            let (head, tail) = source.as_slices();
-            let head_skip = skip.min(head.len());
-            let mut copied = VecDeque::with_capacity(source.len() - skip);
-            copied.extend(head[head_skip..].iter().copied());
-            copied.extend(tail[skip - head_skip..].iter().copied());
-            copied
-        }
         Self {
-            first: self.first + skip as u64,
-            frequency: tail_of(&self.frequency, skip),
-            sync: tail_of(&self.sync, skip),
+            frequency: self.frequency.tail_from(sample),
+            sync: self.sync.tail_from(sample),
         }
     }
 
     pub(super) fn discard_before(&mut self, sample: u64) {
-        let count = sample.saturating_sub(self.first).min(self.len() as u64) as usize;
-        self.frequency.drain(..count);
-        self.sync.drain(..count);
-        self.first += count as u64;
+        self.frequency.discard_before(sample);
+        self.sync.discard_before(sample);
     }
 }
 
