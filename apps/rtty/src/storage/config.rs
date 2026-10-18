@@ -1,9 +1,9 @@
-use std::{collections::BTreeMap, fs, io, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
 use grayline_qso::{ContactSettings, DEFAULT_FIELDS};
-use grayline_shell::log;
-use toml_edit::{DocumentMut, Item, Table, value};
+use grayline_shell::config::Document;
+use toml_edit::{Item, Table, value};
 
 use crate::app::macros::{Station, valid_variable_name};
 
@@ -214,138 +214,84 @@ impl Settings {
 /// save that did not concern it.
 #[derive(Debug)]
 pub struct Config {
-    path: Option<PathBuf>,
-    document: DocumentMut,
-    /// Set when the file could not be parsed.
-    ///
-    /// The application starts on defaults and refuses to save, because
-    /// overwriting a file it could not read would throw away whatever the
-    /// operator had written in it.
-    read_only: bool,
-    error: Option<String>,
+    document: Document,
 }
 
 impl Config {
     /// Reads the settings file, falling back to defaults it will not save over.
     pub fn load(path: PathBuf) -> (Self, Settings) {
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
-            Err(error) => {
-                return (Self::unreadable(path, &error.to_string()), Settings::default());
-            }
-        };
-        match text.parse::<DocumentMut>() {
-            Ok(document) => {
-                let settings = read(&document);
-                (
-                    Self {
-                        path: Some(path),
-                        document,
-                        read_only: false,
-                        error: None,
-                    },
-                    settings,
-                )
-            }
-            Err(error) => (Self::unreadable(path, &error.to_string()), Settings::default()),
-        }
+        let document = Document::load(path);
+        let settings = read(document.table());
+        (Self { document }, settings)
     }
 
     /// A configuration with nowhere to write, for tests and headless runs.
     #[cfg(test)]
     pub fn detached() -> Self {
         Self {
-            path: None,
-            document: DocumentMut::new(),
-            read_only: false,
-            error: None,
+            document: Document::detached(),
         }
     }
 
-    fn unreadable(path: PathBuf, error: &str) -> Self {
-        log::note(&format!("could not read {}: {error}", path.display()));
-        Self {
-            path: Some(path),
-            document: DocumentMut::new(),
-            read_only: true,
-            error: Some(error.to_owned()),
-        }
-    }
-
-    /// Returns what went wrong reading the file, if anything did.
+    /// Returns what went wrong reading or writing the file, if anything did.
     pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+        self.document.error()
     }
 
     /// Writes `settings` into the document and saves it.
     pub fn save(&mut self, settings: &Settings) {
-        if self.path.is_none() || self.read_only {
-            return;
-        }
-        let table = self.document.as_table_mut();
-        for (key, name) in [(DEVICE, &settings.device), (OUTPUT_DEVICE, &settings.output_device)] {
-            match name {
-                Some(name) => table[key] = value(name.as_str()),
-                None => {
-                    table.remove(key);
+        self.document.save(|table| {
+            for (key, name) in [(DEVICE, &settings.device), (OUTPUT_DEVICE, &settings.output_device)] {
+                match name {
+                    Some(name) => table[key] = value(name.as_str()),
+                    None => {
+                        table.remove(key);
+                    }
                 }
             }
-        }
-        table[MARK_HZ] = value(settings.mark_hz);
-        table[SHIFT_HZ] = value(settings.shift_hz);
-        table[BAUD] = value(settings.baud);
-        table[REVERSE] = value(settings.reverse);
-        table[AFC] = value(settings.afc);
-        table[SQUELCH_THRESHOLD] = value(settings.squelch_threshold);
-        table[UNSHIFT_ON_SPACE] = value(settings.unshift_on_space);
-        table[ATC] = value(settings.atc);
-        table[TX_UNSHIFT_ON_SPACE] = value(settings.tx_unshift_on_space);
-        table[TX_LEVEL] = value(settings.tx_level);
-        table[SCOPE] = value(settings.scope);
+            table[MARK_HZ] = value(settings.mark_hz);
+            table[SHIFT_HZ] = value(settings.shift_hz);
+            table[BAUD] = value(settings.baud);
+            table[REVERSE] = value(settings.reverse);
+            table[AFC] = value(settings.afc);
+            table[SQUELCH_THRESHOLD] = value(settings.squelch_threshold);
+            table[UNSHIFT_ON_SPACE] = value(settings.unshift_on_space);
+            table[ATC] = value(settings.atc);
+            table[TX_UNSHIFT_ON_SPACE] = value(settings.tx_unshift_on_space);
+            table[TX_LEVEL] = value(settings.tx_level);
+            table[SCOPE] = value(settings.scope);
 
-        let station = table
-            .entry("station")
-            .or_insert_with(|| Item::Table(Table::new()))
-            .as_table_mut();
-        if let Some(station_table) = station {
-            station_table["callsign"] = value(settings.station.callsign.as_str());
-            station_table["name"] = value(settings.station.name.as_str());
-            station_table["qth"] = value(settings.station.qth.as_str());
-            station_table["grid"] = value(settings.station.grid.as_str());
-        }
+            let station = table
+                .entry("station")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut();
+            if let Some(station_table) = station {
+                station_table["callsign"] = value(settings.station.callsign.as_str());
+                station_table["name"] = value(settings.station.name.as_str());
+                station_table["qth"] = value(settings.station.qth.as_str());
+                station_table["grid"] = value(settings.station.grid.as_str());
+            }
 
-        // Written once and then left alone. There is no editor for them here,
-        // so the file is where they are changed, and rewriting the array on
-        // every save would reformat what the operator had written in it.
-        store_custom_variables(table, &settings.custom_variables);
-        if let Some(qso) = table
-            .entry("qso")
-            .or_insert_with(|| Item::Table(Table::new()))
-            .as_table_mut()
-        {
-            settings.contact.write(qso);
-        }
-        if let Some(rig) = table
-            .entry("rig")
-            .or_insert_with(|| Item::Table(Table::new()))
-            .as_table_mut()
-        {
-            settings.rig.write(rig);
-        }
-        store_keyer(table, &settings.keyer);
-
-        self.write();
-    }
-
-    fn write(&self) {
-        let Some(path) = self.path.as_ref() else { return };
-        if self.read_only {
-            return;
-        }
-        if let Err(error) = fs::write(path, self.document.to_string()) {
-            log::note(&format!("could not save {}: {error}", path.display()));
-        }
+            // Written once and then left alone. There is no editor for them here,
+            // so the file is where they are changed, and rewriting the array on
+            // every save would reformat what the operator had written in it.
+            store_custom_variables(table, &settings.custom_variables);
+            if let Some(qso) = table
+                .entry("qso")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut()
+            {
+                settings.contact.write(qso);
+            }
+            if let Some(rig) = table
+                .entry("rig")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut()
+            {
+                settings.rig.write(rig);
+            }
+            store_keyer(table, &settings.keyer);
+        });
     }
 }
 
@@ -354,9 +300,8 @@ impl Config {
 /// A value that is the wrong type, or names something this build does not
 /// support, is dropped rather than rejected: the file is the operator's, and
 /// one unusable key is not a reason to start on nothing.
-fn read(document: &DocumentMut) -> Settings {
+fn read(table: &Table) -> Settings {
     let mut settings = Settings::default();
-    let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
     for (key, target) in [
@@ -498,6 +443,8 @@ fn number(item: &toml_edit::Value) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use grayline_rig_control::PortSettings;
     use tempfile::TempDir;
 

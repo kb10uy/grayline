@@ -19,6 +19,8 @@
 pub mod check;
 /// The settings shared by every application in the family, and their file.
 pub mod common;
+/// A settings file kept as the document it was read from.
+pub mod config;
 /// The faces the interface is drawn with.
 pub mod fonts;
 /// Fluent-backed message lookup, and the languages an application offers.

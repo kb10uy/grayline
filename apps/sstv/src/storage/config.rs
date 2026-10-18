@@ -4,16 +4,13 @@
 //! document, so comments and hand-written layout are not lost when the
 //! application saves a changed selection.
 
-use std::{
-    collections::BTreeMap,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, path::Path};
 
 use grayline_qso::ContactSettings;
+use grayline_shell::config::Document;
 use grayline_sstv::mode::Mode;
 use grayline_sstv_template::valid_variable_name;
-use toml_edit::{DocumentMut, Item, Table, value};
+use toml_edit::{Item, Table, value};
 
 use crate::storage::history::HistoryFormat;
 
@@ -169,15 +166,7 @@ impl Default for Settings {
 /// The configuration file, kept open as a document across saves.
 #[derive(Debug)]
 pub struct Config {
-    path: PathBuf,
-    document: DocumentMut,
-    /// Set when the file must not be rewritten.
-    ///
-    /// A file that could not be read back is left alone rather than saved
-    /// over, because rewriting it would replace whatever the operator was in
-    /// the middle of editing.
-    read_only: bool,
-    error: Option<String>,
+    document: Document,
 }
 
 impl Config {
@@ -187,142 +176,113 @@ impl Config {
     /// on defaults and reports why, rather than refusing to run because one
     /// hand-edited value is wrong.
     pub fn load(path: &Path) -> Self {
-        let (document, read_only, error) = match fs::read_to_string(path) {
-            Ok(source) => match source.parse::<DocumentMut>() {
-                Ok(document) => (document, false, None),
-                Err(error) => (DocumentMut::new(), true, Some(error.to_string())),
-            },
-            Err(error) if error.kind() == io::ErrorKind::NotFound => (DocumentMut::new(), false, None),
-            Err(error) => (DocumentMut::new(), true, Some(error.to_string())),
-        };
         Self {
-            path: path.to_owned(),
-            document,
-            read_only,
-            error,
+            document: Document::load(path.to_owned()),
         }
     }
 
     #[cfg(test)]
     pub fn detached() -> Self {
         Self {
-            path: PathBuf::new(),
-            document: DocumentMut::new(),
-            read_only: true,
-            error: None,
+            document: Document::detached(),
         }
     }
 
     pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+        self.document.error()
     }
 
     /// Reads the stored settings, substituting the default for anything
     /// missing, mistyped, or unrecognized.
     pub fn settings(&self) -> Settings {
         let defaults = Settings::default();
+        let document = self.document.table();
         Settings {
-            input_device: owned(&self.document, AUDIO_INPUT_DEVICE),
-            output_device: owned(&self.document, AUDIO_OUTPUT_DEVICE),
-            station_callsign: owned(&self.document, STATION_CALLSIGN).unwrap_or_default(),
-            station_qth: owned(&self.document, STATION_QTH).unwrap_or_default(),
-            station_grid: owned(&self.document, STATION_GRID).unwrap_or_default(),
-            qso_number: owned(&self.document, QSO_NUMBER).unwrap_or(defaults.qso_number),
-            custom_variables: custom_variables(&self.document),
-            template: owned(&self.document, LIBRARY_TEMPLATE),
-            stock: owned(&self.document, LIBRARY_STOCK),
-            rx_mode: string(&self.document, RECEIVE_MODE)
+            input_device: owned(document, AUDIO_INPUT_DEVICE),
+            output_device: owned(document, AUDIO_OUTPUT_DEVICE),
+            station_callsign: owned(document, STATION_CALLSIGN).unwrap_or_default(),
+            station_qth: owned(document, STATION_QTH).unwrap_or_default(),
+            station_grid: owned(document, STATION_GRID).unwrap_or_default(),
+            qso_number: owned(document, QSO_NUMBER).unwrap_or(defaults.qso_number),
+            custom_variables: custom_variables(document),
+            template: owned(document, LIBRARY_TEMPLATE),
+            stock: owned(document, LIBRARY_STOCK),
+            rx_mode: string(document, RECEIVE_MODE)
                 .and_then(mode_by_name)
                 .unwrap_or(defaults.rx_mode),
-            tx_mode: string(&self.document, TRANSMIT_MODE)
+            tx_mode: string(document, TRANSMIT_MODE)
                 .and_then(mode_by_name)
                 .unwrap_or(defaults.tx_mode),
-            auto_mode: boolean(&self.document, RECEIVE_AUTO_VIS).unwrap_or(defaults.auto_mode),
+            auto_mode: boolean(document, RECEIVE_AUTO_VIS).unwrap_or(defaults.auto_mode),
             dsp: DspFlags {
-                afc: boolean(&self.document, RECEIVE_AFC).unwrap_or(defaults.dsp.afc),
-                lms_filter: boolean(&self.document, RECEIVE_LMS).unwrap_or(defaults.dsp.lms_filter),
-                live_slant: boolean(&self.document, RECEIVE_SLANT).unwrap_or(defaults.dsp.live_slant),
+                afc: boolean(document, RECEIVE_AFC).unwrap_or(defaults.dsp.afc),
+                lms_filter: boolean(document, RECEIVE_LMS).unwrap_or(defaults.dsp.lms_filter),
+                live_slant: boolean(document, RECEIVE_SLANT).unwrap_or(defaults.dsp.live_slant),
             },
-            vis_restart: boolean(&self.document, RECEIVE_VIS_RESTART).unwrap_or(defaults.vis_restart),
-            vis_strict: boolean(&self.document, RECEIVE_VIS_STRICT).unwrap_or(defaults.vis_strict),
-            send_fskid: boolean(&self.document, TRANSMIT_FSKID).unwrap_or(defaults.send_fskid),
-            contest_mode: boolean(&self.document, TRANSMIT_CONTEST).unwrap_or(defaults.contest_mode),
-            tx_volume: float(&self.document, TRANSMIT_VOLUME)
+            vis_restart: boolean(document, RECEIVE_VIS_RESTART).unwrap_or(defaults.vis_restart),
+            vis_strict: boolean(document, RECEIVE_VIS_STRICT).unwrap_or(defaults.vis_strict),
+            send_fskid: boolean(document, TRANSMIT_FSKID).unwrap_or(defaults.send_fskid),
+            contest_mode: boolean(document, TRANSMIT_CONTEST).unwrap_or(defaults.contest_mode),
+            tx_volume: float(document, TRANSMIT_VOLUME)
                 .map(|volume| volume.clamp(0.0, 1.0))
                 .unwrap_or(defaults.tx_volume),
-            auto_history: boolean(&self.document, RECEIVE_AUTO_HISTORY).unwrap_or(defaults.auto_history),
-            history_format: string(&self.document, RECEIVE_HISTORY_FORMAT)
+            auto_history: boolean(document, RECEIVE_AUTO_HISTORY).unwrap_or(defaults.auto_history),
+            history_format: string(document, RECEIVE_HISTORY_FORMAT)
                 .and_then(HistoryFormat::from_config)
                 .unwrap_or(defaults.history_format),
-            rig: RigSettings::read(
-                self.document.get("rig").and_then(Item::as_table),
-                RigSettings::default(),
-            ),
-            contact: ContactSettings::read(
-                self.document.get("qso").and_then(Item::as_table),
-                ContactSettings::default(),
-            ),
+            rig: RigSettings::read(document.get("rig").and_then(Item::as_table), RigSettings::default()),
+            contact: ContactSettings::read(document.get("qso").and_then(Item::as_table), ContactSettings::default()),
         }
     }
 
     /// Writes `settings` back, leaving every unrelated key untouched.
     pub fn store(&mut self, settings: &Settings) {
-        if self.read_only {
-            return;
-        }
-        let document = &mut self.document;
-        set(
-            document,
-            AUDIO_INPUT_DEVICE,
-            settings.input_device.as_deref().map(value),
-        );
-        set(
-            document,
-            AUDIO_OUTPUT_DEVICE,
-            settings.output_device.as_deref().map(value),
-        );
-        for (key, text) in [
-            (STATION_CALLSIGN, &settings.station_callsign),
-            (STATION_QTH, &settings.station_qth),
-            (STATION_GRID, &settings.station_grid),
-        ] {
-            set(document, key, (!text.is_empty()).then(|| value(text)));
-        }
-        set(document, QSO_NUMBER, Some(value(settings.qso_number.as_str())));
-        store_custom_variables(document, &settings.custom_variables);
-        set(document, LIBRARY_TEMPLATE, settings.template.as_deref().map(value));
-        set(document, LIBRARY_STOCK, settings.stock.as_deref().map(value));
-        set(document, RECEIVE_MODE, Some(value(settings.rx_mode.spec().name())));
-        set(document, RECEIVE_AUTO_VIS, Some(value(settings.auto_mode)));
-        set(document, RECEIVE_AFC, Some(value(settings.dsp.afc)));
-        set(document, RECEIVE_LMS, Some(value(settings.dsp.lms_filter)));
-        set(document, RECEIVE_SLANT, Some(value(settings.dsp.live_slant)));
-        set(document, RECEIVE_VIS_RESTART, Some(value(settings.vis_restart)));
-        set(document, RECEIVE_VIS_STRICT, Some(value(settings.vis_strict)));
-        set(document, TRANSMIT_FSKID, Some(value(settings.send_fskid)));
-        set(document, TRANSMIT_CONTEST, Some(value(settings.contest_mode)));
-        set(
-            document,
-            TRANSMIT_VOLUME,
-            Some(value((f64::from(settings.tx_volume) * 100.0).round() / 100.0)),
-        );
-        set(document, RECEIVE_AUTO_HISTORY, Some(value(settings.auto_history)));
-        set(
-            document,
-            RECEIVE_HISTORY_FORMAT,
-            Some(value(settings.history_format.config_name())),
-        );
-        set(document, TRANSMIT_MODE, Some(value(settings.tx_mode.spec().name())));
-        settings.rig.write(table_mut(document, "rig"));
-        settings.contact.write(table_mut(document, "qso"));
-        self.error = self.write().err().map(|error| error.to_string());
-    }
-
-    fn write(&self) -> io::Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&self.path, self.document.to_string())
+        self.document.save(|document| {
+            set(
+                document,
+                AUDIO_INPUT_DEVICE,
+                settings.input_device.as_deref().map(value),
+            );
+            set(
+                document,
+                AUDIO_OUTPUT_DEVICE,
+                settings.output_device.as_deref().map(value),
+            );
+            for (key, text) in [
+                (STATION_CALLSIGN, &settings.station_callsign),
+                (STATION_QTH, &settings.station_qth),
+                (STATION_GRID, &settings.station_grid),
+            ] {
+                set(document, key, (!text.is_empty()).then(|| value(text)));
+            }
+            set(document, QSO_NUMBER, Some(value(settings.qso_number.as_str())));
+            store_custom_variables(document, &settings.custom_variables);
+            set(document, LIBRARY_TEMPLATE, settings.template.as_deref().map(value));
+            set(document, LIBRARY_STOCK, settings.stock.as_deref().map(value));
+            set(document, RECEIVE_MODE, Some(value(settings.rx_mode.spec().name())));
+            set(document, RECEIVE_AUTO_VIS, Some(value(settings.auto_mode)));
+            set(document, RECEIVE_AFC, Some(value(settings.dsp.afc)));
+            set(document, RECEIVE_LMS, Some(value(settings.dsp.lms_filter)));
+            set(document, RECEIVE_SLANT, Some(value(settings.dsp.live_slant)));
+            set(document, RECEIVE_VIS_RESTART, Some(value(settings.vis_restart)));
+            set(document, RECEIVE_VIS_STRICT, Some(value(settings.vis_strict)));
+            set(document, TRANSMIT_FSKID, Some(value(settings.send_fskid)));
+            set(document, TRANSMIT_CONTEST, Some(value(settings.contest_mode)));
+            set(
+                document,
+                TRANSMIT_VOLUME,
+                Some(value((f64::from(settings.tx_volume) * 100.0).round() / 100.0)),
+            );
+            set(document, RECEIVE_AUTO_HISTORY, Some(value(settings.auto_history)));
+            set(
+                document,
+                RECEIVE_HISTORY_FORMAT,
+                Some(value(settings.history_format.config_name())),
+            );
+            set(document, TRANSMIT_MODE, Some(value(settings.tx_mode.spec().name())));
+            settings.rig.write(table_mut(document, "rig"));
+            settings.contact.write(table_mut(document, "qso"));
+        });
     }
 }
 
@@ -331,7 +291,7 @@ impl Config {
 /// A name no `${...}` expression could ever hold is dropped rather than
 /// carried around unreadable, which is the same treatment every other
 /// unusable value in the file gets.
-fn custom_variables(document: &DocumentMut) -> BTreeMap<String, String> {
+fn custom_variables(document: &Table) -> BTreeMap<String, String> {
     let Some(table) = document.get("variables").and_then(Item::as_table) else {
         return BTreeMap::new();
     };
@@ -346,7 +306,7 @@ fn custom_variables(document: &DocumentMut) -> BTreeMap<String, String> {
 ///
 /// Keys are assigned rather than the table being rebuilt, so a comment written
 /// beside one by hand outlives a save that did not touch it.
-fn store_custom_variables(document: &mut DocumentMut, variables: &BTreeMap<String, String>) {
+fn store_custom_variables(document: &mut Table, variables: &BTreeMap<String, String>) {
     if variables.is_empty() {
         document.remove("variables");
         return;
@@ -364,22 +324,22 @@ fn mode_by_name(name: &str) -> Option<Mode> {
         .find(|mode| mode.spec().name().eq_ignore_ascii_case(name))
 }
 
-fn get(document: &DocumentMut, Key(table, key): Key) -> Option<&Item> {
+fn get(document: &Table, Key(table, key): Key) -> Option<&Item> {
     document.get(table)?.as_table()?.get(key)
 }
 
-fn string(document: &DocumentMut, key: Key) -> Option<&str> {
+fn string(document: &Table, key: Key) -> Option<&str> {
     get(document, key)?.as_str()
 }
 
-fn owned(document: &DocumentMut, key: Key) -> Option<String> {
+fn owned(document: &Table, key: Key) -> Option<String> {
     string(document, key)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }
 
-fn boolean(document: &DocumentMut, key: Key) -> Option<bool> {
+fn boolean(document: &Table, key: Key) -> Option<bool> {
     get(document, key)?.as_bool()
 }
 
@@ -389,7 +349,7 @@ fn boolean(document: &DocumentMut, key: Key) -> Option<bool> {
 /// slips through every clamp and panics the first `Duration` built from it.
 /// They read as absent, so the default stands in like it does for any other
 /// unusable value.
-fn float(document: &DocumentMut, key: Key) -> Option<f32> {
+fn float(document: &Table, key: Key) -> Option<f32> {
     let item = get(document, key)?;
     item.as_float()
         .or_else(|| item.as_integer().map(|value| value as f64))
@@ -397,7 +357,7 @@ fn float(document: &DocumentMut, key: Key) -> Option<f32> {
         .filter(|value| value.is_finite())
 }
 
-fn set(document: &mut DocumentMut, Key(table, key): Key, item: Option<Item>) {
+fn set(document: &mut Table, Key(table, key): Key, item: Option<Item>) {
     let Some(item) = item else {
         // An absent table stays absent: a setting with nothing to store is not
         // a reason to write out an empty section.
@@ -409,7 +369,7 @@ fn set(document: &mut DocumentMut, Key(table, key): Key, item: Option<Item>) {
     table_mut(document, table)[key] = item;
 }
 
-fn table_mut<'a>(document: &'a mut DocumentMut, name: &str) -> &'a mut Table {
+fn table_mut<'a>(document: &'a mut Table, name: &str) -> &'a mut Table {
     let entry = document.entry(name).or_insert(Item::Table(Table::new()));
     if !entry.is_table() {
         *entry = Item::Table(Table::new());
@@ -419,6 +379,8 @@ fn table_mut<'a>(document: &'a mut DocumentMut, name: &str) -> &'a mut Table {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::PathBuf};
+
     use grayline_rig_control::{DEFAULT_ADDRESS, DEFAULT_LEAD_IN_SECONDS, DEFAULT_POLL_SECONDS, PortSettings};
     use rstest::rstest;
     use tempfile::TempDir;

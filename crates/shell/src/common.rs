@@ -11,15 +11,12 @@
 //! modes, or devices means nothing to the others, and this file is only for
 //! what all of them answer the same way.
 
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use directories::BaseDirs;
-use toml_edit::{DocumentMut, Item, value};
+use toml_edit::{Item, Table, value};
 
-use crate::{i18n::Locale, log, platform::FAMILY_DIRECTORY};
+use crate::{config::Document, i18n::Locale, platform::FAMILY_DIRECTORY};
 
 /// The shared settings file, beside the per-application directories.
 pub const COMMON_FILE: &str = "common.toml";
@@ -75,15 +72,7 @@ fn default_common_path() -> Option<PathBuf> {
 /// another application in the family has written there.
 #[derive(Debug)]
 pub struct CommonConfig {
-    path: Option<PathBuf>,
-    document: DocumentMut,
-    /// Set when the file could not be parsed.
-    ///
-    /// The application starts on defaults and refuses to save, because
-    /// overwriting a file it could not read would throw away whatever the
-    /// operator had written in it.
-    read_only: bool,
-    error: Option<String>,
+    document: Document,
     /// What the file already says, so a frame that changed nothing writes
     /// nothing.
     saved: CommonSettings,
@@ -106,24 +95,9 @@ impl CommonConfig {
     /// Reads `path`, falling back to defaults it will not save over.
     #[must_use]
     pub fn load(path: PathBuf) -> Self {
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
-            Err(error) => return Self::unreadable(path, &error.to_string()),
-        };
-        match text.parse::<DocumentMut>() {
-            Ok(document) => {
-                let settings = read(&document);
-                Self {
-                    path: Some(path),
-                    document,
-                    read_only: false,
-                    error: None,
-                    saved: settings,
-                }
-            }
-            Err(error) => Self::unreadable(path, &error.to_string()),
-        }
+        let document = Document::load(path);
+        let saved = read(document.table());
+        Self { document, saved }
     }
 
     /// What the file says, or the defaults where it said nothing usable.
@@ -136,64 +110,37 @@ impl CommonConfig {
     #[must_use]
     pub fn detached() -> Self {
         Self {
-            path: None,
-            document: DocumentMut::new(),
-            read_only: false,
-            error: None,
+            document: Document::detached(),
             saved: CommonSettings::default(),
         }
     }
 
-    fn unreadable(path: PathBuf, error: &str) -> Self {
-        log::note(&format!("could not read {}: {error}", path.display()));
-        Self {
-            path: Some(path),
-            document: DocumentMut::new(),
-            read_only: true,
-            error: Some(error.to_owned()),
-            saved: CommonSettings::default(),
-        }
-    }
-
-    /// Returns what went wrong reading the file, if anything did.
+    /// Returns what went wrong reading or writing the file, if anything did.
     #[must_use]
     pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+        self.document.error()
     }
 
     /// Writes `settings` back, unless they are what the file already says.
     ///
     /// Every application calls this at the end of every frame, which is why
-    /// the comparison is here rather than in each of them.
+    /// the comparison is here rather than in each of them. The family
+    /// directory is made if it is not there yet: each application creates its
+    /// own directory under it as it starts, but this file sits above all of
+    /// them, and whichever saves first has to put the directory there.
     pub fn save(&mut self, settings: &CommonSettings) {
         let settings = settings.clamped();
-        if self.read_only || settings == self.saved {
+        if settings == self.saved {
             return;
         }
         self.saved = settings;
-        let Some(path) = self.path.clone() else { return };
-        let table = self.document.as_table_mut();
-        table["language"] = value(settings.locale.tag());
-        // Rounded on the way out: widening the f32 directly writes the likes
-        // of 1.2999999523162842 into a file meant to be read by hand.
-        table["ui-scale"] = value((f64::from(settings.ui_scale) * 100.0).round() / 100.0);
-
-        if let Err(error) = write(&path, &self.document.to_string()) {
-            log::note(&format!("could not save {}: {error}", path.display()));
-        }
+        self.document.save(|table| {
+            table["language"] = value(settings.locale.tag());
+            // Rounded on the way out: widening the f32 directly writes the
+            // likes of 1.2999999523162842 into a file meant to be read by hand.
+            table["ui-scale"] = value((f64::from(settings.ui_scale) * 100.0).round() / 100.0);
+        });
     }
-}
-
-/// Writes the document, making the family directory if it is not there yet.
-///
-/// Each application creates its own directory under that one as it starts, but
-/// this file sits above all of them, and whichever application saves first is
-/// the one that has to put the directory there.
-fn write(path: &Path, text: &str) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, text)
 }
 
 /// Reads what the family understands, leaving everything else alone.
@@ -201,9 +148,8 @@ fn write(path: &Path, text: &str) -> io::Result<()> {
 /// A value that is the wrong type, or names a language this build does not
 /// carry, is dropped rather than rejected: the file is the operator's, and one
 /// unusable key is not a reason to start on nothing.
-fn read(document: &DocumentMut) -> CommonSettings {
+fn read(table: &Table) -> CommonSettings {
     let mut settings = CommonSettings::default();
-    let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
     if let Some(tag) = get("language").and_then(|value| value.as_str())
@@ -230,6 +176,8 @@ fn read(document: &DocumentMut) -> CommonSettings {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use rstest::rstest;
     use tempfile::TempDir;
 
