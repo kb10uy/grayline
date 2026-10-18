@@ -12,6 +12,7 @@ directories.workspace = true
 eframe.workspace = true
 egui.workspace = true
 fluent-bundle.workspace = true
+fontdb.workspace = true
 image.workspace = true
 jiff.workspace = true
 toml_edit.workspace = true
@@ -35,3 +36,4 @@ windows-sys = { workspace = true, features = [
 [dev-dependencies]
 egui_kittest.workspace = true
 rstest.workspace = true
+tempfile.workspace = true

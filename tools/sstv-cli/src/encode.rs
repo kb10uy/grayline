@@ -11,13 +11,14 @@ use grayline_sstv_template::{
     FileAssetProvider, RenderContext, RenderSize, Renderer, Template, VariableValue, Variables, composite,
 };
 use grayline_tone_tx::Modulator;
-use hound::{SampleFormat, WavSpec, WavWriter};
+use grayline_wav::write_mono;
 use image::imageops::FilterType;
 use jiff::{Zoned, tz::TimeZone};
 
 const SAMPLE_RATE_HZ: u32 = 48_000;
+/// The peak MMSSTV writes its transmit audio at, below full scale, so a
+/// picture written here plays as loud as one it wrote.
 const PCM_PEAK: f32 = 24_578.0;
-const PCM_BLOCK_SIZE: usize = 1_024;
 
 /// Summary of a completed WAV transmission.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -69,33 +70,10 @@ pub fn encode_file(
     let frame = render_frame(&template, template_path, &background, &callsign)?;
     let transmission = TransmissionEncoder::new(mode, frame, station_id)?;
     let mut modulator = Modulator::new(transmission, SAMPLE_RATE_HZ)?;
-    let mut writer = WavWriter::create(
-        output_path,
-        WavSpec {
-            channels: 1,
-            sample_rate: SAMPLE_RATE_HZ,
-            bits_per_sample: 16,
-            sample_format: SampleFormat::Int,
-        },
-    )
-    .with_context(|| format!("failed to create WAV file {}", output_path.display()))?;
-    let mut block = [0.0_f32; PCM_BLOCK_SIZE];
-    let mut samples_written = 0_u64;
-    loop {
-        let count = modulator.process(&mut block)?;
-        if count == 0 {
-            break;
-        }
-        for &sample in &block[..count] {
-            writer
-                .write_sample((sample.clamp(-1.0, 1.0) * PCM_PEAK) as i16)
-                .context("failed to write PCM sample")?;
-        }
-        samples_written += count as u64;
-    }
-    writer
-        .finalize()
-        .with_context(|| format!("failed to finalize WAV file {}", output_path.display()))?;
+    let samples_written = write_mono::<anyhow::Error>(output_path, SAMPLE_RATE_HZ, PCM_PEAK, |block| {
+        Ok(modulator.process(block)?)
+    })
+    .with_context(|| format!("failed to write WAV file {}", output_path.display()))?;
     Ok(EncodeReport {
         mode,
         callsign,

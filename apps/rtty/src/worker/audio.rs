@@ -4,12 +4,11 @@ use grayline_audio::{
     AudioHost, Capture, CaptureReader, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault, WavSource,
 };
 
+use grayline_shell::worker::Waker;
+
 use crate::{
     error::AppError,
-    worker::{
-        Waker,
-        receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
-    },
+    worker::receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
 };
 
 /// One second of queue at the preferred capture rate.
@@ -48,11 +47,8 @@ pub struct AudioState {
 }
 
 impl AudioState {
-    /// Opens `preferred` when the host still offers a device by that name.
-    ///
-    /// The name is matched rather than an identifier because the host assigns
-    /// identifiers per run; a device that disappeared since the last session
-    /// falls back to the host default.
+    /// Opens the device named `preferred`, or the one
+    /// [`AudioHost::preferred_input`] falls back to.
     pub fn new(
         preferred: Option<&str>,
         preferred_output: Option<&str>,
@@ -68,17 +64,8 @@ impl AudioState {
             Ok(devices) => (devices, None),
             Err(error) => (Vec::new(), Some(error.into())),
         };
-        let device = preferred
-            .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
-            .or_else(|| host.default_input_device().filter(|device| devices.contains(device)))
-            .or_else(|| devices.first().cloned());
-        let output_device = preferred_output
-            .and_then(|name| output_devices.iter().find(|device| device.name() == name).cloned())
-            .or_else(|| {
-                host.default_output_device()
-                    .filter(|device| output_devices.contains(device))
-            })
-            .or_else(|| output_devices.first().cloned());
+        let device = host.preferred_input(&devices, preferred);
+        let output_device = host.preferred_output(&output_devices, preferred_output);
         let mut state = Self {
             host,
             devices,

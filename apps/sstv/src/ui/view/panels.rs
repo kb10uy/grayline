@@ -35,7 +35,7 @@ pub(super) fn radio_panel(ui: &mut Ui, app: &mut App) {
 
 pub(super) fn connection_row(ui: &mut Ui, app: &mut App) {
     let failed = app.rig_snapshot.state == RigState::Failed;
-    let label = app.i18n.text(if app.rig.enabled {
+    let label = app.i18n.text(if app.settings.rig.enabled {
         "action-rig-disconnect"
     } else {
         "action-rig-connect"
@@ -47,7 +47,7 @@ pub(super) fn connection_row(ui: &mut Ui, app: &mut App) {
         let height = ui.spacing().interact_size.y;
         let gap = ui.spacing().item_spacing.x;
         let width = (ui.available_width() - gap) / 2.0;
-        let switch = egui::Button::new(RichText::new(label).size(SMALL)).selected(app.rig.enabled);
+        let switch = egui::Button::new(RichText::new(label).size(SMALL)).selected(app.settings.rig.enabled);
         toggled = ui.add_sized([width, height], switch).clicked();
         let again = egui::Button::new(RichText::new(retry).size(SMALL));
         retried = ui
@@ -58,7 +58,7 @@ pub(super) fn connection_row(ui: &mut Ui, app: &mut App) {
     let state = app.i18n.text(app.rig_snapshot.state.label_key());
     ui.label(RichText::new(state).size(LABEL).weak());
     if toggled {
-        app.set_rig_enabled(!app.rig.enabled);
+        app.set_rig_enabled(!app.settings.rig.enabled);
     }
     if retried {
         app.retry_rig();
@@ -209,19 +209,19 @@ pub(super) fn rx_state(ui: &mut Ui, app: &mut App) {
 /// across the tabs, and colored while transmitting for the same reason the
 /// receive indicator is: the bar says whether the radio is doing anything.
 pub(super) fn tx_level(ui: &mut Ui, app: &mut App) {
-    let transmitting = app.tx_snapshot.phase.is_active();
+    let transmitting = app.outgoing.is_active();
     let color = if transmitting { colors::TX_LEVEL } else { Color32::WHITE };
-    let bar = ui.add(ProgressBar::new(app.tx_volume).fill(color));
+    let bar = ui.add(ProgressBar::new(app.settings.tx_volume).fill(color));
     let dragged = bar.interact(egui::Sense::click_and_drag());
     let rect = dragged.rect;
     if let Some(pointer) = dragged.interact_pointer_pos() {
-        app.tx_volume = ((pointer.x - rect.left()) / rect.width().max(1.0)).clamp(0.0, 1.0);
+        app.settings.tx_volume = ((pointer.x - rect.left()) / rect.width().max(1.0)).clamp(0.0, 1.0);
     }
     dragged.on_hover_text(app.i18n.text_with(
         "tx-volume",
         &[
-            ("percent", number((app.tx_volume * 100.0).round())),
-            ("decibels", arg(&decibels(app.tx_volume))),
+            ("percent", number((app.settings.tx_volume * 100.0).round())),
+            ("decibels", arg(&decibels(app.settings.tx_volume))),
         ],
     ));
 }
@@ -239,11 +239,11 @@ pub(super) fn decibels(travel: f32) -> String {
 pub(super) fn mode_panel(ui: &mut Ui, app: &mut App) {
     let label = app.i18n.text("label-auto-vis");
     ui.add_enabled_ui(app.tab == Tab::Receive, |ui| {
-        ui.checkbox(&mut app.auto_mode, RichText::new(label).size(SMALL));
+        ui.checkbox(&mut app.settings.auto_mode, RichText::new(label).size(SMALL));
     });
     let (selected, options) = match app.tab {
-        Tab::Transmit => (app.tx_mode, app.tx_modes.clone()),
-        Tab::Receive => (app.rx_mode, app.rx_modes.clone()),
+        Tab::Transmit => (app.settings.tx_mode, app.tx_modes.clone()),
+        Tab::Receive => (app.settings.rx_mode, app.rx_modes.clone()),
     };
     let mut chosen = selected;
     ComboBox::from_id_salt("mode")
@@ -272,7 +272,7 @@ pub(super) fn dsp_panel(ui: &mut Ui, app: &mut App) {
         let height = ui.spacing().interact_size.y;
         for dsp in Dsp::ALL {
             let label = RichText::new(app.i18n.text(dsp.label_key())).size(SMALL);
-            let button = egui::Button::new(label).selected(app.dsp.get(dsp));
+            let button = egui::Button::new(label).selected(app.settings.dsp.get(dsp));
             // Sized rather than given a minimum, because a button wider than
             // its label leaves the text against its left edge otherwise.
             if ui.add_sized([width, height], button).clicked() {
@@ -326,7 +326,7 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
             app.qso_changed();
         }
     });
-    let contest = app.contest_mode;
+    let contest = app.settings.contest_mode;
     ui.horizontal(|ui| {
         field_label(ui, &sent_label);
         let field_width = (fields - gap) / 2.0;

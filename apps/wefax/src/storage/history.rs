@@ -31,8 +31,8 @@ fn file_name(format: Format, at: &Zoned) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
     use grayline_wefax::{Ioc, LinesPerMinute};
+    use tempfile::TempDir;
 
     #[test]
     fn a_chart_is_named_for_when_it_arrived_and_what_it_is() {
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn a_chart_is_written_where_it_was_asked_for() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let gray: Vec<u8> = (0..24).map(|index| index as u8).collect();
         let path = save(root.path(), Format::MARINE, 8, 3, &gray).unwrap();
         assert!(path.is_file());
@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn a_chart_with_no_pixels_is_refused() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         assert!(save(root.path(), Format::MARINE, 0, 0, &[]).is_err());
         assert!(save(root.path(), Format::MARINE, 4, 2, &[0; 3]).is_err());
     }

@@ -83,9 +83,9 @@ fn the_zoom_stays_inside_what_the_settings_allow() {
 #[test]
 fn the_geometry_reaches_the_worker_settings() {
     let mut app = App::headless();
-    app.ioc = Ioc::Ioc288;
-    app.lines_per_minute = LinesPerMinute::L240;
-    app.inverted = true;
+    app.settings.ioc = Ioc::Ioc288;
+    app.settings.lines_per_minute = LinesPerMinute::L240;
+    app.settings.inverted = true;
     app.push_settings();
 
     let settings = app.audio.settings();
@@ -141,6 +141,7 @@ fn a_received_chart_is_written_where_the_operator_browses() {
     app.format = Some(Format::MARINE);
 
     app.save_chart();
+    app.wait_for_chart_writers();
 
     let notice = app.notice.clone().expect("the save was reported");
     assert!(notice.starts_with(&app.i18n.text("status-saved")), "{notice}");
@@ -186,7 +187,7 @@ fn persisting_an_unchanged_application_writes_nothing() {
     app.persist();
     assert_eq!(app.saved, before);
 
-    app.inverted = !app.inverted;
+    app.settings.inverted = !app.settings.inverted;
     app.persist();
     assert_ne!(app.saved, before);
 }
@@ -218,14 +219,14 @@ fn a_recording_that_cannot_be_read_is_reported() {
 
 #[test]
 fn a_recording_is_decoded_into_the_strip() {
-    let root = crate::test_util::TempDir::new();
+    let root = tempfile::TempDir::new().unwrap();
     let path = root.path().join("chart.wav");
     let format = Format::MARINE;
     write_transmission(&path, 11_025, format);
 
     let ctx = egui::Context::default();
     let mut app = App::headless();
-    app.auto_save = false;
+    app.settings.auto_save = false;
     app.open_wav(&path);
     assert!(app.audio.is_capturing(), "{:?}", app.notice);
 

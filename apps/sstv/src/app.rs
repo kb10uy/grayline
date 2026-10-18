@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs, io,
+    io,
     path::PathBuf,
     sync::{Arc, mpsc},
     thread,
@@ -16,10 +16,11 @@ use grayline_sstv_fskid::{FskId, FskNumber};
 use grayline_sstv_template::valid_variable_name;
 use jiff::{Timestamp, Zoned};
 
+use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_sstv_rx::SyncStart;
 
 use grayline_rig_control::{
-    Keying, Reading, RigControlError, RigSnapshot, RigState, RigWorker,
+    Reading, RigControlError, RigSnapshot, RigState, RigWorker,
     bands::{BandDefinition, BandPlan},
     script,
 };
@@ -27,24 +28,26 @@ use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale, owned},
     platform::{self, Activity, Platform},
+    worker::Waker,
 };
 
 use crate::{
-    error::AppError,
     storage::{
-        config::{Config, ContactSettings, RigSettings, Settings},
+        config::{Config, Settings},
         paths::{AppPaths, Folder},
     },
     ui::raster::{Raster, test_pattern_image},
     worker::{
-        Waker,
-        audio::{AudioState, TxState},
+        audio::AudioState,
         compose::{ComposeRequest, Composer},
-        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
-        receive::{Frame, RxProgress},
-        transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
+        receive::{Frame, RxProgress, RxSettings},
+        transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxProgress, TxWorker},
     },
 };
+
+pub mod outgoing;
+
+use outgoing::{Ending, Kind, Outgoing};
 
 pub use crate::storage::config::{DspFlags, FIRST_QSO_NUMBER};
 pub use crate::storage::library::Entry;
@@ -156,35 +159,20 @@ pub struct App {
     pub tab: Tab,
     pub i18n: I18n,
     pub audio: AudioState,
-    pub auto_mode: bool,
-    pub rx_mode: Mode,
-    pub tx_mode: Mode,
+    /// What the operator chose, as it is saved.
+    ///
+    /// The panels and the menus edit this directly. The station, the serial
+    /// number, the library selection, and the devices are kept where they are
+    /// worked with and copied in when the settings are persisted. Only whether
+    /// to connect the rig and whether to look a contact up are the interface's
+    /// to change: the rest of those two sections belongs to the station and is
+    /// edited in the configuration file.
+    pub settings: Settings,
     pub rx_modes: Vec<Mode>,
     pub tx_modes: Vec<Mode>,
-    pub dsp: DspFlags,
-    /// Whether a VIS header may start a reception over.
-    pub vis_restart: bool,
-    /// Whether a VIS detection requires the header's leader tone as well.
-    pub vis_strict: bool,
-    pub send_fskid: bool,
-    /// Whether the serial number is worked and sent with that identifier.
-    ///
-    /// One switch for the whole exchange: a station giving out numbers sends
-    /// them, and a station that is not has no serial to count either, so the
-    /// panel's number field and its buttons follow this too.
-    pub contest_mode: bool,
-    /// How far along its travel the transmit level fader sits, in `0.0..=1.0`.
-    ///
-    /// Held here for the interface, and converted into the amplitude a
-    /// transmission is scaled by in [`App::tx_gain`], which is what a running
-    /// transmission reads.
-    pub tx_volume: f32,
-    pub auto_history: bool,
-    pub history_format: crate::storage::history::HistoryFormat,
     pub qso: Qso,
     pub station: Station,
-    /// The operator's own template variables, offered as `${custom.<name>}`.
-    pub custom_variables: BTreeMap<String, String>,
+    pub station_dialog_open: bool,
     pub variables_dialog_open: bool,
     /// The rows that dialog is editing.
     ///
@@ -199,9 +187,14 @@ pub struct App {
     /// A success the status line reports, as opposed to a failure: writing
     /// out the rig script or the band plan says where the file went.
     pub notice: Option<String>,
+    /// The last failure doing something on the operator's behalf outside the
+    /// application: opening a folder or the manual, writing a file out, or
+    /// reading the band plan. Shown on the status line.
+    pub error: Option<String>,
     pub rx_raster: Raster,
     pub tx_raster: Raster,
-    pub tx_snapshot: TxSnapshot,
+    /// The transmission going out, and how the last one ended.
+    pub outgoing: Outgoing,
     pub tx_error: Option<String>,
     /// The device fault waiting to be acknowledged, if one is.
     ///
@@ -214,41 +207,8 @@ pub struct App {
     /// Held here rather than read from egui because it has to be restored
     /// before the first frame is laid out.
     pub ui_scale: f32,
-    /// How the rig is reached and what it is told.
-    ///
-    /// Only whether to connect is the interface's to change; the address, the
-    /// timings, and the commands are edited in the configuration file, because
-    /// what a rig needs is a station's own business rather than something a
-    /// menu could offer a list of.
-    pub rig: RigSettings,
-    /// Where the contact directory looks a callsign up.
-    ///
-    /// Only whether to look one up is the interface's to change, for the same
-    /// reason the rig's address is not: the instance and the key belong to the
-    /// station rather than to a list a menu could offer.
-    pub contact_settings: ContactSettings,
-    /// The thread that reads and writes the contact directory.
-    pub contact: ContactWorker,
-    /// What that thread last found, read once per frame.
-    pub contact_snapshot: ContactSnapshot,
-    /// Whether the dialog showing what is filed under the contact is open.
-    pub contact_dialog_open: bool,
-    /// The rows that dialog is editing.
-    ///
-    /// The fields the settings ask for lead, then anything else the directory
-    /// happens to hold.
-    pub contact_draft: Vec<ContactRow>,
-    /// The files the worker was opened over, kept so that switching the lookup
-    /// on or off can open it again over a different logger.
-    contact_paths: ContactPaths,
-    /// The waker that worker was given, kept for the same reason.
-    contact_waker: Waker,
-    /// The callsign it was last asked about.
-    ///
-    /// Leaving a field is what commits it, and the operator leaves the field
-    /// whether or not they changed anything; without this the same station
-    /// would be asked about again on every pass through the panel.
-    contact_requested: String,
+    /// The contact directory, what it last answered, and the dialog editing it.
+    pub directory: ContactEditor,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -268,21 +228,7 @@ pub struct App {
     /// The language and the scale, which the whole family shares.
     common: CommonConfig,
     composition: Composition,
-    /// The amplitude a running transmission reads, shared with its worker.
-    tx_gain: Arc<TxGain>,
-    tx: TxState,
-    /// When a tune tone stops itself, set for as long as one is being sent.
-    ///
-    /// The deadline is what says a tone is running rather than a picture: the
-    /// two use the same worker and the same stream, and everything else about
-    /// them differs only in what the operator is told.
-    tune_until: Option<Instant>,
     rig_worker: Option<RigWorker>,
-    /// Set while a transmission has asked for the rig to be keyed.
-    ///
-    /// A transmission that keyed the rig owes it an unkeying however it ends,
-    /// so this outlives the reason the transmission stopped.
-    rig_keyed: bool,
     /// How many decoded station identifiers have reached the QSO panel.
     ///
     /// The worker republishes every identifier it has decoded on each
@@ -306,29 +252,12 @@ pub struct App {
     activity: Activity,
 }
 
-/// What the station says about itself.
-///
-/// One row of the contact dialog.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ContactRow {
-    pub key: String,
-    pub value: String,
-    /// Whether the settings asked for this key, and so whether it is shown
-    /// with a label rather than with its name laid open for editing.
-    ///
-    /// A row is offered whether or not the station has a value for it, which
-    /// is what makes the dialog say what this operator files rather than only
-    /// what this contact happens to have.
-    pub offered: bool,
-}
-
 /// Set once for the operator rather than per contact, which is why it is
 /// edited in a dialog of its own instead of in the panel beside the image.
 pub struct Station {
     pub callsign: String,
     pub qth: String,
     pub grid: String,
-    pub open: bool,
 }
 
 /// The lists the operator picks a template and a background from.
@@ -414,9 +343,7 @@ impl App {
         let audio = AudioState::new(
             settings.input_device.as_deref(),
             settings.output_device.as_deref(),
-            settings.dsp.live_slant,
-            settings.vis_restart,
-            settings.vis_strict,
+            rx_settings(&settings),
             waker.clone(),
         );
         let mut app = Self::from_parts(
@@ -437,7 +364,8 @@ impl App {
         app.refresh_library();
         app.restore_selection(&settings);
         app.request_composition();
-        app.saved = app.settings();
+        app.sync_settings();
+        app.saved = app.settings.clone();
         app
     }
 
@@ -456,13 +384,8 @@ impl App {
     pub(crate) fn headless_on(platform: Box<dyn Platform>) -> Self {
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
-            AudioState::disconnected(),
-            AppPaths::from_roots(
-                scratch.join("config"),
-                scratch.join("data"),
-                scratch.join("pictures"),
-                scratch.join("state"),
-            ),
+            AudioState::disconnected(rx_settings(&Settings::default())),
+            AppPaths::from_roots(grayline_shell::paths::Roots::under(scratch)),
             Stored {
                 config: Config::detached(),
                 common: CommonConfig::detached(),
@@ -493,20 +416,9 @@ impl App {
             tab: Tab::default(),
             i18n: I18n::new(shared.locale, &crate::locales::CATALOG),
             audio,
-            auto_mode: settings.auto_mode,
-            rx_mode: settings.rx_mode,
-            tx_mode: settings.tx_mode,
+            settings: settings.clone(),
             rx_modes: modes(|mode| mode.spec().decode_support()),
             tx_modes: modes(|mode| mode.spec().encode_support()),
-            dsp: settings.dsp,
-            vis_restart: settings.vis_restart,
-            vis_strict: settings.vis_strict,
-            send_fskid: settings.send_fskid,
-            contest_mode: settings.contest_mode,
-            tx_volume: settings.tx_volume,
-            tx_gain: Arc::new(TxGain::from_travel(settings.tx_volume)),
-            auto_history: settings.auto_history,
-            history_format: settings.history_format,
             qso: Qso {
                 number: settings.qso_number.trim().to_owned(),
                 ..Qso::default()
@@ -515,9 +427,8 @@ impl App {
                 callsign: settings.station_callsign.trim().to_ascii_uppercase(),
                 qth: settings.station_qth.trim().to_owned(),
                 grid: settings.station_grid.trim().to_owned(),
-                open: false,
             },
-            custom_variables: settings.custom_variables.clone(),
+            station_dialog_open: false,
             variables_dialog_open: false,
             variables_draft: Vec::new(),
             library: Library {
@@ -525,26 +436,24 @@ impl App {
                 template: None,
                 stocks: Vec::new(),
                 stock: None,
-                error: bands_error,
+                error: None,
             },
             library_scan: None,
             history_writers: Vec::new(),
             notice: None,
+            error: bands_error,
             rx_raster: Raster::blank(settings.rx_mode),
             tx_raster: Raster::test_pattern(settings.tx_mode),
-            tx_snapshot: TxSnapshot::default(),
+            outgoing: Outgoing::new(settings.tx_volume),
             tx_error: None,
             device_fault: None,
             ui_scale: shared.ui_scale,
-            rig: settings.rig.clone(),
-            contact: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
-            contact_snapshot: ContactSnapshot::default(),
-            contact_dialog_open: false,
-            contact_draft: Vec::new(),
-            contact_paths,
-            contact_waker: waker,
-            contact_requested: String::new(),
-            contact_settings: settings.contact.clone(),
+            directory: ContactEditor::new(
+                &settings.contact,
+                contact_paths,
+                "grayline-sstv-contact".to_owned(),
+                move || waker.wake(),
+            ),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -566,10 +475,7 @@ impl App {
                 shows_frequency: false,
                 reading: None,
             },
-            tx: TxState::default(),
-            tune_until: None,
             rig_worker: None,
-            rig_keyed: false,
             adopted_callsigns: 0,
             adopted_numbers: 0,
             adopted_session: 0,
@@ -579,7 +485,7 @@ impl App {
     }
 
     pub fn title(&self) -> String {
-        self.i18n.text("app-title")
+        crate::identity::IDENTITY.title()
     }
 
     /// Reselects the library entries named by `settings`.
@@ -592,31 +498,18 @@ impl App {
         self.library.stock = index_of(&self.library.stocks, settings.stock.as_deref()).or(self.library.stock);
     }
 
-    fn settings(&self) -> Settings {
-        Settings {
-            input_device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
-            output_device: self.audio.output_device.as_ref().map(|device| device.name().to_owned()),
-            station_callsign: self.station.callsign.clone(),
-            station_qth: self.station.qth.clone(),
-            station_grid: self.station.grid.clone(),
-            qso_number: self.qso.number.clone(),
-            custom_variables: self.custom_variables.clone(),
-            template: selected_name(&self.library.templates, self.library.template),
-            stock: selected_name(&self.library.stocks, self.library.stock),
-            rx_mode: self.rx_mode,
-            tx_mode: self.tx_mode,
-            auto_mode: self.auto_mode,
-            dsp: self.dsp,
-            vis_restart: self.vis_restart,
-            vis_strict: self.vis_strict,
-            send_fskid: self.send_fskid,
-            contest_mode: self.contest_mode,
-            tx_volume: self.tx_volume,
-            auto_history: self.auto_history,
-            history_format: self.history_format,
-            rig: self.rig.clone(),
-            contact: self.contact_settings.clone(),
-        }
+    /// Copies what is kept elsewhere into the settings: the devices that are
+    /// actually open, the station, the serial number, and the library
+    /// selection.
+    fn sync_settings(&mut self) {
+        self.settings.input_device = self.audio.device.as_ref().map(|device| device.name().to_owned());
+        self.settings.output_device = self.audio.output_device.as_ref().map(|device| device.name().to_owned());
+        self.settings.station_callsign.clone_from(&self.station.callsign);
+        self.settings.station_qth.clone_from(&self.station.qth);
+        self.settings.station_grid.clone_from(&self.station.grid);
+        self.settings.qso_number.clone_from(&self.qso.number);
+        self.settings.template = selected_name(&self.library.templates, self.library.template);
+        self.settings.stock = selected_name(&self.library.stocks, self.library.stock);
     }
 
     /// Writes the settings back when anything the interface owns has changed.
@@ -630,10 +523,10 @@ impl App {
             locale: self.i18n.locale(),
             ui_scale: self.ui_scale,
         });
-        let settings = self.settings();
-        if settings != self.saved {
-            self.config.store(&settings);
-            self.saved = settings;
+        self.sync_settings();
+        if self.settings != self.saved {
+            self.config.store(&self.settings);
+            self.saved = self.settings.clone();
         }
     }
 
@@ -688,15 +581,15 @@ impl App {
     }
 
     pub fn select_rx_mode(&mut self, mode: Mode) {
-        if mode != self.rx_mode {
-            self.rx_mode = mode;
+        if mode != self.settings.rx_mode {
+            self.settings.rx_mode = mode;
             self.rx_raster = Raster::blank(mode);
         }
     }
 
     pub fn select_tx_mode(&mut self, mode: Mode) {
-        if mode != self.tx_mode {
-            self.tx_mode = mode;
+        if mode != self.settings.tx_mode {
+            self.settings.tx_mode = mode;
             self.tx_raster = Raster::test_pattern(mode);
             self.composition.frame = None;
             self.request_composition();
@@ -708,8 +601,8 @@ impl App {
     /// Pushed to the receive worker at once rather than on the next frame, so
     /// the change applies to the reception in progress.
     pub fn set_vis_restart(&mut self, enabled: bool) {
-        self.vis_restart = enabled;
-        self.audio.set_vis_restart(enabled);
+        self.settings.vis_restart = enabled;
+        self.push_rx_settings();
     }
 
     /// Chooses whether a VIS detection requires the leader tone as well.
@@ -717,8 +610,13 @@ impl App {
     /// Pushed to the receive worker at once rather than on the next frame, so
     /// the change applies to the signal search in progress.
     pub fn set_vis_strict(&mut self, enabled: bool) {
-        self.vis_strict = enabled;
-        self.audio.set_vis_strict(enabled);
+        self.settings.vis_strict = enabled;
+        self.push_rx_settings();
+    }
+
+    /// Hands the receive worker what the settings now say about reception.
+    fn push_rx_settings(&mut self) {
+        self.audio.set_rx_settings(rx_settings(&self.settings));
     }
 
     /// Abandons the reception in progress and starts the search over.
@@ -733,9 +631,9 @@ impl App {
     }
 
     pub fn toggle_dsp(&mut self, dsp: Dsp) {
-        self.dsp.toggle(dsp);
+        self.settings.dsp.toggle(dsp);
         if dsp == Dsp::Slant {
-            self.audio.set_live_slant(self.dsp.live_slant);
+            self.push_rx_settings();
         }
     }
 
@@ -746,8 +644,9 @@ impl App {
     /// browsing them is the file manager's job and the interface only has to
     /// point at the folder.
     pub fn reveal(&mut self, folder: Folder) {
+        let message = self.i18n.text("error-open-folder");
         let opened = self.platform.open_path(self.paths.folder(folder));
-        self.library.error = opened.err().map(|error| error.to_string());
+        self.error = opened.err().map(|error| format!("{message}: {error}"));
     }
 
     /// Opens the operator's manual.
@@ -759,7 +658,7 @@ impl App {
         let url = grayline_shell::manual_url(&crate::identity::IDENTITY);
         let message = self.i18n.text("error-open-manual");
         let opened = self.platform.open_url(&url);
-        self.library.error = opened.err().map(|error| format!("{message}: {error}"));
+        self.error = opened.err().map(|error| format!("{message}: {error}"));
     }
 
     pub fn normalize_call(&mut self) {
@@ -789,127 +688,37 @@ impl App {
         self.look_up_contact();
     }
 
-    /// Asks the directory about the callsign in the QSO panel.
-    ///
-    /// Text that is not a callsign asks nobody: a half-typed field and a
-    /// garbled identifier both arrive here, and neither is a station worth
-    /// putting a question to somebody's logger about.
     fn look_up_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
-            self.contact_requested.clear();
-            return;
-        };
-        if callsign == self.contact_requested {
-            return;
-        }
-        self.contact_requested = callsign.clone();
-        self.contact.look_up(&callsign);
+        self.directory.look_up(&self.qso.call);
     }
 
-    /// Asks the logger about the callsign again, whatever the store holds.
     pub fn refresh_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
-            return;
-        };
-        self.contact_requested = callsign.clone();
-        self.contact.refresh(&callsign);
+        self.directory.refresh(&self.qso.call);
     }
 
-    /// Whether asking the logger is something this station can do at all.
-    ///
-    /// A control that would do nothing is not offered: with the lookup off, or
-    /// with no instance and no key configured, there is nobody to ask again.
     pub fn can_refresh_contact(&self) -> bool {
-        self.contact_settings.lookup && grayline_qso::normalize_callsign(&self.qso.call).is_some()
+        ContactEditor::can_refresh(&self.settings.contact, &self.qso.call)
     }
 
-    /// Opens the dialog on what is filed under the callsign being worked.
-    ///
-    /// The fields the settings ask for lead, in the order they were written,
-    /// whether or not this station has any of them: a station in Japan wants
-    /// somewhere to put a JCC code and a station anywhere else does not, and
-    /// which of those an operator is was never something to decide here.
-    /// Anything else already filed follows, under its own name.
     pub fn open_contact(&mut self) {
-        let known = &self.contact_snapshot.fields;
-        let offered = grayline_qso::expand_fields(self.contact_settings.fields.iter().map(String::as_str));
-        let mut draft: Vec<ContactRow> = offered
-            .iter()
-            .map(|key| ContactRow {
-                value: known.get(key).cloned().unwrap_or_default(),
-                key: key.clone(),
-                offered: true,
-            })
-            .collect();
-        draft.extend(
-            known
-                .iter()
-                .filter(|(key, _)| !offered.contains(key))
-                .map(|(key, value)| ContactRow {
-                    key: key.clone(),
-                    value: value.clone(),
-                    offered: false,
-                }),
-        );
-        self.contact_draft = draft;
-        self.contact_dialog_open = true;
+        self.directory.open(&self.settings.contact.fields);
     }
 
     pub fn add_contact_field(&mut self) {
-        self.contact_draft.push(ContactRow::default());
+        self.directory.add_field();
     }
 
-    /// Files the edited rows under the callsign being worked.
-    ///
-    /// A row the operator emptied is dropped rather than left alone: clearing
-    /// a value is how a wrong one is taken back, and a write that only ever
-    /// added would hand it straight back on the next lookup. A row whose name
-    /// no `${...}` expression could hold is kept in the dialog to be corrected
-    /// and left out of the store, the way an operator's own variables are.
     pub fn commit_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.qso.call) else {
-            return;
-        };
-        let Some(mut record) = grayline_qso::Record::new(&callsign) else {
-            return;
-        };
-        let mut dropped = Vec::new();
-        for row in &self.contact_draft {
-            if !grayline_qso::valid_key(&row.key) {
-                continue;
-            }
-            if record.set(&row.key, &row.value) {
-                continue;
-            }
-            if self.contact_snapshot.fields.contains_key(&row.key) {
-                dropped.push(row.key.clone());
-            }
-        }
-        if record.iter().eq(self
-            .contact_snapshot
-            .fields
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str())))
-            && dropped.is_empty()
-        {
-            return;
-        }
-        self.contact.save(record, dropped);
+        self.directory.commit(&self.qso.call);
     }
 
-    /// Turns asking the operator's own logger on or off.
-    ///
-    /// The worker is opened again rather than told: what it holds is a
-    /// directory composed over a logger or over nothing, and which of those it
-    /// is was decided when it was built.
+    /// Turns asking the operator's own logger on or off, and asks again.
     pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.contact_settings.lookup == lookup {
+        if self.settings.contact.lookup == lookup {
             return;
         }
-        self.contact_settings.lookup = lookup;
-        self.contact = contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
-        self.contact_snapshot = ContactSnapshot::default();
-        self.contact_requested.clear();
+        self.settings.contact.lookup = lookup;
+        self.directory.reconfigure(&self.settings.contact);
         self.look_up_contact();
     }
 
@@ -918,13 +727,13 @@ impl App {
     /// Refuses to write over one that is already there, the way the rig script
     /// does: the file only exists because someone put a key in it.
     pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.contact_paths.credentials.clone() else {
+        let Some(path) = self.directory.paths().credentials.clone() else {
             return;
         };
         let written = if path.exists() {
             Ok(path)
         } else {
-            grayline_qso::Credentials::write(&path, Some(&self.contact_settings.wavelog_url), "")
+            grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
                 .map(|()| path)
                 .map_err(|error| io::Error::other(error.to_string()))
         };
@@ -932,10 +741,7 @@ impl App {
     }
 
     fn poll_contact(&mut self) {
-        let latest = self.contact.latest();
-        let changed = latest.fields != self.contact_snapshot.fields;
-        self.contact_snapshot = latest;
-        if changed {
+        if self.directory.poll() {
             self.request_composition();
         }
     }
@@ -974,6 +780,7 @@ impl App {
 
     pub fn open_custom_variables(&mut self) {
         self.variables_draft = self
+            .settings
             .custom_variables
             .iter()
             .map(|(name, value)| (name.clone(), value.clone()))
@@ -998,21 +805,20 @@ impl App {
             .filter(|(name, _)| valid_variable_name(name))
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect();
-        if variables != self.custom_variables {
-            self.custom_variables = variables;
+        if variables != self.settings.custom_variables {
+            self.settings.custom_variables = variables;
             self.request_composition();
         }
     }
 
+    /// Reads the library on this thread, for startup and for a scan that
+    /// could not be given a thread of its own.
     fn refresh_library(&mut self) {
-        let mut errors = Vec::new();
-        if let Err(error) = self.load_templates() {
-            errors.push(error.to_string());
-        }
-        if let Err(error) = self.load_stocks() {
-            errors.push(error.to_string());
-        }
-        self.library.error = (!errors.is_empty()).then(|| errors.join("; "));
+        let scan = LibraryScan {
+            templates: template_entries(self.paths.templates_dir()),
+            stocks: stock_entries(self.paths.stocks_dir()),
+        };
+        self.adopt_library_scan(scan);
     }
 
     /// Reads the library again without making the interface wait for it.
@@ -1020,7 +826,7 @@ impl App {
     /// A stock folder is read file by file for each image's geometry, which on
     /// a networked folder takes longer than a frame has. The scan runs on a
     /// thread of its own and is adopted on the frame its result arrives.
-    fn start_library_scan(&mut self) {
+    pub fn start_library_scan(&mut self) {
         let (sender, receiver) = mpsc::channel();
         let templates_dir = self.paths.templates_dir().to_path_buf();
         let stocks_dir = self.paths.stocks_dir().to_path_buf();
@@ -1034,13 +840,7 @@ impl App {
             });
         match spawned {
             Ok(_) => self.library_scan = Some(receiver),
-            Err(_) => {
-                let scan = LibraryScan {
-                    templates: template_entries(self.paths.templates_dir()),
-                    stocks: stock_entries(self.paths.stocks_dir()),
-                };
-                self.adopt_library_scan(scan);
-            }
+            Err(_) => self.refresh_library(),
         }
     }
 
@@ -1084,7 +884,7 @@ impl App {
     /// down, so quitting right after a reception still keeps it.
     fn save_history_in_background(&mut self, candidate: crate::worker::receive::HistoryCandidate) {
         let directory = self.paths.received_dir().to_path_buf();
-        let format = self.history_format;
+        let format = self.settings.history_format;
         let spawned = thread::Builder::new()
             .name("grayline-sstv-history".to_owned())
             .spawn(move || {
@@ -1114,26 +914,6 @@ impl App {
         }
     }
 
-    pub fn refresh_templates(&mut self) {
-        self.start_library_scan();
-    }
-
-    pub fn refresh_stocks(&mut self) {
-        self.start_library_scan();
-    }
-
-    fn load_templates(&mut self) -> io::Result<()> {
-        let entries = template_entries(self.paths.templates_dir())?;
-        replace_entries(&mut self.library.templates, &mut self.library.template, entries);
-        Ok(())
-    }
-
-    fn load_stocks(&mut self) -> io::Result<()> {
-        let entries = stock_entries(self.paths.stocks_dir())?;
-        replace_entries(&mut self.library.stocks, &mut self.library.stock, entries);
-        Ok(())
-    }
-
     /// How long the interface may sit still before it has to draw again.
     ///
     /// A reception asks for its own frames through the receive worker's waker,
@@ -1150,7 +930,7 @@ impl App {
         // A transmission is read from its worker and from the playback queue,
         // neither of which announces anything, and the row being sent moves
         // continuously while it runs.
-        if self.tx_snapshot.phase.is_active() || self.tune_until.is_some() {
+        if self.outgoing.is_active() {
             at_most(LIVE_INTERVAL);
         }
         if self.composition.pending {
@@ -1167,7 +947,7 @@ impl App {
         }
         // Nothing in a snapshot reports a device that stopped, and a rig is
         // read by polling, so both are watched for rather than waited on.
-        if self.audio.is_capturing() || self.rig.enabled {
+        if self.audio.is_capturing() || self.settings.rig.enabled {
             at_most(WATCH_INTERVAL);
         }
         soonest
@@ -1185,7 +965,7 @@ impl App {
         }
         if let Some(candidate) = self.audio.take_history() {
             self.adopt_received_image(&candidate.frame);
-            if self.auto_history {
+            if self.settings.auto_history {
                 self.save_history_in_background(candidate);
             }
         }
@@ -1198,24 +978,23 @@ impl App {
         }
         self.adopt_decoded_callsign();
         self.adopt_decoded_number();
-        self.audio.set_sync_start(self.sync_start());
-        self.audio.set_vis_restart(self.vis_restart);
-        self.audio.set_vis_strict(self.vis_strict);
-        self.tx_gain.set_travel(self.tx_volume);
-        if self.auto_mode
+        self.push_rx_settings();
+        self.outgoing.set_level(self.settings.tx_volume);
+        if self.settings.auto_mode
             && let Some(mode) = self.audio.snapshot().mode
         {
             self.select_rx_mode(mode);
         }
         self.poll_rig();
         self.poll_contact();
+        self.poll_composition();
         self.poll_transmit();
         // Reception stops for as long as anything is going out. The station's
         // own signal comes back off the antenna, and what would be decoded from
         // it is the picture being sent. Derived from the phase rather than
         // switched at either end of a transmission, so a tone, a picture, and a
         // transmission that failed all release it the same way.
-        self.audio.set_muted_for_transmit(self.tx_snapshot.phase.is_active());
+        self.audio.set_muted_for_transmit(self.outgoing.is_active());
         self.refresh_timed_composition();
         self.refresh_tuned_composition();
         self.report_activity();
@@ -1227,10 +1006,10 @@ impl App {
     /// here rather than through a path of its own: a worker exists exactly
     /// while the operator has asked for one.
     fn poll_rig(&mut self) {
-        match (self.rig.enabled, self.rig_worker.is_some()) {
+        match (self.settings.rig.enabled, self.rig_worker.is_some()) {
             (true, false) => {
                 let worker = RigWorker::spawn(
-                    &self.rig,
+                    &self.settings.rig,
                     self.paths.config_dir(),
                     Arc::clone(&self.bands),
                     grayline_shell::log::note,
@@ -1242,7 +1021,7 @@ impl App {
                 // A rig switched off mid-transmission is still a keyed rig,
                 // and the request has to go before the channel closes for the
                 // worker to see it at all.
-                self.unkey_rig();
+                self.outgoing.release_rig(self.rig_worker.as_ref());
                 if let Some(worker) = self.rig_worker.take() {
                     worker.stop_in_background();
                 }
@@ -1261,7 +1040,7 @@ impl App {
     /// worker, and switching off mid-transmission is what gives the keying
     /// back before the connection goes.
     pub const fn set_rig_enabled(&mut self, enabled: bool) {
-        self.rig.enabled = enabled;
+        self.settings.rig.enabled = enabled;
     }
 
     /// Makes the connection again after it failed.
@@ -1269,7 +1048,7 @@ impl App {
     /// Giving up the worker is the whole of it: while rig control is switched
     /// on, the next frame is what starts one.
     pub fn retry_rig(&mut self) {
-        self.unkey_rig();
+        self.outgoing.release_rig(self.rig_worker.as_ref());
         if let Some(worker) = self.rig_worker.take() {
             worker.stop_in_background();
         }
@@ -1326,18 +1105,10 @@ impl App {
 
     /// Writes the default script out for the operator to edit.
     ///
-    /// Refuses to write over one that is already there: the file only exists
-    /// because someone edited it, and replacing it with the default is the one
-    /// thing this must never do. The result is reported on the status line
-    /// rather than in front of the interface, because nothing was lost either
-    /// way.
+    /// The result is reported on the status line rather than in front of the
+    /// interface, because nothing was lost either way.
     pub fn write_rig_script(&mut self) {
-        let path = self.paths.config_dir().join(script::SCRIPT_FILE);
-        let written = if path.exists() {
-            Ok(path)
-        } else {
-            fs::write(&path, script::DEFAULT_SCRIPT).map(|()| path)
-        };
+        let written = script::write_default(self.paths.config_dir());
         self.report_written(written);
     }
 
@@ -1358,48 +1129,13 @@ impl App {
                     self.i18n
                         .text_with("rig-script-written", &[("path", owned(path.display().to_string()))]),
                 );
-                self.library.error = None;
+                self.error = None;
                 self.reveal(Folder::Config);
             }
             Err(error) => {
-                self.library.error = Some(error.to_string());
+                self.error = Some(error.to_string());
                 self.notice = None;
             }
-        }
-    }
-
-    fn unkey_rig(&mut self) {
-        if !self.rig_keyed {
-            return;
-        }
-        self.rig_keyed = false;
-        if let Some(worker) = self.rig_worker.as_ref() {
-            worker.receive();
-        }
-    }
-
-    /// Whether the audio may start.
-    ///
-    /// A transmission that keyed the rig waits for the rig to say it is
-    /// transmitting, because the lead-in the rig needs to switch over is time
-    /// anything sent into it is simply lost.
-    const fn rig_ready_to_send(&self) -> bool {
-        !self.rig_keyed || matches!(self.rig_snapshot.state, RigState::Transmitting)
-    }
-
-    /// Chooses which modes a reception may start in without a VIS header.
-    ///
-    /// A transmission joined after its header, or that never sent one, can only
-    /// be identified by the spacing of its sync pulses, and a period can be
-    /// matched by more than one mode. So the operator's own choice decides how
-    /// far the inference may reach: with automatic detection on, any supported
-    /// mode may be inferred, and with it off only the selected mode is
-    /// considered, which confirms rather than overrides that choice.
-    const fn sync_start(&self) -> SyncStart {
-        if self.auto_mode {
-            SyncStart::Any
-        } else {
-            SyncStart::Only(self.rx_mode)
         }
     }
 
@@ -1514,7 +1250,7 @@ impl App {
     /// Transmission outranks reception: the two cannot overlap on one device,
     /// and a transmission in progress is the stronger claim on the machine.
     fn report_activity(&mut self) {
-        let activity = if self.tx_snapshot.phase.is_active() {
+        let activity = if self.outgoing.is_active() {
             Activity::Transmitting
         } else if matches!(
             self.audio.snapshot().progress,
@@ -1540,7 +1276,7 @@ impl App {
         match self.tab {
             Tab::Receive => self.audio.snapshot().display_fraction,
             Tab::Transmit => {
-                if self.tx_snapshot.phase.is_active() && !self.is_tuning() {
+                if self.outgoing.is_sending_picture() {
                     self.tx_progress().fraction()
                 } else {
                     1.0
@@ -1551,8 +1287,8 @@ impl App {
 
     pub const fn active_mode(&self) -> Mode {
         match self.tab {
-            Tab::Transmit => self.tx_mode,
-            Tab::Receive => self.rx_mode,
+            Tab::Transmit => self.settings.tx_mode,
+            Tab::Receive => self.settings.rx_mode,
         }
     }
 
@@ -1588,7 +1324,7 @@ impl App {
         // A transmission is sending the frame currently on the tab. Replacing
         // it would show something that is not going out, so the change waits
         // until the transmission is over.
-        if self.tx_snapshot.phase.is_active() {
+        if self.outgoing.is_active() {
             self.composition.deferred = true;
             return;
         }
@@ -1612,18 +1348,18 @@ impl App {
             template_path: template.path.clone(),
             background_path: stock.path.clone(),
             assets_dir: self.paths.assets_dir().to_path_buf(),
-            mode: self.tx_mode,
+            mode: self.settings.tx_mode,
             received_image: self.composition.received_image.clone(),
             received_at: self.composition.received_at.clone(),
             station_callsign: self.station.callsign.clone(),
             station_qth: self.station.qth.clone(),
             station_grid: self.station.grid.clone(),
             contact_callsign: self.qso.call.clone(),
-            contact: self.contact_snapshot.fields.clone(),
+            contact: self.directory.snapshot.fields.clone(),
             report: self.qso.rsv.clone(),
             number: self.qso.number.clone(),
             report_received: self.qso.rsv_received.clone(),
-            custom: self.custom_variables.clone(),
+            custom: self.settings.custom_variables.clone(),
             radio: self.composition.reading.clone(),
         });
     }
@@ -1650,7 +1386,9 @@ impl App {
         }
     }
 
-    fn poll_transmit(&mut self) {
+    /// Adopts the picture the composer finished, if it is the one asked for
+    /// last.
+    fn poll_composition(&mut self) {
         if let Some(result) = self.composition.composer.latest()
             && result.generation == self.composition.generation
         {
@@ -1669,54 +1407,16 @@ impl App {
                 }
             }
         }
+    }
 
-        // Checked before the worker is read, because the tone it produces never
-        // runs out on its own and the deadline is the only thing that ends it.
-        if let Some(deadline) = self.tune_until
-            && Instant::now() >= deadline
-        {
-            self.stop_transmit_with(TxPhase::Complete);
-            return;
-        }
-
-        let Some(snapshot) = self.tx.latest() else {
-            return;
-        };
-        self.tx_snapshot = snapshot;
-        if self.tx_snapshot.phase == TxPhase::Failed {
-            self.tx_error = self.tx_snapshot.error.as_ref().map(AppError::to_string);
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        // A rig that refused one of the operator's commands has not been keyed,
-        // so the transmission it was keyed for cannot go out.
-        if self.rig_keyed
-            && let Some(error) = self.rig_snapshot.error.as_ref()
-        {
-            self.tx_error = Some(error.to_string());
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        let should_start = !self.tx.is_started()
-            && self.rig_ready_to_send()
-            && matches!(self.tx_snapshot.phase, TxPhase::Producing | TxPhase::Draining);
-        if should_start && let Err(error) = self.tx.start_playback() {
-            self.tx_error = Some(error.to_string());
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        if self.tx.has_underrun() {
-            self.tx_error = Some(AppError::PlaybackUnderrun.to_string());
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        if self.tx_snapshot.phase == TxPhase::Draining && self.tx.is_drained() {
-            self.stop_transmit_with(TxPhase::Complete);
+    fn poll_transmit(&mut self) {
+        if let Some(ending) = self.outgoing.poll(&self.rig_snapshot, Instant::now()) {
+            self.end_transmission(ending);
         }
     }
 
     pub fn can_transmit(&self) -> bool {
-        self.transmit_problem().is_none() && !self.tx_snapshot.phase.is_active()
+        self.transmit_problem().is_none() && !self.outgoing.is_active()
     }
 
     pub fn transmit_problem(&self) -> Option<String> {
@@ -1747,7 +1447,7 @@ impl App {
     /// A rig that was asked to key and did not leaves a transmission nobody
     /// hears, so it stops one rather than being let through quietly.
     fn rig_problem(&self) -> Option<String> {
-        if !self.rig.enabled || self.rig_snapshot.state.is_ready() {
+        if !self.settings.rig.enabled || self.rig_snapshot.state.is_ready() {
             return None;
         }
         let detail = self.rig_snapshot.error.as_ref().map_or_else(
@@ -1761,7 +1461,9 @@ impl App {
     }
 
     fn station_id(&self) -> Option<Result<FskId, grayline_sstv_fskid::FskIdError>> {
-        self.send_fskid.then(|| FskId::new(self.station.callsign.trim()))
+        self.settings
+            .send_fskid
+            .then(|| FskId::new(self.station.callsign.trim()))
     }
 
     /// Returns the contest number that identifier would carry, if any.
@@ -1771,7 +1473,7 @@ impl App {
     /// that still does not fit is left off rather than refused: the picture is
     /// what the transmission is for.
     fn contest_number(&self) -> Option<FskNumber> {
-        if !self.contest_mode {
+        if !self.settings.contest_mode {
             return None;
         }
         let text: String = self
@@ -1804,45 +1506,28 @@ impl App {
             .frame
             .clone()
             .expect("transmit availability requires a prepared frame");
-        let Some(writer) = self.begin_transmission() else {
-            return;
-        };
-        self.tx.attach_worker(TxWorker::spawn(
-            writer,
-            self.tx_mode,
-            frame,
-            identification,
-            Arc::clone(&self.tx_gain),
-        ));
+        let mode = self.settings.tx_mode;
+        self.begin_transmission(Kind::Picture, |writer, gain| {
+            TxWorker::spawn(writer, mode, frame, identification, gain)
+        });
     }
 
     /// Claims the output stream and the rig for something about to go out.
     ///
-    /// Returns the writer the worker fills, or nothing when the stream could
-    /// not be opened, in which case the reason is already in front of the
-    /// operator.
-    fn begin_transmission(&mut self) -> Option<PlaybackWriter> {
+    /// When the stream could not be opened nothing starts, and the reason is
+    /// put in front of the operator.
+    fn begin_transmission(&mut self, kind: Kind, spawn: impl FnOnce(PlaybackWriter, Arc<TxGain>) -> TxWorker) {
         let (playback, writer) = match self.audio.open_playback(PLAYBACK_QUEUE_SAMPLES) {
             Ok(playback) => playback,
             Err(error) => {
                 self.tx_error = Some(error.to_string());
-                return None;
+                return;
             }
         };
-        self.tx_snapshot = TxSnapshot {
-            phase: TxPhase::Priming,
-            ..TxSnapshot::default()
-        };
         self.tx_error = None;
-        self.tx.begin(playback);
-        self.tx_gain.set_travel(self.tx_volume);
-        // Asked for before the audio is generated, so the lead-in the rig
-        // needs runs alongside filling the queue rather than after it.
-        if let Some(worker) = self.rig_worker.as_ref() {
-            worker.transmit(Keying::Audio);
-            self.rig_keyed = true;
-        }
-        Some(writer)
+        self.outgoing.set_level(self.settings.tx_volume);
+        let worker = spawn(writer, self.outgoing.gain());
+        self.outgoing.begin(kind, playback, worker, self.rig_worker.as_ref());
     }
 
     /// Reports why the tune tone could not be sent, if it could not.
@@ -1850,7 +1535,7 @@ impl App {
     /// Less stands in its way than in a picture's: a tone carries no image and
     /// names no station, so only the output device and the rig are asked.
     pub fn tune_problem(&self) -> Option<String> {
-        if self.tx_snapshot.phase.is_active() && !self.is_tuning() {
+        if self.outgoing.is_sending_picture() {
             return Some(self.i18n.text("error-transmit-active"));
         }
         if self.audio.output_device.is_none() {
@@ -1865,25 +1550,22 @@ impl App {
             self.tx_error = Some(error);
             return;
         }
-        let Some(writer) = self.begin_transmission() else {
-            return;
-        };
-        self.tune_until = Some(Instant::now() + TUNE_LIMIT);
-        self.tx.attach_worker(TxWorker::spawn_tune(
-            writer,
-            TUNE_FREQUENCY_HZ,
-            Arc::clone(&self.tx_gain),
-        ));
+        self.begin_transmission(
+            Kind::Tune {
+                until: Instant::now() + TUNE_LIMIT,
+            },
+            |writer, gain| TxWorker::spawn_tune(writer, TUNE_FREQUENCY_HZ, gain),
+        );
     }
 
     pub fn stop_tune(&mut self) {
         if self.is_tuning() {
-            self.stop_transmit_with(TxPhase::Cancelled);
+            self.end_transmission(Ending::Cancelled);
         }
     }
 
-    pub const fn is_tuning(&self) -> bool {
-        self.tune_until.is_some()
+    pub fn is_tuning(&self) -> bool {
+        self.outgoing.is_tuning()
     }
 
     /// Puts the interface in the state a running tone leaves it in.
@@ -1892,45 +1574,63 @@ impl App {
     /// is what the operator can do while it runs rather than its audio.
     #[cfg(test)]
     pub(crate) fn tune_for_test(&mut self) {
-        self.tune_until = Some(Instant::now() + TUNE_LIMIT);
-        self.tx_snapshot.phase = TxPhase::Producing;
+        self.outgoing.begin_for_test(
+            Kind::Tune {
+                until: Instant::now() + TUNE_LIMIT,
+            },
+            crate::worker::transmit::TxPhase::Producing,
+        );
     }
 
     pub fn stop_transmit(&mut self) {
-        if self.tx_snapshot.phase.is_active() {
-            self.stop_transmit_with(TxPhase::Cancelled);
+        if self.outgoing.is_active() {
+            self.end_transmission(Ending::Cancelled);
         }
     }
 
-    fn stop_transmit_with(&mut self, phase: TxPhase) {
-        self.tx.stop();
-        self.tune_until = None;
-        self.unkey_rig();
-        self.tx_snapshot.phase = phase;
+    /// Ends whatever is going out, however it ended.
+    ///
+    /// Every way a transmission ends comes through here, so each of them gives
+    /// the rig back and makes the composition that was put off while it ran.
+    fn end_transmission(&mut self, ending: Ending) {
+        if let Ending::Failed(error) = &ending {
+            self.tx_error = Some(error.clone());
+        }
+        self.outgoing.end(&ending, self.rig_worker.as_ref());
         if self.composition.deferred {
             self.composition.deferred = false;
             self.request_composition();
         }
     }
 
-    /// Reports which image row the transmission is currently on.
-    ///
-    /// The clock is the sample count the device callback has consumed, not the
-    /// worker's generated count: the worker runs ahead to keep the queue full,
-    /// so only the callback knows what is actually being heard. That position
-    /// maps onto a row because the raster scans at a uniform rate.
     pub fn tx_progress(&self) -> TxProgress {
-        if self.tx_snapshot.phase == TxPhase::Complete {
-            return TxProgress::Complete;
-        }
-        if !self.tx_snapshot.phase.is_active() {
-            return TxProgress::Idle;
-        }
-        self.tx_snapshot.raster.progress_at(self.tx.played_samples())
+        self.outgoing.progress()
     }
 
     pub fn output_sample_rate_hz(&self) -> Option<u32> {
-        self.tx.sample_rate_hz()
+        self.outgoing.sample_rate_hz()
+    }
+}
+
+/// What `settings` say about reception, in the form the receive worker reads.
+///
+/// Which modes a reception may start in without a VIS header follows the mode
+/// selection. A transmission joined after its header, or that never sent one,
+/// can only be identified by the spacing of its sync pulses, and a period can
+/// be matched by more than one mode. So the operator's own choice decides how
+/// far the inference may reach: with automatic detection on, any supported
+/// mode may be inferred, and with it off only the selected mode is
+/// considered, which confirms rather than overrides that choice.
+fn rx_settings(settings: &Settings) -> RxSettings {
+    RxSettings {
+        live_slant: settings.dsp.live_slant,
+        vis_restart: settings.vis_restart,
+        vis_strict: settings.vis_strict,
+        sync_start: if settings.auto_mode {
+            SyncStart::Any
+        } else {
+            SyncStart::Only(settings.rx_mode)
+        },
     }
 }
 

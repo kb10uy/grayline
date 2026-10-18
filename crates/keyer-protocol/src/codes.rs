@@ -10,7 +10,7 @@ const DIGITS: &[u8; 32] = b"0123456789ABCDEFGHIJKLMNOPQRSTUV";
 ///
 /// A five-bit code is one digit, `0`–`9` then `A`–`V` by value, and each
 /// control code is a lower-case letter, so a run of codes is one word.
-pub fn encode_codes(codes: &[TxCode]) -> String {
+pub(crate) fn encode_codes(codes: &[TxCode]) -> String {
     codes
         .iter()
         .map(|code| match code {

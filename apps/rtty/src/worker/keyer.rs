@@ -17,11 +17,9 @@ use std::{
 use grayline_keyer_protocol::{KeyerClient, StreamState};
 use grayline_rig_control::RigError;
 use grayline_rtty::{TxCode, TxConfig};
+use grayline_shell::worker::update;
 
-use crate::{
-    error::AppError,
-    worker::{transmit::TxPhase, update},
-};
+use crate::{error::AppError, worker::transmit::TxPhase};
 
 /// The rate a keyer's timeline counts in: one tick is a microsecond.
 pub const KEYER_TICKS_PER_SECOND: u32 = 1_000_000;

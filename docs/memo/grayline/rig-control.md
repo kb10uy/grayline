@@ -74,11 +74,13 @@ description of how to talk to a rig. They moved out of the SSTV application
 once a second application needed to key a rig, which is the rule the rest of
 this repository's crates were drawn by.
 
-The application still owns the moments and the settings. It supplies the
-`[rig]` section it parsed out of its own configuration file, the directory the
-script and the plan are read from, and a function the script's `log` writes
-to — rig control keeps no log of its own, because which log a message belongs
-in is the application's to know.
+The application still owns the moments and the file the settings live in. It
+finds the `[rig]` section in its own configuration file and hands it to
+`RigSettings::read`, which is rig control's, so the two applications cannot
+read the same section two ways; `RigSettings::write` puts it back. It also
+supplies the directory the script and the plan are read from, and a function
+the script's `log` writes to — rig control keeps no log of its own, because
+which log a message belongs in is the application's to know.
 
 Each application reads its own configuration directory, so a station that keys
 both has a `rigcontrol.lua` per application rather than one the two could
@@ -94,7 +96,7 @@ one kind of transport. There is not.
 | | SSTV | RTTY |
 | --- | --- | --- |
 | Keying around a transmission | Yes | Yes |
-| Settings | `[rig]`, edited from the radio panel | `[rig]`, edited in the file |
+| Settings | `[rig]`; switched on from the radio panel, otherwise edited in the file | `[rig]`, edited in the file |
 | `rigcontrol.lua`, `bands.toml` | Read, and written out from the menu | Read, and the built-in default otherwise |
 | Frequency poll | On, and shown in the radio panel | Off by default; nothing shows a frequency yet |
 | Band selector, tuning controls | Yes | No |
@@ -349,7 +351,7 @@ address = "127.0.0.1:4533"
 
 | Key | Meaning |
 | --- | --- |
-| `enabled` | Whether to connect at all. The SSTV application's Rig Control menu is the same switch; the RTTY application reads this key and offers no switch. |
+| `enabled` | Whether to connect at all. The SSTV application's radio panel Connect and Disconnect buttons are the same switch; the RTTY application reads this key and offers no switch. |
 | `lead-in` | Seconds between `transmit` returning and the first audio sample. |
 | `tail` | Seconds between the last audio sample and `receive` being called. |
 | `poll-interval` | Seconds between calls to `poll_frequency`. `0` never calls it, which is what the RTTY application starts on. |
@@ -442,7 +444,8 @@ switching rig control off while one is running.
 `poll_frequency` is not called while the rig is keyed. Reading the frequency
 back mid-transmission says nothing the operator cannot see, and it puts CAT
 traffic on the wire during the one part of a session that has to be left alone.
-`set_frequency` and `change_band` are refused while keyed for the same reason.
+`set_frequency` and `change_band` are dropped while keyed for the same reason,
+and the interface disables the controls.
 
 While rig control is switched on and not connected, a transmission is refused
 with what the rig said. Switching it off transmits anyway. In the RTTY

@@ -1,4 +1,4 @@
-use crate::time::SstvDuration;
+use crate::time::{SstvDuration, samples_spanned};
 
 /// Where the raster clock comes from when decoding starts.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -82,5 +82,5 @@ impl Default for RxConfig {
 }
 
 pub(super) fn sync_detector_delay_samples(sample_rate_hz: u32, sync_detector_delay: SstvDuration) -> f64 {
-    f64::from(sample_rate_hz) * sync_detector_delay.as_picos() as f64 / 1.0e12
+    samples_spanned(f64::from(sample_rate_hz), sync_detector_delay.as_picos())
 }

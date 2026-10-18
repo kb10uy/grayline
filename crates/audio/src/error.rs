@@ -33,6 +33,22 @@ pub enum AudioError {
     Backend(String),
 }
 
+impl AudioError {
+    pub(crate) fn backend(error: impl core::fmt::Display) -> Self {
+        Self::Backend(error.to_string())
+    }
+
+    pub(crate) fn check_queue(sample_rate_hz: u32, capacity_samples: usize) -> Result<(), Self> {
+        if capacity_samples == 0 {
+            return Err(Self::EmptyCapacity);
+        }
+        if sample_rate_hz < crate::MINIMUM_SAMPLE_RATE_HZ {
+            return Err(Self::UnsupportedConfiguration(format!("{sample_rate_hz} Hz")));
+        }
+        Ok(())
+    }
+}
+
 /// Why a stream that was running stopped on its own.
 ///
 /// The host's own error kinds are not exposed; these are the distinctions the
@@ -66,7 +82,7 @@ pub struct StreamFault {
 /// until it is taken: a stream that fails usually fails repeatedly, and the
 /// first is the one that says why.
 #[derive(Clone, Debug, Default)]
-pub struct FaultSlot(Arc<Mutex<Option<StreamFault>>>);
+pub(crate) struct FaultSlot(Arc<Mutex<Option<StreamFault>>>);
 
 impl FaultSlot {
     pub(crate) fn report(&self, fault: StreamFault) {
@@ -78,7 +94,7 @@ impl FaultSlot {
     }
 
     /// Takes the pending report, if a stream left one.
-    pub fn take(&self) -> Option<StreamFault> {
+    pub(crate) fn take(&self) -> Option<StreamFault> {
         match self.0.lock() {
             Ok(mut slot) => slot.take(),
             Err(poisoned) => poisoned.into_inner().take(),

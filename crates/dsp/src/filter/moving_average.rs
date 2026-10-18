@@ -1,6 +1,6 @@
 use alloc::{vec, vec::Vec};
 
-use crate::DspError;
+use crate::{DspError, validate::validate_sample_rate};
 
 /// Parameters for a boxcar moving-average filter.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,9 +37,7 @@ pub struct MovingAverage {
 impl MovingAverage {
     /// Designs and creates a filter whose window covers one smoothing period.
     pub fn new(design: MovingAverageDesign) -> Result<Self, DspError> {
-        if !design.sample_rate_hz.is_finite() || design.sample_rate_hz <= 0.0 {
-            return Err(DspError::InvalidSampleRate);
-        }
+        validate_sample_rate(design.sample_rate_hz)?;
         if !design.smoothing_hz.is_finite() || design.smoothing_hz <= 0.0 {
             return Err(DspError::InvalidFrequency);
         }

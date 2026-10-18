@@ -46,7 +46,9 @@ Note that AFC does not sit cleanly in any of them. It reads the FFT array,
 which is produced from the audio block before the demodulator, and writes tone
 frequencies into the demodulator. A reasonable target is to make it a
 `demodulator`-level component that consumes a spectrum slice and emits a tone
-pair, with the FFT itself in `dsp` and the timing decision in `application`.
+pair, with the FFT itself in `dsp` and the cadence owned by the receive
+pipeline. That is what `grayline-rtty` does
+([grayline/rtty.md](../grayline/rtty.md)).
 
 ## What the Original's Path Contains
 
@@ -80,6 +82,7 @@ should make explicit:
 
 - `m_type` selects among four structurally different discriminators. This is an
   enum whose variants own different state, not a mode flag on one struct.
+  Grayline ports only the resonator pair, so no such enum exists yet.
 - `m_StopLen` conflates a receive tolerance with a transmit element length,
   with two of its five values meaning the same thing on one side and different
   things on the other. Split it.
@@ -100,8 +103,10 @@ to keep that behavior is a product decision, but it should be an explicit one.
 
 The original's split between `SampBase`, `SampFreq`, and `DemSamp` exists to
 allow sound-card clock calibration without requesting an odd hardware rate, and
-to run the demodulator at half rate. Both are worth keeping, but they should be
-explicit rate parameters rather than globals.
+to run the demodulator at half rate. Grayline kept neither: the receive path
+runs at the capture rate, for the reasons recorded under "Nothing is
+decimated" in [grayline/rtty.md](../grayline/rtty.md), and no clock
+calibration exists.
 
 Bit timing is an integer sample counter with no fractional accumulator. A port
 should use a fractional accumulator, which costs nothing and removes a
@@ -134,11 +139,12 @@ These should stay outside the portable core:
 already covers Kaiser-windowed FIR design, `CFIR2`-style convolution, the
 Butterworth IIR design, the FFT — and the two-pole resonator (`CIIRTANK`),
 which is `grayline_dsp::filter::Resonator`, lifted for the MMSSTV port's tone
-detectors. What MMTTY's DSP layer holds beyond that is the boxcar moving
-average (`CSmooz`), the half-band decimator (`CDECM2`), the four-times
+detectors — and, lifted for the RTTY port, the boxcar moving average
+(`CSmooz`), which is `grayline_dsp::filter::MovingAverage`. What MMTTY's DSP
+layer holds beyond that is the half-band decimator (`CDECM2`), the four-times
 interpolate/decimate pair used by the oversampled limiter, and the recursive
-sliding DFT (`CSlideFFT`). Which of those the shared DSP crate takes is
-Grayline's decision, recorded in [grayline/rtty.md](../grayline/rtty.md).
+sliding DFT (`CSlideFFT`). None of those was taken, for the reasons recorded
+in [grayline/rtty.md](../grayline/rtty.md).
 
 Conversely, nothing in the RTTY path needs image buffers, color conversion, or
 the SSTV timing model, and the RTTY receiver's output is a character stream

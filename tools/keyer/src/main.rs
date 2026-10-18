@@ -9,7 +9,10 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{
+    Args, Parser, Subcommand, ValueEnum,
+    builder::{PossibleValuesParser, TypedValueParser},
+};
 use grayline_keyer::{
     clock::{self, SystemClock},
     line::{self, SerialLine, Signal},
@@ -81,20 +84,20 @@ struct SendArgs {
     baud: f64,
 
     /// Length of the stop element in bits.
-    #[arg(long, value_enum, value_name = "BITS", default_value_t)]
-    stop: StopArgument,
+    #[arg(long, value_name = "BITS", value_parser = named(&StopElement::ALL, StopElement::name, StopElement::from_name), default_value = StopElement::default().name())]
+    stop: StopElement,
 
     /// Parity bit between the data bits and the stop element.
-    #[arg(long, value_enum, value_name = "PARITY", default_value_t)]
-    parity: ParityArgument,
+    #[arg(long, value_name = "PARITY", value_parser = named(&Parity::ALL, Parity::name, Parity::from_name), default_value = Parity::default().name())]
+    parity: Parity,
 
     /// Idle between characters, in bits.
     #[arg(long, value_name = "BITS", default_value_t = 0.0)]
     gap: f64,
 
     /// What fills the gap between characters.
-    #[arg(long, value_enum, value_name = "FILLER", default_value_t)]
-    diddle: DiddleArgument,
+    #[arg(long, value_name = "FILLER", value_parser = named(&Diddle::ALL, Diddle::name, Diddle::from_name), default_value = Diddle::default().name())]
+    diddle: Diddle,
 
     /// Mark idle before the first character, in seconds.
     #[arg(long, value_name = "SECONDS", default_value_t = 0.5)]
@@ -123,61 +126,28 @@ impl From<SignalArgument> for Signal {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum StopArgument {
-    #[value(name = "1")]
-    One,
-    #[default]
-    #[value(name = "1.5")]
-    OneAndAHalf,
-    #[value(name = "2")]
-    Two,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum ParityArgument {
-    #[default]
-    None,
-    Even,
-    Odd,
-    Mark,
-    Space,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum DiddleArgument {
-    #[default]
-    None,
-    Ltrs,
-    Blank,
+/// Offers `all` by the names `name` gives them and reads the chosen one back.
+fn named<T: Copy + Send + Sync + 'static>(
+    all: &'static [T],
+    name: fn(T) -> &'static str,
+    from_name: fn(&str) -> Option<T>,
+) -> impl TypedValueParser<Value = T> {
+    PossibleValuesParser::new(all.iter().map(|value| name(*value)))
+        .map(move |chosen| from_name(&chosen).expect("clap accepts only the offered names"))
 }
 
 impl SendArgs {
     fn config(&self) -> Result<TxConfig> {
         let mut config = TxConfig {
             char_gap_bits: self.gap,
-            diddle: match self.diddle {
-                DiddleArgument::None => Diddle::None,
-                DiddleArgument::Ltrs => Diddle::Ltrs,
-                DiddleArgument::Blank => Diddle::Blank,
-            },
+            diddle: self.diddle,
             lead_in_seconds: self.lead_in,
             tail_seconds: self.tail,
             ..TxConfig::default()
         };
         config.framing.baud = BaudRate::new(self.baud).context("invalid --baud")?;
-        config.framing.stop = match self.stop {
-            StopArgument::One => StopElement::One,
-            StopArgument::OneAndAHalf => StopElement::OneAndAHalf,
-            StopArgument::Two => StopElement::Two,
-        };
-        config.framing.parity = match self.parity {
-            ParityArgument::None => Parity::None,
-            ParityArgument::Even => Parity::Even,
-            ParityArgument::Odd => Parity::Odd,
-            ParityArgument::Mark => Parity::Mark,
-            ParityArgument::Space => Parity::Space,
-        };
+        config.framing.stop = self.stop;
+        config.framing.parity = self.parity;
         Ok(config)
     }
 }

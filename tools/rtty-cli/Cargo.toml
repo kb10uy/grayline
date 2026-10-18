@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-hound.workspace = true
+grayline-wav = { path = "../../crates/wav" }
 grayline-rtty = { path = "../../crates/rtty", features = ["std"] }
 
 [dev-dependencies]

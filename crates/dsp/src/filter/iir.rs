@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::f64::consts::PI;
 
-use crate::DspError;
+use crate::{DspError, validate::validate_frequency};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 /// Analog low-pass prototype used to design an IIR filter.
@@ -197,12 +197,7 @@ fn validate_design(design: IirLowPassDesign) -> Result<(), DspError> {
     if design.order == 0 {
         return Err(DspError::InvalidOrder);
     }
-    if !design.sample_rate_hz.is_finite() || design.sample_rate_hz <= 0.0 {
-        return Err(DspError::InvalidSampleRate);
-    }
-    if !design.cutoff_hz.is_finite() || design.cutoff_hz <= 0.0 || design.cutoff_hz >= design.sample_rate_hz * 0.5 {
-        return Err(DspError::InvalidFrequency);
-    }
+    validate_frequency(design.sample_rate_hz, design.cutoff_hz)?;
     if let IirResponse::Chebyshev { ripple_db } = design.response
         && (!ripple_db.is_finite() || ripple_db <= 0.0)
     {

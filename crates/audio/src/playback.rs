@@ -77,16 +77,12 @@ impl Playback {
     /// and count the shortfall as starvation.
     pub fn play(&self) -> Result<(), AudioError> {
         self.state.started.store(true, Ordering::Release);
-        self.stream
-            .play()
-            .map_err(|error| AudioError::Backend(error.to_string()))
+        self.stream.play().map_err(AudioError::backend)
     }
 
     /// Suspends playback without closing the device.
     pub fn pause(&self) -> Result<(), AudioError> {
-        self.stream
-            .pause()
-            .map_err(|error| AudioError::Backend(error.to_string()))
+        self.stream.pause().map_err(AudioError::backend)
     }
 
     /// Returns the number of mono samples waiting for the device callback.
@@ -241,7 +237,7 @@ pub fn synthetic_playback(
     sample_rate_hz: u32,
     capacity_samples: usize,
 ) -> Result<(PlaybackWriter, PlaybackReader), AudioError> {
-    validate(sample_rate_hz, capacity_samples)?;
+    AudioError::check_queue(sample_rate_hz, capacity_samples)?;
     let (producer, consumer) = ringbuf::HeapRb::<f32>::new(capacity_samples).split();
     let state = Arc::new(PlaybackState::default());
     Ok((
@@ -254,7 +250,7 @@ pub(crate) fn queue(
     sample_rate_hz: u32,
     capacity_samples: usize,
 ) -> Result<(PlaybackWriter, HeapCons<f32>, Arc<PlaybackState>), AudioError> {
-    validate(sample_rate_hz, capacity_samples)?;
+    AudioError::check_queue(sample_rate_hz, capacity_samples)?;
     let (producer, consumer) = ringbuf::HeapRb::<f32>::new(capacity_samples).split();
     let state = Arc::new(PlaybackState::default());
     Ok((
@@ -262,16 +258,6 @@ pub(crate) fn queue(
         consumer,
         state,
     ))
-}
-
-fn validate(sample_rate_hz: u32, capacity_samples: usize) -> Result<(), AudioError> {
-    if capacity_samples == 0 {
-        return Err(AudioError::EmptyCapacity);
-    }
-    if sample_rate_hz < crate::MINIMUM_SAMPLE_RATE_HZ {
-        return Err(AudioError::UnsupportedConfiguration(format!("{sample_rate_hz} Hz")));
-    }
-    Ok(())
 }
 
 fn record_played(state: &PlaybackState, count: usize) {

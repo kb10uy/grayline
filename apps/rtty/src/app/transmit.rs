@@ -5,9 +5,15 @@
 //! transmission, and a transmission gives its unsent remainder back. The
 //! application drives it once per frame and reads it to draw.
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Duration};
 
+use grayline_rig_control::RigControlError;
 use grayline_rtty::TxSchedule;
+
+use crate::{
+    error::AppError,
+    worker::transmit::{Output, TxPhase},
+};
 
 /// How much of a message has left for the rig.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -74,13 +80,125 @@ impl Sending {
     }
 }
 
+/// The message on the air together with the output it is going out on.
+///
+/// The two begin and end together, so they are one value: there is no frame in
+/// which a message is on the air without an output or an output runs without
+/// its message.
+#[derive(Debug)]
+pub struct OnAir {
+    sending: Sending,
+    output: Output,
+    /// Whether this message has reported an underrun, so one gap in the audio
+    /// is one notice rather than one per frame.
+    underran: bool,
+}
+
+/// How a message on the air ended, when it did.
+#[derive(Debug)]
+pub enum Ending {
+    /// The output went out to the end of the message.
+    Finished {
+        /// How late the keyer's worst transition was, for a message it keyed.
+        late: Option<Duration>,
+    },
+    /// The output failed, or could not be started.
+    Failed(Option<AppError>),
+    /// The keyed rig refused one of the operator's commands.
+    RigRefused(RigControlError),
+}
+
+/// What one frame found on the air.
+#[derive(Debug, Default)]
+pub struct Advance {
+    /// What was heard since the last frame, for the echo.
+    pub echo: Option<String>,
+    /// Set on the frame the message first ran its queue dry.
+    pub underran: bool,
+    pub ending: Option<Ending>,
+}
+
+impl OnAir {
+    pub const fn sending(&self) -> &Sending {
+        &self.sending
+    }
+
+    pub const fn output(&self) -> &Output {
+        &self.output
+    }
+
+    #[cfg(test)]
+    pub fn script_for_test(&mut self, snapshot: crate::worker::transmit::OutputSnapshot) {
+        self.output.script(snapshot);
+    }
+
+    pub fn progress(&self) -> SentProgress {
+        self.sending.progress(self.output.played_samples())
+    }
+
+    /// How much of the whole transmission is left, as time.
+    pub fn remaining(&self) -> Duration {
+        let remaining = self.sending.remaining_samples(self.output.played_samples());
+        Duration::from_secs_f64(remaining as f64 / f64::from(self.output.sample_rate_hz()))
+    }
+
+    /// Reads the output once and decides what this frame does about it.
+    ///
+    /// `ready` is whether the rig may be sent into, and `rig_error` is what a
+    /// rig keyed for this message has refused, if anything.
+    pub fn advance(&mut self, ready: bool, rig_error: Option<&RigControlError>) -> Advance {
+        self.output.refresh();
+        // A rig that refused one of the operator's commands has not been
+        // keyed, so the message it was keyed for cannot go out.
+        if let Some(error) = rig_error {
+            return Advance {
+                ending: Some(Ending::RigRefused(error.clone())),
+                ..Advance::default()
+            };
+        }
+        let echo = self.sending.take_echo(self.output.played_samples());
+        let snapshot = self.output.snapshot();
+        if snapshot.phase == TxPhase::Failed {
+            return Advance {
+                echo,
+                ending: Some(Ending::Failed(snapshot.error.clone())),
+                ..Advance::default()
+            };
+        }
+        // The device is told to start once the queue has something in it, so
+        // the lead-in is not the thing that underruns. A keyed rig is waited
+        // for first: audio sent while it is still switching over is lost.
+        if !self.output.is_started()
+            && snapshot.phase != TxPhase::Priming
+            && ready
+            && let Err(error) = self.output.start()
+        {
+            return Advance {
+                echo,
+                ending: Some(Ending::Failed(Some(error))),
+                ..Advance::default()
+            };
+        }
+        // A queue that ran dry put a gap in the middle of a character, which
+        // the station being sent to reads as noise. Nothing can be done about
+        // it now, but the operator should know the message that went out was
+        // not the message on screen.
+        let underran = self.output.has_underrun() && !self.underran;
+        self.underran |= underran;
+        let ending = (self.output.is_started() && self.output.snapshot().drained).then(|| Ending::Finished {
+            late: self.output.snapshot().late,
+        });
+        Advance { echo, underran, ending }
+    }
+}
+
 /// The draft, the queue, and the message being keyed.
 #[derive(Debug, Default)]
 pub struct Transmit {
     /// What the operator is writing.
     pub draft: String,
     queue: VecDeque<String>,
-    sending: Option<Sending>,
+    on_air: Option<OnAir>,
 }
 
 impl Transmit {
@@ -107,22 +225,30 @@ impl Transmit {
 
     /// Takes the next message to key, if nothing is on the air.
     pub fn take_next(&mut self) -> Option<String> {
-        if self.sending.is_some() {
+        if self.on_air.is_some() {
             return None;
         }
         self.queue.pop_front()
     }
 
-    pub fn begin(&mut self, sending: Sending) {
-        self.sending = Some(sending);
+    pub fn begin(&mut self, sending: Sending, output: Output) {
+        self.on_air = Some(OnAir {
+            sending,
+            output,
+            underran: false,
+        });
+    }
+
+    pub const fn on_air(&self) -> Option<&OnAir> {
+        self.on_air.as_ref()
+    }
+
+    pub const fn on_air_mut(&mut self) -> Option<&mut OnAir> {
+        self.on_air.as_mut()
     }
 
     pub fn sending(&self) -> Option<&Sending> {
-        self.sending.as_ref()
-    }
-
-    pub fn sending_mut(&mut self) -> Option<&mut Sending> {
-        self.sending.as_mut()
+        self.on_air.as_ref().map(OnAir::sending)
     }
 
     /// What is still waiting, in the order it will go out.
@@ -131,12 +257,13 @@ impl Transmit {
     }
 
     pub fn is_busy(&self) -> bool {
-        self.sending.is_some() || !self.queue.is_empty()
+        self.on_air.is_some() || !self.queue.is_empty()
     }
 
-    /// Forgets the message on the air, for one that ended by itself.
+    /// Forgets the message on the air and drops its output, for one that
+    /// ended by itself.
     pub fn finish(&mut self) {
-        self.sending = None;
+        self.on_air = None;
     }
 
     /// Drops a queued message that has not started.
@@ -150,11 +277,17 @@ impl Transmit {
     /// queued behind it, separated the way the draft separates lines: an
     /// aborted transmission is resumed by editing and pressing send again, and
     /// that wants the text back rather than a record of how it was divided.
-    pub fn abandon(&mut self, played_samples: u64) -> String {
+    ///
+    /// The output is read once more before it is dropped, so what is handed
+    /// back is what had not been played when the operator stopped it.
+    pub fn abandon(&mut self) -> String {
         let unsent = self
-            .sending
+            .on_air
             .take()
-            .map(|sending| sending.unsent(played_samples))
+            .map(|mut on_air| {
+                on_air.output.refresh();
+                on_air.sending.unsent(on_air.output.played_samples())
+            })
             .unwrap_or_default();
         self.abandon_queue(unsent)
     }
@@ -179,6 +312,7 @@ mod tests {
     use grayline_rtty::TxConfig;
 
     use super::*;
+    use crate::{test_util::refused_port, worker::transmit::OutputSnapshot};
 
     const RATE: u32 = 8_000;
 
@@ -188,6 +322,22 @@ mod tests {
 
     fn sending(text: &str) -> Sending {
         Sending::new(text.to_owned(), schedule(text))
+    }
+
+    fn scripted() -> Output {
+        Output::scripted(TxPhase::Producing)
+    }
+
+    fn on_air(text: &str, phase: TxPhase) -> OnAir {
+        OnAir {
+            sending: sending(text),
+            output: Output::scripted(phase),
+            underran: false,
+        }
+    }
+
+    fn played(on_air: &mut OnAir, snapshot: OutputSnapshot) {
+        on_air.output.script(snapshot);
     }
 
     #[test]
@@ -229,7 +379,7 @@ mod tests {
         transmit.queue("second".to_owned());
 
         assert_eq!(transmit.take_next().as_deref(), Some("first"));
-        transmit.begin(sending("first"));
+        transmit.begin(sending("first"), scripted());
         assert_eq!(transmit.take_next(), None);
 
         transmit.finish();
@@ -255,10 +405,14 @@ mod tests {
         let ends = sending.progress(u64::MAX);
         assert_eq!(ends.total, 6);
         let third = schedule(text).character_ends()[2];
-        transmit.begin(sending);
+        transmit.begin(sending, scripted());
+        transmit.on_air_mut().unwrap().output.script(OutputSnapshot {
+            played: third,
+            ..OutputSnapshot::default()
+        });
         transmit.queue("QUEUED".to_owned());
 
-        let returned = transmit.abandon(third);
+        let returned = transmit.abandon();
 
         assert_eq!(returned, "YRY\nQUEUED");
         assert!(!transmit.is_busy());
@@ -267,8 +421,124 @@ mod tests {
     #[test]
     fn abandoning_before_anything_played_returns_the_whole_message() {
         let mut transmit = Transmit::default();
-        transmit.begin(sending("CQ"));
-        assert_eq!(transmit.abandon(0), "CQ");
+        transmit.begin(sending("CQ"), scripted());
+        assert_eq!(transmit.abandon(), "CQ");
+    }
+
+    #[test]
+    fn the_output_is_started_once_it_is_primed_and_the_rig_is_ready() {
+        let mut on_air = on_air("RY", TxPhase::Priming);
+        assert!(on_air.advance(true, None).ending.is_none());
+        assert!(!on_air.output.is_started());
+
+        played(
+            &mut on_air,
+            OutputSnapshot {
+                phase: TxPhase::Producing,
+                ..OutputSnapshot::default()
+            },
+        );
+        on_air.advance(false, None);
+        assert!(!on_air.output.is_started(), "the rig is still switching over");
+
+        on_air.advance(true, None);
+        assert!(on_air.output.is_started());
+    }
+
+    #[test]
+    fn a_refusing_rig_ends_the_message_before_anything_is_echoed() {
+        let text = "RY";
+        let mut on_air = on_air(text, TxPhase::Producing);
+        played(
+            &mut on_air,
+            OutputSnapshot {
+                phase: TxPhase::Producing,
+                played: schedule(text).character_ends()[0],
+                ..OutputSnapshot::default()
+            },
+        );
+
+        let advance = on_air.advance(true, Some(&refused_port()));
+
+        assert!(matches!(advance.ending, Some(Ending::RigRefused(_))), "{advance:?}");
+        assert_eq!(advance.echo, None);
+    }
+
+    #[test]
+    fn a_failed_output_ends_the_message_with_its_own_error() {
+        let mut on_air = on_air("RY", TxPhase::Producing);
+        played(
+            &mut on_air,
+            OutputSnapshot {
+                phase: TxPhase::Failed,
+                error: Some(AppError::NoOutputDevice),
+                ..OutputSnapshot::default()
+            },
+        );
+
+        let advance = on_air.advance(true, None);
+
+        assert!(
+            matches!(advance.ending, Some(Ending::Failed(Some(AppError::NoOutputDevice)))),
+            "{advance:?}"
+        );
+    }
+
+    #[test]
+    fn an_underrun_is_reported_once_per_message() {
+        let mut on_air = on_air("RY", TxPhase::Producing);
+        on_air.advance(true, None);
+        played(
+            &mut on_air,
+            OutputSnapshot {
+                phase: TxPhase::Producing,
+                underrun: true,
+                ..OutputSnapshot::default()
+            },
+        );
+
+        assert!(on_air.advance(true, None).underran);
+        assert!(!on_air.advance(true, None).underran);
+    }
+
+    #[test]
+    fn a_drained_output_finishes_the_message_with_the_last_of_its_echo() {
+        let text = "RY";
+        let mut on_air = on_air(text, TxPhase::Producing);
+        on_air.advance(true, None);
+        played(
+            &mut on_air,
+            OutputSnapshot {
+                phase: TxPhase::Draining,
+                played: u64::MAX,
+                drained: true,
+                late: Some(Duration::from_micros(40)),
+                ..OutputSnapshot::default()
+            },
+        );
+
+        let advance = on_air.advance(true, None);
+
+        assert_eq!(advance.echo.as_deref(), Some(text));
+        assert!(
+            matches!(advance.ending, Some(Ending::Finished { late: Some(late) }) if late == Duration::from_micros(40)),
+            "{advance:?}"
+        );
+    }
+
+    #[test]
+    fn an_output_that_was_never_started_is_not_finished() {
+        let mut on_air = on_air("RY", TxPhase::Producing);
+        played(
+            &mut on_air,
+            OutputSnapshot {
+                phase: TxPhase::Draining,
+                drained: true,
+                ..OutputSnapshot::default()
+            },
+        );
+
+        assert!(on_air.advance(false, None).ending.is_none());
     }
 
     #[test]

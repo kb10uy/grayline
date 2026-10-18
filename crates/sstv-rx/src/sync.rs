@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use core::cmp::Reverse;
 
 use grayline_sstv::mode::{Mode, Support};
 

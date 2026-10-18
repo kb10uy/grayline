@@ -10,9 +10,10 @@ use cpal::{
 use ringbuf::{HeapRb, traits::Split};
 
 use crate::{
-    AudioError, Capture, CaptureReader, FaultKind, FaultSlot, InputDevice, MINIMUM_SAMPLE_RATE_HZ, OutputDevice,
-    Playback, PlaybackWriter, StreamFault, capture,
+    AudioError, Capture, CaptureReader, FaultKind, InputDevice, MINIMUM_SAMPLE_RATE_HZ, OutputDevice, Playback,
+    PlaybackWriter, StreamFault, capture,
     device::{describe, named, preferred_output_buffer_size, preferred_output_rate, preferred_rate},
+    error::FaultSlot,
     playback,
 };
 
@@ -35,10 +36,7 @@ impl AudioHost {
     /// are skipped rather than failing the whole enumeration, because one
     /// broken device should not hide the rest.
     pub fn input_devices(&self) -> Result<Vec<InputDevice>, AudioError> {
-        let devices = self
-            .host
-            .input_devices()
-            .map_err(|error| AudioError::Backend(error.to_string()))?;
+        let devices = self.host.input_devices().map_err(AudioError::backend)?;
         let described = devices
             .filter(|device| device.default_input_config().is_ok())
             .filter_map(|device| describe(&device))
@@ -59,10 +57,7 @@ impl AudioHost {
 
     /// Lists usable playback devices.
     pub fn output_devices(&self) -> Result<Vec<OutputDevice>, AudioError> {
-        let devices = self
-            .host
-            .output_devices()
-            .map_err(|error| AudioError::Backend(error.to_string()))?;
+        let devices = self.host.output_devices().map_err(AudioError::backend)?;
         let described = devices
             .filter(|device| device.default_output_config().is_ok())
             .filter_map(|device| describe(&device))
@@ -74,6 +69,29 @@ impl AudioHost {
     pub fn default_output_device(&self) -> Option<OutputDevice> {
         let id = self.host.default_output_device()?.id().ok()?;
         self.output_devices().ok()?.into_iter().find(|device| device.id == id)
+    }
+
+    /// Chooses the capture device a session starts on, out of `devices`.
+    ///
+    /// The one named `preferred` when the host still offers it; otherwise the
+    /// host's default, and failing that the first. The name is matched rather
+    /// than an identifier because the host assigns identifiers per run, and a
+    /// device that disappeared since the last session falls back rather than
+    /// leaving the operator with nothing.
+    pub fn preferred_input(&self, devices: &[InputDevice], preferred: Option<&str>) -> Option<InputDevice> {
+        preferred
+            .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
+            .or_else(|| self.default_input_device().filter(|device| devices.contains(device)))
+            .or_else(|| devices.first().cloned())
+    }
+
+    /// Chooses the playback device a session starts on, as
+    /// [`preferred_input`](Self::preferred_input) chooses the capture one.
+    pub fn preferred_output(&self, devices: &[OutputDevice], preferred: Option<&str>) -> Option<OutputDevice> {
+        preferred
+            .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
+            .or_else(|| self.default_output_device().filter(|device| devices.contains(device)))
+            .or_else(|| devices.first().cloned())
     }
 
     /// Opens `device` for capture and starts delivery.
@@ -144,7 +162,7 @@ impl AudioHost {
                 return Err(AudioError::UnsupportedConfiguration(device.name.clone()));
             }
         }
-        .map_err(|error| AudioError::Backend(error.to_string()))?;
+        .map_err(AudioError::backend)?;
 
         let capture = Capture::new(stream, sample_rate, channels, faults);
         capture.resume()?;
@@ -207,7 +225,7 @@ impl AudioHost {
             ),
             _ => return Err(AudioError::UnsupportedConfiguration(device.name.clone())),
         }
-        .map_err(|error| AudioError::Backend(error.to_string()))?;
+        .map_err(AudioError::backend)?;
         Ok((Playback::new(stream, sample_rate, channels, state, faults), writer))
     }
 }

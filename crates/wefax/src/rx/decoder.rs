@@ -1,8 +1,10 @@
 use alloc::collections::VecDeque;
 
+use grayline_dsp::stream::{SampleRing, guarded_window};
+
 use crate::{
     error::WefaxError,
-    format::{Format, Ioc, WefaxBand},
+    format::{Format, Ioc},
     image::GrayRaster,
     rx::{
         apt::AptEvent,
@@ -15,12 +17,6 @@ use crate::{
     },
 };
 
-/// Share of a pixel's interval left untouched at each end.
-///
-/// Averaging the central five-eighths guards against the neighbouring pixels
-/// bleeding in through the discriminator's own settling time, and is what the
-/// SSTV decoder does for the same reason.
-const PIXEL_GUARD: f64 = 0.187_5;
 /// Lines kept behind the one being decoded, for a correction that moves back.
 const RETAIN_LINES: usize = 2;
 /// Shortest span a completed picture is fitted over, in lines.
@@ -199,11 +195,6 @@ impl WefaxDecoder {
             reason,
         };
         self.events.push_back(RxEvent::Stopped { reason });
-    }
-
-    /// Changes the shift the gray scale is read against.
-    pub const fn set_band(&mut self, band: WefaxBand) {
-        self.config.band = band;
     }
 
     /// Sets whether black and white are the other way round.
@@ -588,35 +579,29 @@ impl WefaxDecoder {
 /// why the slant correction happens on the raster instead.
 #[derive(Clone, Debug, Default)]
 struct SampleWindow {
-    first_sample: u64,
-    frequency_hz: VecDeque<f32>,
+    frequency_hz: SampleRing<f32>,
 }
 
 impl SampleWindow {
     fn restart(&mut self, first_sample: f64) {
-        self.first_sample = first_sample.max(0.0) as u64;
-        self.frequency_hz.clear();
+        self.frequency_hz.restart(first_sample.max(0.0) as u64);
     }
 
     fn push(&mut self, value: f32, sample: u64) {
-        if self.frequency_hz.is_empty() && sample >= self.first_sample {
-            self.first_sample = sample;
+        if self.frequency_hz.is_empty() && sample >= self.frequency_hz.first() {
+            self.frequency_hz.restart(sample);
         }
-        if sample >= self.first_sample {
-            self.frequency_hz.push_back(value);
+        if sample >= self.frequency_hz.first() {
+            self.frequency_hz.push(value);
         }
     }
 
     fn end(&self) -> u64 {
-        self.first_sample + self.frequency_hz.len() as u64
+        self.frequency_hz.end()
     }
 
     fn discard_before(&mut self, sample: u64) {
-        let drop = sample
-            .saturating_sub(self.first_sample)
-            .min(self.frequency_hz.len() as u64);
-        self.frequency_hz.drain(..drop as usize);
-        self.first_sample += drop;
+        self.frequency_hz.discard_before(sample);
     }
 
     /// Averages the central part of a pixel's interval.
@@ -625,56 +610,33 @@ impl SampleWindow {
     /// at the lowest capture rates, the nearest sample stands in for it. That
     /// is a soft picture, not a failure.
     fn pixel_mean(&self, left: f64, right: f64) -> Result<f64, WefaxError> {
-        let guard = (right - left) * PIXEL_GUARD;
-        let first = libm::ceil(left + guard).max(0.0) as u64;
-        let end = libm::ceil(right - guard).max(0.0) as u64;
-        if end > first {
-            let mut sum = 0.0;
-            for run in self.runs(first, end)? {
-                for &value in run {
-                    sum += f64::from(value);
-                }
+        let (first, end) = guarded_window(left, right);
+        let mut sum = 0.0;
+        for run in self.runs(first, end)? {
+            for &value in run {
+                sum += f64::from(value);
             }
-            return Ok(sum / (end - first) as f64);
         }
-        let center = libm::ceil((left + right) * 0.5 - 0.5).max(0.0) as u64;
-        Ok(f64::from(self.get(center)?))
+        Ok(sum / (end - first) as f64)
     }
 
     /// Returns the retained samples covering `[first, end)` as the at most two
     /// runs the ring holds them in, translating and bounds-checking the range
     /// once rather than every sample.
     fn runs(&self, first: u64, end: u64) -> Result<[&[f32]; 2], WefaxError> {
-        if first < self.first_sample {
+        if first < self.frequency_hz.first() {
             return Err(WefaxError::SampleDiscarded { sample: first });
         }
-        if end > self.end() {
-            return Err(WefaxError::SampleDiscarded { sample: self.end() });
-        }
-        let start = (first - self.first_sample) as usize;
-        let stop = (end - self.first_sample) as usize;
-        let (head, tail) = self.frequency_hz.as_slices();
-        Ok(if stop <= head.len() {
-            [&head[start..stop], &[]]
-        } else if start >= head.len() {
-            [&tail[start - head.len()..stop - head.len()], &[]]
-        } else {
-            [&head[start..], &tail[..stop - head.len()]]
+        self.frequency_hz.runs(first, end).ok_or(WefaxError::SampleDiscarded {
+            sample: self.frequency_hz.end(),
         })
-    }
-
-    fn get(&self, sample: u64) -> Result<f32, WefaxError> {
-        sample
-            .checked_sub(self.first_sample)
-            .and_then(|offset| self.frequency_hz.get(offset as usize).copied())
-            .ok_or(WefaxError::SampleDiscarded { sample })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::format::{LinesPerMinute, PHASING_WHITE_FRACTION};
+    use crate::format::{LinesPerMinute, PHASING_WHITE_FRACTION, WefaxBand};
     use alloc::{vec, vec::Vec};
     use rstest::rstest;
 

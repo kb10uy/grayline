@@ -40,9 +40,6 @@ pub enum AppError {
     /// There is nothing to play a transmission out of.
     #[error("no output device is available")]
     NoOutputDevice,
-    /// A transmission was asked to start on a stream that is no longer open.
-    #[error("the playback stream is closed")]
-    PlaybackClosed,
     /// The FSK keyer could not be reached, or refused part of a stream.
     #[error("FSK keyer: {0}")]
     Keyer(RigError),

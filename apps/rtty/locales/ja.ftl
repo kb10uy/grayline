@@ -1,5 +1,3 @@
-app-title = Grayline RTTY
-
 menu-file = ファイル
 menu-view = 表示
 menu-settings = 設定

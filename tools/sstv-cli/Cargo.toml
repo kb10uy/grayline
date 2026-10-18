@@ -12,14 +12,15 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-hound.workspace = true
+grayline-wav = { path = "../../crates/wav" }
 image.workspace = true
 jiff.workspace = true
-grayline-sstv-rx = { path = "../../crates/sstv-rx" }
+grayline-sstv-rx = { path = "../../crates/sstv-rx", features = ["std"] }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
-grayline-tone-tx = { path = "../../crates/tone-tx" }
+grayline-tone-tx = { path = "../../crates/tone-tx", features = ["std"] }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
 grayline-sstv-template = { path = "../../crates/sstv-template" }
 
 [dev-dependencies]
+hound.workspace = true
 rstest.workspace = true

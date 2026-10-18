@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use grayline_sstv::{mode::Mode, time::SstvDuration};
 use grayline_sstv_fskid::{FskId, FskNumber, FskRecord};
 
@@ -82,6 +84,9 @@ impl DemodulatedChunk {
     }
 }
 
+/// Lowest capture rate the front end demodulates.
+pub const MINIMUM_SAMPLE_RATE_HZ: u32 = 6_000;
+
 /// Stateful incremental SSTV receive front end.
 pub struct Demodulator {
     front_end: FrontEnd,
@@ -95,7 +100,7 @@ pub struct Demodulator {
 impl Demodulator {
     /// Constructs a receive front end for a physical PCM sample rate.
     pub fn new(sample_rate_hz: u32) -> Result<Self, DemodulatorError> {
-        if sample_rate_hz < 6_000 {
+        if sample_rate_hz < MINIMUM_SAMPLE_RATE_HZ {
             return Err(DemodulatorError::SampleRateTooLow(sample_rate_hz));
         }
         Ok(Self {

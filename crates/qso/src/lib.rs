@@ -18,9 +18,11 @@
 mod adif;
 mod credentials;
 mod directory;
+mod editor;
 mod error;
 mod paths;
 mod record;
+mod settings;
 mod store;
 mod wavelog;
 mod worker;
@@ -31,12 +33,14 @@ mod test_util;
 pub use adif::{Adif, AdifRecord, ImportReport, import, read_adif};
 pub use credentials::{Credentials, KEY_VARIABLE, URL_VARIABLE};
 pub use directory::{Directory, HIT_TTL, Lookup, MISS_TTL};
+pub use editor::{ContactEditor, ContactRow};
 pub use error::QsoError;
 pub use paths::{CREDENTIALS_FILE, FAMILY_DIRECTORY, STORE_FILE, default_credentials_path, default_store_path};
 pub use record::{
     DEFAULT_FIELDS, FIELD_GROUPS, GROUP_PREFIX, Record, WELL_KNOWN_KEYS, expand_fields, field_group,
     normalize_callsign, valid_key,
 };
+pub use settings::ContactSettings;
 pub use store::{Origin, Store};
 pub use wavelog::{DEFAULT_TIMEOUT, Wavelog};
 pub use worker::{ContactPaths, ContactSnapshot, ContactState, ContactWorker};

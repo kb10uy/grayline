@@ -11,15 +11,12 @@
 //! modes, or devices means nothing to the others, and this file is only for
 //! what all of them answer the same way.
 
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use directories::BaseDirs;
-use toml_edit::{DocumentMut, Item, value};
+use toml_edit::{Item, Table, value};
 
-use crate::{i18n::Locale, log, platform::FAMILY_DIRECTORY};
+use crate::{config::Document, i18n::Locale, platform::FAMILY_DIRECTORY};
 
 /// The shared settings file, beside the per-application directories.
 pub const COMMON_FILE: &str = "common.toml";
@@ -64,8 +61,7 @@ impl CommonSettings {
 }
 
 /// Where the shared file sits, if the user directories can be found at all.
-#[must_use]
-pub fn default_common_path() -> Option<PathBuf> {
+fn default_common_path() -> Option<PathBuf> {
     Some(BaseDirs::new()?.config_dir().join(FAMILY_DIRECTORY).join(COMMON_FILE))
 }
 
@@ -76,15 +72,7 @@ pub fn default_common_path() -> Option<PathBuf> {
 /// another application in the family has written there.
 #[derive(Debug)]
 pub struct CommonConfig {
-    path: Option<PathBuf>,
-    document: DocumentMut,
-    /// Set when the file could not be parsed.
-    ///
-    /// The application starts on defaults and refuses to save, because
-    /// overwriting a file it could not read would throw away whatever the
-    /// operator had written in it.
-    read_only: bool,
-    error: Option<String>,
+    document: Document,
     /// What the file already says, so a frame that changed nothing writes
     /// nothing.
     saved: CommonSettings,
@@ -107,24 +95,9 @@ impl CommonConfig {
     /// Reads `path`, falling back to defaults it will not save over.
     #[must_use]
     pub fn load(path: PathBuf) -> Self {
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
-            Err(error) => return Self::unreadable(path, &error.to_string()),
-        };
-        match text.parse::<DocumentMut>() {
-            Ok(document) => {
-                let settings = read(&document);
-                Self {
-                    path: Some(path),
-                    document,
-                    read_only: false,
-                    error: None,
-                    saved: settings,
-                }
-            }
-            Err(error) => Self::unreadable(path, &error.to_string()),
-        }
+        let document = Document::load(path);
+        let saved = read(document.table());
+        Self { document, saved }
     }
 
     /// What the file says, or the defaults where it said nothing usable.
@@ -137,64 +110,37 @@ impl CommonConfig {
     #[must_use]
     pub fn detached() -> Self {
         Self {
-            path: None,
-            document: DocumentMut::new(),
-            read_only: false,
-            error: None,
+            document: Document::detached(),
             saved: CommonSettings::default(),
         }
     }
 
-    fn unreadable(path: PathBuf, error: &str) -> Self {
-        log::note(&format!("could not read {}: {error}", path.display()));
-        Self {
-            path: Some(path),
-            document: DocumentMut::new(),
-            read_only: true,
-            error: Some(error.to_owned()),
-            saved: CommonSettings::default(),
-        }
-    }
-
-    /// Returns what went wrong reading the file, if anything did.
+    /// Returns what went wrong reading or writing the file, if anything did.
     #[must_use]
     pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+        self.document.error()
     }
 
     /// Writes `settings` back, unless they are what the file already says.
     ///
     /// Every application calls this at the end of every frame, which is why
-    /// the comparison is here rather than in each of them.
+    /// the comparison is here rather than in each of them. The family
+    /// directory is made if it is not there yet: each application creates its
+    /// own directory under it as it starts, but this file sits above all of
+    /// them, and whichever saves first has to put the directory there.
     pub fn save(&mut self, settings: &CommonSettings) {
         let settings = settings.clamped();
-        if self.read_only || settings == self.saved {
+        if settings == self.saved {
             return;
         }
         self.saved = settings;
-        let Some(path) = self.path.clone() else { return };
-        let table = self.document.as_table_mut();
-        table["language"] = value(settings.locale.tag());
-        // Rounded on the way out: widening the f32 directly writes the likes
-        // of 1.2999999523162842 into a file meant to be read by hand.
-        table["ui-scale"] = value((f64::from(settings.ui_scale) * 100.0).round() / 100.0);
-
-        if let Err(error) = write(&path, &self.document.to_string()) {
-            log::note(&format!("could not save {}: {error}", path.display()));
-        }
+        self.document.save(|table| {
+            table["language"] = value(settings.locale.tag());
+            // Rounded on the way out: widening the f32 directly writes the
+            // likes of 1.2999999523162842 into a file meant to be read by hand.
+            table["ui-scale"] = value((f64::from(settings.ui_scale) * 100.0).round() / 100.0);
+        });
     }
-}
-
-/// Writes the document, making the family directory if it is not there yet.
-///
-/// Each application creates its own directory under that one as it starts, but
-/// this file sits above all of them, and whichever application saves first is
-/// the one that has to put the directory there.
-fn write(path: &Path, text: &str) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, text)
 }
 
 /// Reads what the family understands, leaving everything else alone.
@@ -202,9 +148,8 @@ fn write(path: &Path, text: &str) -> io::Result<()> {
 /// A value that is the wrong type, or names a language this build does not
 /// carry, is dropped rather than rejected: the file is the operator's, and one
 /// unusable key is not a reason to start on nothing.
-fn read(document: &DocumentMut) -> CommonSettings {
+fn read(table: &Table) -> CommonSettings {
     let mut settings = CommonSettings::default();
-    let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
     if let Some(tag) = get("language").and_then(|value| value.as_str())
@@ -231,35 +176,17 @@ fn read(document: &DocumentMut) -> CommonSettings {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use rstest::rstest;
+    use tempfile::TempDir;
 
     use super::*;
 
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("grayline-shell-{name}"));
-            let _ = fs::remove_dir_all(&path);
-            fs::create_dir_all(&path).expect("a scratch directory");
-            Self(path)
-        }
-
-        fn file(&self) -> PathBuf {
-            self.0.join(COMMON_FILE)
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
     #[test]
     fn a_missing_file_starts_on_defaults_and_can_be_saved() {
-        let root = TempDir::new("missing");
-        let mut config = CommonConfig::load(root.file());
+        let root = TempDir::new().unwrap();
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         assert_eq!(config.settings(), CommonSettings::default());
         assert!(config.error().is_none());
 
@@ -268,27 +195,27 @@ mod tests {
             ui_scale: 1.25,
         });
 
-        let written = fs::read_to_string(root.file()).expect("the file was written");
+        let written = fs::read_to_string(root.path().join(COMMON_FILE)).expect("the file was written");
         assert!(written.contains("language = \"ja\""), "{written}");
         assert!(written.contains("ui-scale = 1.25"), "{written}");
     }
 
     #[test]
     fn stored_settings_survive_a_round_trip() {
-        let root = TempDir::new("round-trip");
+        let root = TempDir::new().unwrap();
         let wanted = CommonSettings {
             locale: Locale::Ja,
             ui_scale: 1.5,
         };
-        CommonConfig::load(root.file()).save(&wanted);
+        CommonConfig::load(root.path().join(COMMON_FILE)).save(&wanted);
 
-        assert_eq!(CommonConfig::load(root.file()).settings(), wanted);
+        assert_eq!(CommonConfig::load(root.path().join(COMMON_FILE)).settings(), wanted);
     }
 
     #[test]
     fn the_family_directory_is_made_on_the_way_out() {
-        let root = TempDir::new("make-directory");
-        let path = root.0.join("not-there-yet").join(COMMON_FILE);
+        let root = TempDir::new().unwrap();
+        let path = root.path().join("not-there-yet").join(COMMON_FILE);
         CommonConfig::load(path.clone()).save(&CommonSettings {
             locale: Locale::Ja,
             ui_scale: DEFAULT_UI_SCALE,
@@ -299,42 +226,45 @@ mod tests {
 
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
-        let root = TempDir::new("comments");
+        let root = TempDir::new().unwrap();
         fs::write(
-            root.file(),
+            root.path().join(COMMON_FILE),
             "# the station's own note\nunknown = 7\nlanguage = \"ja\"\n",
         )
         .unwrap();
 
-        let mut config = CommonConfig::load(root.file());
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         assert_eq!(config.settings().locale, Locale::Ja);
         config.save(&CommonSettings {
             ui_scale: 1.1,
             ..config.settings()
         });
 
-        let written = fs::read_to_string(root.file()).unwrap();
+        let written = fs::read_to_string(root.path().join(COMMON_FILE)).unwrap();
         assert!(written.contains("# the station's own note"), "{written}");
         assert!(written.contains("unknown = 7"), "{written}");
     }
 
     #[test]
     fn a_save_that_changes_nothing_does_not_touch_the_file() {
-        let root = TempDir::new("unchanged");
-        fs::write(root.file(), "language = \"ja\"\n").unwrap();
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), "language = \"ja\"\n").unwrap();
 
-        let mut config = CommonConfig::load(root.file());
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         config.save(&config.settings());
 
-        assert_eq!(fs::read_to_string(root.file()).unwrap(), "language = \"ja\"\n");
+        assert_eq!(
+            fs::read_to_string(root.path().join(COMMON_FILE)).unwrap(),
+            "language = \"ja\"\n"
+        );
     }
 
     #[test]
     fn an_unparsable_file_is_never_written_over() {
-        let root = TempDir::new("unparsable");
-        fs::write(root.file(), "this is not toml = = =\n").unwrap();
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), "this is not toml = = =\n").unwrap();
 
-        let mut config = CommonConfig::load(root.file());
+        let mut config = CommonConfig::load(root.path().join(COMMON_FILE));
         assert!(config.error().is_some());
         assert_eq!(config.settings(), CommonSettings::default());
 
@@ -342,28 +272,34 @@ mod tests {
             locale: Locale::Ja,
             ui_scale: 2.0,
         });
-        assert_eq!(fs::read_to_string(root.file()).unwrap(), "this is not toml = = =\n");
+        assert_eq!(
+            fs::read_to_string(root.path().join(COMMON_FILE)).unwrap(),
+            "this is not toml = = =\n"
+        );
     }
 
     #[test]
     fn unusable_values_fall_back_and_a_scale_is_brought_into_range() {
-        let root = TempDir::new("unusable");
-        fs::write(root.file(), "language = 7\nui-scale = 99\n").unwrap();
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), "language = 7\nui-scale = 99\n").unwrap();
 
-        let settings = CommonConfig::load(root.file()).settings();
+        let settings = CommonConfig::load(root.path().join(COMMON_FILE)).settings();
         assert_eq!(settings.locale, Locale::default());
         assert_eq!(settings.ui_scale, *UI_SCALE_RANGE.end());
     }
 
     /// TOML spells `nan` and `inf`, and a NaN passes a range clamp unchanged.
     #[rstest]
-    #[case("nan", "ui-scale = nan\n")]
-    #[case("inf", "ui-scale = inf\n")]
-    fn a_non_finite_scale_reads_as_the_default(#[case] name: &str, #[case] contents: &str) {
-        let root = TempDir::new(&format!("non-finite-{name}"));
-        fs::write(root.file(), contents).unwrap();
+    #[case("ui-scale = nan\n")]
+    #[case("ui-scale = inf\n")]
+    fn a_non_finite_scale_reads_as_the_default(#[case] contents: &str) {
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(COMMON_FILE), contents).unwrap();
 
-        assert_eq!(CommonConfig::load(root.file()).settings().ui_scale, DEFAULT_UI_SCALE);
+        assert_eq!(
+            CommonConfig::load(root.path().join(COMMON_FILE)).settings().ui_scale,
+            DEFAULT_UI_SCALE
+        );
     }
 
     #[test]

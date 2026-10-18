@@ -55,7 +55,7 @@ platform integration, and application behavior.
 | Rig policy | What the rig is told, and when | `rigcontrol.lua`, hosted by `grayline-rig-control` |
 | Integration | Composition of core stages for a particular environment | `gl-sstv`, `gl-wefax`, `gl-rtty`, and `web-demo` |
 | Template composition | KDL scene parsing, variables, RGBA overlay rendering, and RGB composition | `grayline-sstv-template` |
-| Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv` receive interface; designed in [gui-design.md](gui-design.md) |
+| Application | UI, configuration, history, template editing, logging, PTT, CAT, and orchestration | `grayline-sstv-app`, `grayline-wefax-app`, and `grayline-rtty-app`; designed in [gui-design.md](gui-design.md) |
 
 These are responsibility boundaries, not a requirement that every row become a
 separate crate. Closely related protocol types currently live together in
@@ -111,8 +111,7 @@ worker thread fed by `grayline-audio` instead of a WAV reader.
 or a separate complete demodulated array. Its packet size defaults to 1024 mono
 samples and is configurable with `--packet-size`. Demodulation and raster
 decoding run sequentially in one thread, while bounded staging may retain
-demodulated samples for the optional whole-image refinement pass. There is no
-live audio source yet.
+demodulated samples for the optional whole-image refinement pass.
 
 ### Current Transmit Flow
 
@@ -250,6 +249,14 @@ staged periods, re-observes synchronization centers across the immutable staged
 stream, and fits the final global clock from those observations. This keeps
 early progressive display from biasing the completed-image slant correction.
 
+Both stages redraw into a fresh image from the staged samples under the refitted
+clock, and the decoder takes that image only once the redraw and the position
+decoding resumes from have both succeeded, so a refit the retained samples
+cannot cover leaves the reception exactly as it was. What a reception holds is
+a phase of the decoder rather than a set of optional fields: nothing before the
+first block, the working and staged streams while acquiring, and those streams
+with the raster clock while decoding.
+
 ### Timed Transmit Data
 
 `TxEncoder` owns an image and yields `TimedTone` values. Each value carries a
@@ -354,7 +361,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twenty-two packages:
+The workspace currently contains twenty-five packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -367,6 +374,7 @@ The workspace currently contains twenty-two packages:
 | `grayline-sstv-cli` | Offline receive and transmit integration, as `gl-sstv` | Implemented |
 | `grayline-web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
+| `grayline-wav` | Mono WAV reading and writing for the tools and file sources | Implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
 | `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
 | `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
@@ -388,7 +396,7 @@ packages it uses. External and development-only dependencies are omitted.
 
 | Package | Direct workspace dependencies |
 | --- | --- |
-| `grayline-audio` | None |
+| `grayline-audio` | `grayline-wav` |
 | `grayline-dsp` | None |
 | `grayline-qso` | None |
 | `grayline-qso-cli` | `grayline-qso` |
@@ -396,22 +404,23 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |
 | `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
-| `grayline-rtty-cli` | `grayline-rtty` |
+| `grayline-rtty-cli` | `grayline-rtty`, `grayline-wav` |
 | `grayline-keyer-protocol` | `grayline-rig`, `grayline-rtty` |
 | `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
 | `grayline-shell` | None |
-| `grayline-sstv` | `grayline-sstv-fskid` |
-| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
-| `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv` | `grayline-dsp`, `grayline-sstv-fskid` |
+| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx`, `grayline-wav` |
 | `grayline-sstv-fskid` | None |
 | `grayline-sstv-rx` | `grayline-dsp`, `grayline-sstv`, `grayline-sstv-fskid` |
 | `grayline-sstv-template` | `grayline-sstv`, `grayline-variables` |
 | `grayline-tone-tx` | `grayline-dsp`, `grayline-sstv` |
 | `grayline-variables` | None |
-| `grayline-web-demo` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx` |
+| `grayline-web-demo` | `grayline-sstv`, `grayline-sstv-rx` |
 | `grayline-wefax` | `grayline-dsp` |
 | `grayline-wefax-app` | `grayline-audio`, `grayline-shell`, `grayline-wefax` |
-| `grayline-wefax-cli` | `grayline-wefax` |
+| `grayline-wefax-cli` | `grayline-wav`, `grayline-wefax` |
+| `grayline-wav` | None |
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this
 workspace. That it needs no part of `grayline-sstv` is the point of the split
@@ -459,9 +468,12 @@ and a client for them over `grayline-rig`'s transport. It is a crate of its own
 so that an application reaches the keyer without linking the serial port
 library the keyer itself needs ([keyer.md](keyer.md)).
 
-`grayline-dsp`, `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` build as
-allocation-backed `no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
-remain in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
+`grayline-dsp`, `grayline-sstv`, `grayline-sstv-rx`, `grayline-tone-tx`,
+`grayline-wefax`, and `grayline-rtty` build as `no_std` crates by default.
+`grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
+remain in `grayline-wav` and in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
+`grayline-wav` reads a recording's first channel and writes 16-bit mono for the three tools and for
+`grayline-audio`'s file source, so what a recording is checked for is written once.
 `grayline-sstv-template` is a
 standard-library application-support crate: it depends on `grayline-sstv` only at
 the received-image and final RGB composition boundaries. It does not expose
@@ -479,6 +491,12 @@ of the WAV receive path; that path uses the Hilbert phase-difference
 discriminator. The moving average and the peak normalizer are the RTTY
 integrator and level stage, the latter lifted from the SSTV front end when the
 second caller for it appeared.
+
+`stream::SampleRing` and `stream::guarded_window` are what the SSTV and WEFAX
+decoders read pixels from: demodulated values held at absolute stream
+positions and read back as at most two contiguous runs, and the guarded sample
+range a pixel is averaged over. The two decoders had each carried their own copy
+of both, with the same guard and the same centre fallback.
 
 `frequency::HilbertDiscriminator` and `detector::ToneDetector` were the SSTV
 front end's own until a second mode needed them, which is the point at which
@@ -683,6 +701,9 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
+cargo build -p grayline-sstv-rx --no-default-features
+cargo build -p grayline-tone-tx --no-default-features
+cargo build -p grayline-dsp --no-default-features
 cargo build -p grayline-wefax --no-default-features
 cargo build -p grayline-rtty --no-default-features
 cargo clippy -p grayline-web-demo --target wasm32-unknown-unknown

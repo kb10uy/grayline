@@ -10,10 +10,11 @@ bench = false
 
 [features]
 default = []
-std = ["thiserror/std"]
+std = ["thiserror/std", "grayline-dsp/std"]
 
 [dependencies]
 libm.workspace = true
+grayline-dsp = { path = "../dsp" }
 grayline-sstv-fskid = { path = "../sstv-fskid" }
 thiserror.workspace = true
 

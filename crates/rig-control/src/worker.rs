@@ -381,10 +381,12 @@ mod tests {
     };
 
     use super::*;
-    use crate::{bands::BandPlan, script, test_util::TempDir};
+    use tempfile::TempDir;
+
+    use crate::{bands::BandPlan, script};
 
     fn with_script(source: &str) -> TempDir {
-        let directory = TempDir::new();
+        let directory = TempDir::new().unwrap();
         fs::write(directory.path().join(script::SCRIPT_FILE), source).unwrap();
         directory
     }
@@ -471,7 +473,7 @@ mod tests {
     #[test]
     fn the_default_script_keys_and_unkeys() {
         let fake = FakeRig::spawn(14_230_000);
-        let config = TempDir::new();
+        let config = TempDir::new().unwrap();
         let worker = RigWorker::spawn(&settings(&fake.address), config.path(), plan(), log);
         settle(&worker, |snapshot| snapshot.state == RigState::Receiving);
 
@@ -538,7 +540,7 @@ mod tests {
     #[test]
     fn the_lead_in_is_waited_out_before_the_rig_reports_it_is_transmitting() {
         let fake = FakeRig::spawn(14_230_000);
-        let config = TempDir::new();
+        let config = TempDir::new().unwrap();
         let worker = RigWorker::spawn(
             &RigSettings {
                 lead_in_seconds: 0.3,
@@ -560,7 +562,7 @@ mod tests {
     #[test]
     fn polling_reports_what_the_rig_is_tuned_to() {
         let fake = FakeRig::spawn(7_178_000);
-        let config = TempDir::new();
+        let config = TempDir::new().unwrap();
         let worker = RigWorker::spawn(
             &RigSettings {
                 poll_seconds: 0.02,
@@ -607,7 +609,7 @@ mod tests {
     #[test]
     fn a_keyed_rig_is_not_polled() {
         let fake = FakeRig::spawn(7_178_000);
-        let config = TempDir::new();
+        let config = TempDir::new().unwrap();
         let worker = RigWorker::spawn(
             &RigSettings {
                 poll_seconds: 0.02,
@@ -719,7 +721,7 @@ mod tests {
 
     #[test]
     fn a_rig_that_is_not_listening_is_reported_rather_than_waited_on() {
-        let config = TempDir::new();
+        let config = TempDir::new().unwrap();
 
         let worker = RigWorker::spawn(&settings(NOTHING_LISTENING), config.path(), plan(), log);
 

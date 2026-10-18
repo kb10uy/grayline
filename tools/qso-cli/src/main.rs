@@ -8,8 +8,8 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use grayline_qso::{
-    CREDENTIALS_FILE, Credentials, DEFAULT_TIMEOUT, Directory, KEY_VARIABLE, Origin, STORE_FILE, Store, Wavelog,
-    default_credentials_path, default_store_path, import,
+    CREDENTIALS_FILE, Credentials, DEFAULT_TIMEOUT, Directory, KEY_VARIABLE, Origin, STORE_FILE, Store, URL_VARIABLE,
+    Wavelog, default_credentials_path, default_store_path, import,
 };
 use grayline_qso_cli::{record_from_assignments, render_json, render_keys, render_table};
 
@@ -234,9 +234,9 @@ fn wavelog(url: Option<&str>) -> Result<Wavelog> {
         Some(path) => Credentials::read(&path)?.with_environment(),
         None => Credentials::default().with_environment(),
     };
-    let url = url.map(str::to_owned).or(credentials.url).context(
-        "no Wavelog URL is configured; pass --url, set GRAYLINE_WAVELOG_URL, or run `gl-qso credential set`",
-    )?;
+    let url = url.map(str::to_owned).or(credentials.url).with_context(|| {
+        format!("no Wavelog URL is configured; pass --url, set {URL_VARIABLE}, or run `gl-qso credential set`")
+    })?;
     let key = credentials.key.with_context(|| {
         format!("no Wavelog API key is configured; set {KEY_VARIABLE} or run `gl-qso credential set`")
     })?;

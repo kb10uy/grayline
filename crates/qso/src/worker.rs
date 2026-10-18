@@ -55,6 +55,9 @@ enum Request {
         record: Record,
         dropped: Vec<String>,
     },
+    /// Which logger to ask from now on, queued behind whatever was asked
+    /// before it so a save made before the switch still lands first.
+    UseRemote(Option<Wavelog>),
 }
 
 /// The files the directory is opened over.
@@ -162,6 +165,18 @@ impl ContactWorker {
         self.request(Request::Save { record, dropped });
     }
 
+    /// Asks `remote` from now on, or nobody, without waiting for the worker.
+    pub fn use_remote(&self, remote: Option<Wavelog>) {
+        self.request(Request::UseRemote(remote));
+    }
+
+    /// Whether the thread is still there to take requests.
+    ///
+    /// One whose directory could not be opened published why and stopped.
+    pub fn is_running(&self) -> bool {
+        self.thread.as_ref().is_some_and(|thread| !thread.is_finished())
+    }
+
     fn begin(&self, callsign: &str) {
         update(&self.snapshot, |state| {
             state.callsign = callsign.to_ascii_uppercase();
@@ -205,10 +220,13 @@ impl ContactPaths {
             Some(path) => Store::open(path)?,
             None => Store::in_memory()?,
         };
-        Ok(Directory::new(
-            store,
-            remote(lookup, wavelog_url, self.credentials.as_deref()),
-        ))
+        Ok(Directory::new(store, self.remote(lookup, wavelog_url)))
+    }
+
+    /// The logger `lookup` and `wavelog_url` ask for, with the key the
+    /// credentials file holds.
+    pub fn remote(&self, lookup: bool, wavelog_url: &str) -> Option<Wavelog> {
+        remote(lookup, wavelog_url, self.credentials.as_deref())
     }
 }
 
@@ -249,6 +267,7 @@ fn contact_loop(
             match request {
                 Request::LookUp { callsign, refresh } => look_up(&mut directory, &callsign, refresh, snapshot),
                 Request::Save { record, dropped } => save(&mut directory, &record, &dropped, snapshot),
+                Request::UseRemote(remote) => directory.set_remote(remote),
             }
         }
         wake();

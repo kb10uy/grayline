@@ -1,6 +1,6 @@
 use core::f64::consts::PI;
 
-use crate::DspError;
+use crate::{DspError, validate::validate_frequency};
 
 #[derive(Clone, Debug, PartialEq)]
 /// A two-pole narrow-band resonator for tone-envelope detection.
@@ -102,12 +102,7 @@ impl Resonator {
 }
 
 fn validate_parameters(frequency_hz: f64, sample_rate_hz: f64, bandwidth_hz: f64) -> Result<(), DspError> {
-    if !sample_rate_hz.is_finite() || sample_rate_hz <= 0.0 {
-        return Err(DspError::InvalidSampleRate);
-    }
-    if !frequency_hz.is_finite() || frequency_hz <= 0.0 || frequency_hz >= sample_rate_hz * 0.5 {
-        return Err(DspError::InvalidFrequency);
-    }
+    validate_frequency(sample_rate_hz, frequency_hz)?;
     if !bandwidth_hz.is_finite() || bandwidth_hz < 0.0 {
         return Err(DspError::InvalidBandwidth);
     }

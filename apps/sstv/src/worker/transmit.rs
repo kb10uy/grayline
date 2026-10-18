@@ -9,11 +9,12 @@ use std::{
 
 use grayline_audio::PlaybackWriter;
 use grayline_dsp::oscillator::Vco;
+use grayline_shell::worker::update;
 use grayline_sstv::{TransmissionEncoder, image::RgbImage, mode::Mode};
 use grayline_sstv_fskid::{FskId, FskNumber};
 use grayline_tone_tx::Modulator;
 
-use crate::{error::AppError, worker::update};
+use crate::error::AppError;
 
 const PCM_BLOCK_SIZE: usize = 1_024;
 
@@ -37,15 +38,8 @@ pub enum TxPhase {
     Priming,
     Producing,
     Draining,
-    Complete,
     Cancelled,
     Failed,
-}
-
-impl TxPhase {
-    pub const fn is_active(self) -> bool {
-        matches!(self, Self::Priming | Self::Producing | Self::Draining)
-    }
 }
 
 /// Where the image raster sits inside the transmission, in output samples.

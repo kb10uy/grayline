@@ -1,10 +1,12 @@
 use std::{
+    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Instant,
 };
 
+use grayline_qso::{ContactRow, ContactSnapshot, ContactState};
 use grayline_rtty::{ToneSet, rx::ChannelLevels};
 use grayline_shell::{
     common::{COMMON_FILE, DEFAULT_UI_SCALE},
@@ -15,7 +17,7 @@ use rstest::rstest;
 use super::*;
 use crate::{
     test_util::{FakeKeyer, refused_port},
-    worker::contact::ContactState,
+    worker::transmit::{OutputSnapshot, TxPhase},
 };
 
 #[derive(Default)]
@@ -97,9 +99,9 @@ fn closing_the_window_from_its_own_frame_stops_the_tap() {
 #[test]
 fn a_window_left_open_is_written_to_the_settings() {
     let mut app = App::headless();
-    assert!(!app.settings().scope);
+    assert!(!app.settings.scope);
     app.set_scope_open(true);
-    assert!(app.settings().scope);
+    assert!(app.settings.scope);
 }
 
 #[test]
@@ -136,8 +138,8 @@ fn the_zoom_stays_inside_what_the_settings_allow() {
 #[test]
 fn the_shift_is_added_to_the_mark_tone() {
     let mut app = App::headless();
-    app.mark_hz = 1_275.0;
-    app.shift_hz = 850.0;
+    app.settings.mark_hz = 1_275.0;
+    app.settings.shift_hz = 850.0;
     assert_eq!(
         app.tones(),
         ToneSet {
@@ -150,11 +152,11 @@ fn the_shift_is_added_to_the_mark_tone() {
 #[test]
 fn the_tuning_settings_reach_the_worker() {
     let mut app = App::headless();
-    app.mark_hz = 1_275.0;
-    app.shift_hz = 425.0;
-    app.baud = 75.0;
-    app.reverse = true;
-    app.afc = true;
+    app.settings.mark_hz = 1_275.0;
+    app.settings.shift_hz = 425.0;
+    app.settings.baud = 75.0;
+    app.settings.reverse = true;
+    app.settings.afc = true;
     app.push_settings();
 
     let settings = app.audio.settings();
@@ -168,11 +170,11 @@ fn the_tuning_settings_reach_the_worker() {
 #[test]
 fn a_threshold_of_nothing_is_no_squelch_at_all() {
     let mut app = App::headless();
-    app.squelch_threshold = 0.0;
+    app.settings.squelch_threshold = 0.0;
     app.push_settings();
     assert_eq!(app.audio.settings().squelch, None);
 
-    app.squelch_threshold = 0.4;
+    app.settings.squelch_threshold = 0.4;
     app.push_settings();
     assert_eq!(app.audio.settings().squelch, Some(0.4));
 }
@@ -180,8 +182,8 @@ fn a_threshold_of_nothing_is_no_squelch_at_all() {
 #[test]
 fn what_is_persisted_is_brought_back_into_range() {
     let mut app = App::headless();
-    app.mark_hz = 40_000.0;
-    app.squelch_threshold = 9.0;
+    app.settings.mark_hz = 40_000.0;
+    app.settings.squelch_threshold = 9.0;
     app.push_settings();
 
     assert_eq!(app.audio.settings().tones.mark_hz, MAXIMUM_MARK_HZ);
@@ -211,7 +213,7 @@ fn a_new_capture_session_starts_the_text_over() {
 fn the_detected_pair_can_be_taken_up() {
     let mut app = App::headless();
     app.adopt_detected_tones();
-    assert_eq!(app.mark_hz, Settings::default().mark_hz);
+    assert_eq!(app.settings.mark_hz, Settings::default().mark_hz);
 }
 
 #[test]
@@ -264,14 +266,14 @@ fn only_a_printing_watch_keeps_the_machine_awake() {
 
 #[test]
 fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
-    let root = crate::test_util::TempDir::new();
+    let root = tempfile::TempDir::new().unwrap();
     let shared = root.path().join(COMMON_FILE);
     fs::write(&shared, "language = \"ja\"\n").unwrap();
 
     let settings = Settings::default();
     let mut app = App::from_parts(
         AudioState::disconnected(worker_settings(&settings)),
-        AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
+        AppPaths::from_roots(grayline_shell::paths::Roots::under(root.path())),
         Stored {
             config: Config::detached(),
             common: CommonConfig::load(shared.clone()),
@@ -295,7 +297,7 @@ fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
 #[test]
 fn a_settings_change_is_persisted_once() {
     let mut app = App::headless();
-    app.baud = 50.0;
+    app.settings.baud = 50.0;
     app.persist();
     assert_eq!(app.saved.baud, 50.0);
     app.persist();
@@ -321,7 +323,7 @@ fn a_station_keying_fsk_needs_no_output_device() {
     app.transmit.draft = "CQ DE JL1HIS".to_owned();
     assert_eq!(app.keying(), Keying::Audio);
 
-    app.keyer.enabled = true;
+    app.settings.keyer.enabled = true;
 
     assert_eq!(app.keying(), Keying::Fsk);
     assert!(!app.lacks_output());
@@ -341,15 +343,15 @@ fn run_until_idle(app: &mut App) {
 fn a_message_keyed_as_fsk_goes_to_the_keyer_and_is_echoed() {
     let fake = FakeKeyer::spawn(&[("sending", 0), ("completed", 60_000_000)]);
     let mut app = App::headless();
-    app.keyer.enabled = true;
-    app.keyer.address.clone_from(&fake.address);
+    app.settings.keyer.enabled = true;
+    app.settings.keyer.address.clone_from(&fake.address);
     app.transmit.queue("RYRY".to_owned());
 
     run_until_idle(&mut app);
 
     assert!(app.notice.is_none(), "{:?}", app.notice);
     assert!(app.columns[0].text().contains("RYRY"), "{:?}", app.columns[0].text());
-    assert!(!app.tx.is_running());
+    assert!(app.transmit.on_air().is_none());
     let received = fake.received();
     assert!(
         received.iter().any(|line| line.starts_with("+\\rtty_send ")),
@@ -364,8 +366,8 @@ fn a_keyer_that_is_not_running_gives_the_messages_back() {
     let address = listener.local_addr().unwrap().to_string();
     drop(listener);
     let mut app = App::headless();
-    app.keyer.enabled = true;
-    app.keyer.address = address;
+    app.settings.keyer.enabled = true;
+    app.settings.keyer.address = address;
     app.transmit.queue("FIRST".to_owned());
     app.transmit.queue("SECOND".to_owned());
 
@@ -385,7 +387,7 @@ fn a_rig_that_has_not_answered_holds_the_send_button() {
     // A station keying with VOX has no rig to wait for.
     assert_eq!(app.rig_problem(), None);
 
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Failed;
     app.rig_snapshot.error = Some(refused_port());
     let problem = app.rig_problem().expect("a problem");
@@ -434,6 +436,113 @@ fn a_queued_message_keeps_the_rig_keyed() {
     assert!(!app.should_unkey(), "the rig was never keyed");
 }
 
+fn on_air(app: &mut App, text: &str, phase: TxPhase) {
+    let schedule = grayline_rtty::TxSchedule::new(text, KEYER_TICKS_PER_SECOND, &app.tx_config()).unwrap();
+    app.transmit
+        .begin(Sending::new(text.to_owned(), schedule), Output::scripted(phase));
+}
+
+fn script(app: &mut App, snapshot: OutputSnapshot) {
+    app.transmit
+        .on_air_mut()
+        .expect("a message on the air")
+        .script_for_test(snapshot);
+}
+
+#[test]
+fn a_keyed_rig_is_waited_for_before_the_output_starts() {
+    use grayline_rig_control::RigState;
+
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.rig_snapshot.state = RigState::Receiving;
+    on_air(&mut app, "RY", TxPhase::Producing);
+
+    app.poll_transmit();
+    assert!(!app.transmit.on_air().unwrap().output().is_started());
+
+    app.rig_snapshot.state = RigState::Transmitting;
+    app.poll_transmit();
+    assert!(app.transmit.on_air().unwrap().output().is_started());
+}
+
+#[test]
+fn a_finished_message_starts_the_next_and_the_rig_is_unkeyed_after_the_last() {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.rig_snapshot.state = grayline_rig_control::RigState::Transmitting;
+    on_air(&mut app, "FIRST", TxPhase::Producing);
+    app.transmit.queue("SECOND".to_owned());
+    app.poll_transmit();
+    script(
+        &mut app,
+        OutputSnapshot {
+            phase: TxPhase::Draining,
+            played: u64::MAX,
+            drained: true,
+            ..OutputSnapshot::default()
+        },
+    );
+
+    app.poll_transmit();
+
+    assert!(app.columns[0].text().contains("FIRST"), "{:?}", app.columns[0].text());
+    assert_eq!(app.transmit.draft, "SECOND", "the second could not be opened");
+    app.poll_workers();
+    assert!(!app.rig_keyed);
+}
+
+#[rstest]
+#[case::failed(
+    OutputSnapshot { phase: TxPhase::Failed, error: Some(AppError::NoOutputDevice), ..OutputSnapshot::default() },
+    None,
+)]
+#[case::rig_refused(OutputSnapshot { phase: TxPhase::Producing, ..OutputSnapshot::default() }, Some(refused_port()))]
+fn a_failure_gives_the_unsent_text_and_the_queue_back_and_unkeys(
+    #[case] snapshot: OutputSnapshot,
+    #[case] rig_error: Option<grayline_rig_control::RigControlError>,
+) {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.rig_snapshot.error = rig_error;
+    on_air(&mut app, "FIRST", TxPhase::Producing);
+    app.transmit.queue("SECOND".to_owned());
+    app.transmit.draft = "TYPING".to_owned();
+    script(&mut app, snapshot);
+
+    app.poll_transmit();
+
+    assert!(!app.transmit.is_busy());
+    assert_eq!(app.transmit.draft, "FIRST\nSECOND\nTYPING");
+    assert!(app.notice.is_some());
+    app.poll_workers();
+    assert!(!app.rig_keyed);
+}
+
+#[test]
+fn stopping_mid_message_gives_back_only_what_had_not_been_played() {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    on_air(&mut app, "RYRY", TxPhase::Producing);
+    let second = grayline_rtty::TxSchedule::new("RYRY", KEYER_TICKS_PER_SECOND, &app.tx_config())
+        .unwrap()
+        .character_ends()[1];
+    script(
+        &mut app,
+        OutputSnapshot {
+            phase: TxPhase::Producing,
+            played: second,
+            ..OutputSnapshot::default()
+        },
+    );
+
+    app.abort_transmission();
+
+    assert_eq!(app.transmit.draft, "RY");
+    app.poll_workers();
+    assert!(!app.rig_keyed);
+}
+
 #[test]
 fn a_message_holding_an_unsendable_character_cannot_be_sent() {
     let mut app = App::headless();
@@ -480,10 +589,10 @@ fn stopping_returns_queued_messages_to_the_draft() {
 #[test]
 fn the_transmitter_follows_the_tuning_panel() {
     let mut app = App::headless();
-    app.mark_hz = 1_275.0;
-    app.shift_hz = 170.0;
-    app.baud = 75.0;
-    app.reverse = true;
+    app.settings.mark_hz = 1_275.0;
+    app.settings.shift_hz = 170.0;
+    app.settings.baud = 75.0;
+    app.settings.reverse = true;
 
     let config = app.tx_config();
 
@@ -499,7 +608,7 @@ fn the_transmitter_follows_the_tuning_panel() {
 #[case(1.0)]
 fn every_level_produces_a_transmitter_that_can_be_built(#[case] level: f64) {
     let mut app = App::headless();
-    app.tx_level = level;
+    app.settings.tx_level = level;
     let config = app.tx_config();
     assert!(config.amplitude > 0.0);
     assert!(grayline_rtty::Transmitter::new(core::iter::empty(), 48_000, config).is_ok());
@@ -508,10 +617,11 @@ fn every_level_produces_a_transmitter_that_can_be_built(#[case] level: f64) {
 #[test]
 fn the_transmit_level_is_stored_and_read_back() {
     let mut app = App::headless();
-    app.tx_level = 0.25;
-    app.tx_unshift_on_space = false;
+    app.settings.tx_level = 0.25;
+    app.settings.tx_unshift_on_space = false;
 
-    let settings = app.settings();
+    app.persist();
+    let settings = app.saved.clone();
 
     assert_eq!(settings.tx_level, 0.25);
     assert!(!settings.tx_unshift_on_space);
@@ -520,7 +630,7 @@ fn the_transmit_level_is_stored_and_read_back() {
 #[test]
 fn a_macro_is_written_into_the_draft_at_the_caret() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CALL".to_owned(),
         text: "DE ${station.callsign}".to_owned(),
@@ -537,7 +647,7 @@ fn a_macro_is_written_into_the_draft_at_the_caret() {
 #[test]
 fn a_macro_written_into_the_middle_of_a_draft_stays_in_the_middle() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CALL".to_owned(),
         text: "${station.callsign}".to_owned(),
@@ -569,7 +679,7 @@ fn a_sending_macro_does_not_disturb_the_draft() {
 #[test]
 fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
     let mut app = App::headless();
-    app.station.callsign = "jl1his".to_owned();
+    app.settings.station.callsign = "jl1his".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CQ".to_owned(),
         text: "cq de ${station.callsign}\n".to_owned(),
@@ -582,7 +692,7 @@ fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
 #[test]
 fn a_set_message_takes_the_draft_over() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
     app.templates = vec![crate::app::macros::Template {
         name: "BK".to_owned(),
         text: "BK DE ${station.callsign} BK".to_owned(),
@@ -646,10 +756,11 @@ fn a_callsign_taken_from_the_received_text_is_brought_into_shape() {
 #[test]
 fn the_station_details_are_stored_and_read_back() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
-    app.station.qth = "TOKYO".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.qth = "TOKYO".to_owned();
 
-    let settings = app.settings();
+    app.persist();
+    let settings = app.saved.clone();
 
     assert_eq!(settings.station.callsign, "JL1HIS");
     assert_eq!(settings.station.qth, "TOKYO");
@@ -680,15 +791,15 @@ fn only_usable_rows_become_fields_the_macros_can_read() {
 
     app.commit_custom_variables();
 
-    assert_eq!(app.custom_variables.len(), 1);
-    assert_eq!(app.custom_variables["grid"], "PM95UQ");
+    assert_eq!(app.settings.custom_variables.len(), 1);
+    assert_eq!(app.settings.custom_variables["grid"], "PM95UQ");
     assert_eq!(app.variables_draft.len(), 2);
 }
 
 #[test]
 fn opening_the_window_loads_the_fields_that_are_stored() {
     let mut app = App::headless();
-    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
 
     app.open_station();
 
@@ -699,7 +810,7 @@ fn opening_the_window_loads_the_fields_that_are_stored() {
 #[test]
 fn a_macro_reads_the_fields_the_operator_added() {
     let mut app = App::headless();
-    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
     app.macros = vec![crate::app::macros::Macro {
         label: "GRID".to_owned(),
         text: "MY GRID IS ${custom.grid}".to_owned(),
@@ -712,9 +823,10 @@ fn a_macro_reads_the_fields_the_operator_added() {
 #[test]
 fn the_operator_fields_are_stored_and_read_back() {
     let mut app = App::headless();
-    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
 
-    let settings = app.settings();
+    app.persist();
+    let settings = app.saved.clone();
 
     assert_eq!(settings.custom_variables["grid"], "PM95UQ");
 }
@@ -768,7 +880,7 @@ fn filed(app: &App) -> ContactSnapshot {
 fn waited(app: &App, done: impl Fn(&ContactSnapshot) -> bool) -> ContactSnapshot {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let snapshot = app.contact_directory.latest();
+        let snapshot = app.directory.worker().latest();
         if done(&snapshot) || Instant::now() > deadline {
             return snapshot;
         }
@@ -780,11 +892,11 @@ fn waited(app: &App, done: impl Fn(&ContactSnapshot) -> bool) -> ContactSnapshot
 fn file(app: &mut App, fields: &[(&str, &str)]) {
     app.open_contact();
     for (key, value) in fields {
-        if let Some(row) = app.contact_draft.iter_mut().find(|row| row.key == *key) {
+        if let Some(row) = app.directory.draft.iter_mut().find(|row| row.key == *key) {
             row.value = (*value).to_owned();
             continue;
         }
-        app.contact_draft.push(ContactRow {
+        app.directory.draft.push(ContactRow {
             key: (*key).to_owned(),
             value: (*value).to_owned(),
             offered: false,
@@ -806,7 +918,7 @@ fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
     app.finish_contact_edit();
 
     assert_eq!(
-        app.contact_directory.latest().state,
+        app.directory.worker().latest().state,
         ContactState::Unknown,
         "a second request would have put the worker back to looking"
     );
@@ -845,7 +957,7 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
     app.contact.callsign = typed.to_owned();
     app.finish_contact_edit();
 
-    assert_eq!(app.contact_directory.latest().state, ContactState::Idle);
+    assert_eq!(app.directory.worker().latest().state, ContactState::Idle);
 }
 
 /// A headless interface must reach neither the operator's own store nor the
@@ -855,8 +967,8 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
-    assert_eq!(app.contact_paths.store, None);
-    assert_eq!(app.contact_paths.credentials, None);
+    assert_eq!(app.directory.paths().store, None);
+    assert_eq!(app.directory.paths().credentials, None);
 }
 
 /// The menu offers to write a credentials file, and a test that applies every
@@ -872,12 +984,12 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
 
 #[test]
 fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = crate::test_util::TempDir::new();
+    let root = tempfile::TempDir::new().unwrap();
     let credentials = root.path().join("credentials.toml");
     let settings = Settings::default();
     let mut app = App::from_parts(
         AudioState::disconnected(worker_settings(&settings)),
-        AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
+        AppPaths::from_roots(grayline_shell::paths::Roots::under(root.path())),
         Stored {
             config: Config::detached(),
             common: CommonConfig::detached(),
@@ -935,7 +1047,7 @@ fn a_name_this_mode_could_not_send_is_left_where_it_was_filed() {
 
     assert!(app.contact.name.is_empty(), "{}", app.contact.name);
     assert_eq!(
-        app.contact_snapshot.fields.get("name").map(String::as_str),
+        app.directory.snapshot.fields.get("name").map(String::as_str),
         Some("太郎")
     );
 }
@@ -964,7 +1076,7 @@ fn a_field_the_operator_emptied_is_dropped() {
     file(&mut app, &[("grid", "PM95UQ")]);
 
     app.open_contact();
-    for row in &mut app.contact_draft {
+    for row in &mut app.directory.draft {
         if row.key == "grid" {
             row.value.clear();
         }
@@ -973,5 +1085,5 @@ fn a_field_the_operator_emptied_is_dropped() {
     waited(&app, |snapshot| !snapshot.fields.contains_key("grid"));
     app.poll_contact();
 
-    assert_eq!(app.contact_snapshot.fields.get("grid"), None);
+    assert_eq!(app.directory.snapshot.fields.get("grid"), None);
 }

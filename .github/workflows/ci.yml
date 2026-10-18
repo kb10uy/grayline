@@ -87,17 +87,11 @@ jobs:
       - name: Build the no_std crates without std
         run: |
           cargo build -p grayline-sstv --no-default-features
+          cargo build -p grayline-sstv-rx --no-default-features
+          cargo build -p grayline-tone-tx --no-default-features
           cargo build -p grayline-dsp --no-default-features
           cargo build -p grayline-wefax --no-default-features
           cargo build -p grayline-rtty --no-default-features
-
-      # For the same reason, a crate that asks for no `std` feature from these
-      # two is only held to it on its own: the workspace turns the feature on
-      # around it and would carry a new dependency on `std` in unremarked.
-      - name: Build the crates that ask for no std of their dependencies
-        run: |
-          cargo build -p grayline-tone-tx
-          cargo build -p grayline-sstv-rx
 
   # One job per application, so they compile at the same time and a failure
   # names which one broke rather than which command did.

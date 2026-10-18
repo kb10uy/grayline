@@ -9,15 +9,17 @@ use crate::{
     },
 };
 
-/// The demodulator-to-decoder wiring every offline receiver repeats.
+/// The demodulator-to-decoder wiring every receiver repeats.
 ///
 /// A framing tone is decided part way through a packet, and the samples
 /// either side of it belong to different states, so the packet has to be
 /// split there. Getting that wrong costs a line at the top of every picture,
 /// which is why it lives here once rather than in each caller.
 ///
-/// A live receiver keeps its own loop instead: it also restarts, publishes
-/// rows as they arrive, and applies the operator's corrections mid-stream.
+/// The band is fixed when the pipeline is built, so the demodulator and the
+/// decoder cannot read the gray scale against different shifts; a receiver
+/// that changes it builds a new pipeline. The operator's other corrections
+/// reach the decoder through [`decoder_mut`](Self::decoder_mut).
 #[derive(Clone, Debug)]
 pub struct ReceivePipeline {
     demodulator: Demodulator,

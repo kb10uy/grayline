@@ -8,18 +8,12 @@
 //! that the native and in-window renderers both consume, so the two paths
 //! cannot drift apart.
 
-use grayline_shell::{
-    common::DEFAULT_UI_SCALE,
-    i18n::{Locale, number},
-    menu as shared_menu,
-};
+use grayline_shell::{common::DEFAULT_UI_SCALE, i18n::Locale, menu as shared_menu};
 
 use crate::{
     app::App,
     storage::{history::HistoryFormat, paths::Folder},
 };
-
-pub type MenuHost = shared_menu::MenuHost<Action>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
@@ -62,22 +56,13 @@ pub fn model(app: &App) -> Vec<Menu> {
         },
         Menu {
             label: text("menu-view"),
-            items: vec![
-                Item::Command {
-                    label: text("menu-zoom-in"),
-                    action: Action::ZoomIn,
-                },
-                Item::Command {
-                    label: text("menu-zoom-out"),
-                    action: Action::ZoomOut,
-                },
-                Item::Command {
-                    label: app
-                        .i18n
-                        .text_with("menu-zoom-reset", &[("percent", number(ui_scale_percent(app)))]),
-                    action: Action::ZoomReset,
-                },
-            ],
+            items: shared_menu::zoom_items(
+                &app.i18n,
+                app.ui_scale,
+                Action::ZoomIn,
+                Action::ZoomOut,
+                Action::ZoomReset,
+            ),
         },
         Menu {
             label: text("menu-settings"),
@@ -104,12 +89,12 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-send-fskid"),
-                            checked: app.send_fskid,
+                            checked: app.settings.send_fskid,
                             action: Action::ToggleSendFskid,
                         },
                         Item::Check {
                             label: text("action-contest-mode"),
-                            checked: app.contest_mode,
+                            checked: app.settings.contest_mode,
                             action: Action::ToggleContestMode,
                         },
                     ],
@@ -119,12 +104,12 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-vis-restart"),
-                            checked: app.vis_restart,
+                            checked: app.settings.vis_restart,
                             action: Action::ToggleVisRestart,
                         },
                         Item::Check {
                             label: text("action-vis-strict"),
-                            checked: app.vis_strict,
+                            checked: app.settings.vis_strict,
                             action: Action::ToggleVisStrict,
                         },
                     ],
@@ -138,7 +123,7 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-contact-lookup"),
-                            checked: app.contact_settings.lookup,
+                            checked: app.settings.contact.lookup,
                             action: Action::ToggleContactLookup,
                         },
                         Item::Command {
@@ -161,19 +146,10 @@ pub fn model(app: &App) -> Vec<Menu> {
                     ],
                 },
                 Item::Separator,
-                Item::Submenu {
-                    label: text("menu-language"),
-                    items: locale_items(app),
-                },
+                shared_menu::language_submenu(&app.i18n, Action::SelectLocale),
             ],
         },
-        Menu {
-            label: text("menu-help"),
-            items: vec![Item::Command {
-                label: text("menu-manual"),
-                action: Action::OpenManual,
-            }],
-        },
+        shared_menu::help_menu(&app.i18n, Action::OpenManual),
     ]
 }
 
@@ -203,64 +179,35 @@ fn history_items(app: &App) -> Vec<Item> {
     let mut items = vec![
         Item::Check {
             label: app.i18n.text("action-auto-history"),
-            checked: app.auto_history,
+            checked: app.settings.auto_history,
             action: Action::ToggleAutoHistory,
         },
         Item::Separator,
     ];
     items.extend(HistoryFormat::ALL.into_iter().map(|format| Item::Check {
         label: app.i18n.text(format.label_key()),
-        checked: app.history_format == format,
+        checked: app.settings.history_format == format,
         action: Action::SelectHistoryFormat(format),
     }));
     items
 }
 
-fn ui_scale_percent(app: &App) -> f32 {
-    (app.ui_scale * 100.0).round()
-}
-
 fn device_items(app: &App) -> Vec<Item> {
-    if app.audio.devices.is_empty() {
-        return vec![Item::Pending(app.i18n.text("status-no-audio"))];
-    }
-    let selected = app.audio.device.as_ref().map(|device| device.name());
-    app.audio
-        .devices
-        .iter()
-        .map(|device| Item::Check {
-            label: device.name().to_owned(),
-            checked: selected == Some(device.name()),
-            action: Action::SelectDevice(device.name().to_owned()),
-        })
-        .collect()
-}
-
-fn locale_items(app: &App) -> Vec<Item> {
-    Locale::ALL
-        .into_iter()
-        .map(|locale| Item::Check {
-            label: locale.to_string(),
-            checked: locale == app.i18n.locale(),
-            action: Action::SelectLocale(locale),
-        })
-        .collect()
+    shared_menu::device_items(
+        app.audio.devices.iter().map(|device| device.name()),
+        app.audio.device.as_ref().map(|device| device.name()),
+        app.i18n.text("status-no-audio"),
+        Action::SelectDevice,
+    )
 }
 
 fn output_device_items(app: &App) -> Vec<Item> {
-    if app.audio.output_devices.is_empty() {
-        return vec![Item::Pending(app.i18n.text("status-no-output"))];
-    }
-    let selected = app.audio.output_device.as_ref().map(|device| device.name());
-    app.audio
-        .output_devices
-        .iter()
-        .map(|device| Item::Check {
-            label: device.name().to_owned(),
-            checked: selected == Some(device.name()),
-            action: Action::SelectOutputDevice(device.name().to_owned()),
-        })
-        .collect()
+    shared_menu::device_items(
+        app.audio.output_devices.iter().map(|device| device.name()),
+        app.audio.output_device.as_ref().map(|device| device.name()),
+        app.i18n.text("status-no-output"),
+        Action::SelectOutputDevice,
+    )
 }
 
 /// Applies `action` to the application.
@@ -271,37 +218,26 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),
-        Action::ShowStation => app.station.open = true,
+        Action::ShowStation => app.station_dialog_open = true,
         Action::ShowCustomVariables => app.open_custom_variables(),
-        Action::ToggleSendFskid => app.send_fskid = !app.send_fskid,
-        Action::ToggleContestMode => app.contest_mode = !app.contest_mode,
-        Action::ToggleVisRestart => app.set_vis_restart(!app.vis_restart),
-        Action::ToggleVisStrict => app.set_vis_strict(!app.vis_strict),
-        Action::ToggleContactLookup => app.set_contact_lookup(!app.contact_settings.lookup),
+        Action::ToggleSendFskid => app.settings.send_fskid = !app.settings.send_fskid,
+        Action::ToggleContestMode => app.settings.contest_mode = !app.settings.contest_mode,
+        Action::ToggleVisRestart => app.set_vis_restart(!app.settings.vis_restart),
+        Action::ToggleVisStrict => app.set_vis_strict(!app.settings.vis_strict),
+        Action::ToggleContactLookup => app.set_contact_lookup(!app.settings.contact.lookup),
         Action::WriteContactCredentials => app.write_contact_credentials(),
         Action::WriteRigScript => app.write_rig_script(),
         Action::WriteBandPlan => app.write_band_plan(),
-        Action::ToggleAutoHistory => app.auto_history = !app.auto_history,
-        Action::SelectHistoryFormat(format) => app.history_format = format,
+        Action::ToggleAutoHistory => app.settings.auto_history = !app.settings.auto_history,
+        Action::SelectHistoryFormat(format) => app.settings.history_format = format,
         Action::OpenManual => app.open_manual(),
-        Action::ZoomIn => app.zoom_by(ZOOM_STEP),
-        Action::ZoomOut => app.zoom_by(-ZOOM_STEP),
+        Action::ZoomIn => app.zoom_by(shared_menu::ZOOM_STEP),
+        Action::ZoomOut => app.zoom_by(-shared_menu::ZOOM_STEP),
         Action::ZoomReset => app.set_ui_scale(DEFAULT_UI_SCALE),
         Action::Reveal(folder) => app.reveal(folder),
         Action::Quit => return true,
     }
     false
-}
-
-const ZOOM_STEP: f32 = 0.1;
-
-#[cfg(test)]
-pub fn flatten(menus: &[Menu]) -> Vec<&Item> {
-    shared_menu::flatten(menus)
-}
-
-pub const fn is_in_window() -> bool {
-    shared_menu::is_in_window()
 }
 
 pub fn bar(ui: &mut egui::Ui, model: &[Menu]) -> Option<Action> {
@@ -312,47 +248,6 @@ pub fn bar(ui: &mut egui::Ui, model: &[Menu]) -> Option<Action> {
 mod tests {
     use super::*;
     use crate::app::App;
-
-    fn count(items: &[Item]) -> usize {
-        items
-            .iter()
-            .map(|item| match item {
-                Item::Submenu { items, .. } => 1 + count(items),
-                _ => 1,
-            })
-            .sum()
-    }
-
-    #[test]
-    fn flattening_counts_every_item_including_separators() {
-        let model = model(&App::headless());
-        let expected: usize = model.iter().map(|menu| count(&menu.items)).sum();
-        assert_eq!(flatten(&model).len(), expected);
-        assert!(
-            model.iter().any(|menu| menu.items.contains(&Item::Separator)),
-            "the model needs a separator for this to be worth asserting"
-        );
-    }
-
-    #[test]
-    fn flattening_visits_a_submenu_before_its_contents() {
-        let model = vec![Menu {
-            label: "settings".to_owned(),
-            items: vec![
-                Item::Separator,
-                Item::Submenu {
-                    label: "outer".to_owned(),
-                    items: vec![Item::Pending("inner".to_owned())],
-                },
-                Item::Pending("after".to_owned()),
-            ],
-        }];
-        let flat = flatten(&model);
-        assert!(matches!(flat[0], Item::Separator));
-        assert!(matches!(flat[1], Item::Submenu { .. }));
-        assert!(matches!(flat[2], Item::Pending(label) if label == "inner"));
-        assert!(matches!(flat[3], Item::Pending(label) if label == "after"));
-    }
 
     #[test]
     fn the_file_menu_offers_every_folder() {
@@ -399,13 +294,13 @@ mod tests {
 
         apply(&mut app, Action::OpenManual);
 
-        assert_eq!(app.library.error, None);
+        assert_eq!(app.error, None);
     }
 
     #[test]
     fn every_action_in_the_model_is_applicable() {
         let mut app = App::headless();
-        for item in flatten(&model(&App::headless())) {
+        for item in shared_menu::flatten(&model(&App::headless())) {
             let action = match item {
                 Item::Check { action, .. } | Item::Command { action, .. } => action.clone(),
                 _ => continue,

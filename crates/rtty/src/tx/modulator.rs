@@ -54,7 +54,7 @@ impl<I: Iterator<Item = TxCode>> Transmitter<I> {
         let framer = Framer::new(sample_rate_hz, &config)?;
         let timing = framer.timing();
         if !config.amplitude.is_finite() || config.amplitude <= 0.0 {
-            return Err(RttyError::Dsp(grayline_dsp::DspError::InvalidLevel));
+            return Err(RttyError::InvalidAmplitude);
         }
         let vco = Vco::new(
             rate,
@@ -437,6 +437,15 @@ mod tests {
         assert_eq!(
             Transmitter::new(core::iter::empty(), RATE, negative_gap).err().unwrap(),
             RttyError::InvalidTransmitTiming
+        );
+
+        let silent = TxConfig {
+            amplitude: 0.0,
+            ..config()
+        };
+        assert_eq!(
+            Transmitter::new(core::iter::empty(), RATE, silent).err().unwrap(),
+            RttyError::InvalidAmplitude
         );
 
         let mut too_fast = config();

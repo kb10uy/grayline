@@ -109,11 +109,6 @@ impl Demodulator {
         self.band
     }
 
-    /// Changes the shift the gray scale is read against.
-    pub const fn set_band(&mut self, band: WefaxBand) {
-        self.band = band;
-    }
-
     /// Returns how strongly each framing tone is currently present.
     pub fn apt_strengths(&self) -> AptStrengths {
         self.apt.strengths()
@@ -130,18 +125,23 @@ impl Demodulator {
     }
 
     /// Demodulates one packet, continuing from wherever the last one ended.
+    ///
+    /// A packet holding a sample that is not finite is refused whole, before
+    /// any stage has seen it, so the demodulator is left as if it had never
+    /// arrived and the next packet continues from where the last good one
+    /// ended.
     pub fn process(&mut self, samples: &[f32]) -> Result<DemodulatedChunk, WefaxError> {
         let count = samples.len() as u64;
         if self.next_sample.checked_add(count).is_none() {
             return Err(WefaxError::SamplePositionOverflow);
         }
+        if let Some(index) = samples.iter().position(|sample| !sample.is_finite()) {
+            return Err(WefaxError::NonFiniteSample { index });
+        }
         let first_sample = self.next_sample;
         let mut frequency_hz = Vec::with_capacity(samples.len());
         let mut apt_events = Vec::new();
         for (index, sample) in samples.iter().enumerate() {
-            if !sample.is_finite() {
-                return Err(WefaxError::NonFiniteSample { index });
-            }
             let frequency = self.front_end.process(f64::from(*sample));
             let position = first_sample + index as u64;
             if let Some(event) = self.apt.process(self.band.normalized(frequency), position) {
@@ -400,5 +400,26 @@ mod tests {
             demodulator.process(&samples).unwrap_err(),
             WefaxError::NonFiniteSample { index: 2 }
         );
+    }
+
+    #[rstest]
+    #[case(0)]
+    #[case(500)]
+    #[case(999)]
+    fn a_refused_packet_leaves_the_demodulator_as_it_was(#[case] bad: usize) {
+        let samples = tone(11_025, 1_900.0, 0.3);
+        let mut packet = samples[1_000..2_000].to_vec();
+        packet[bad] = f32::NAN;
+        let mut tested = Demodulator::new(11_025).unwrap();
+        let mut control = Demodulator::new(11_025).unwrap();
+        tested.process(&samples[..1_000]).unwrap();
+        control.process(&samples[..1_000]).unwrap();
+
+        assert!(tested.process(&packet).is_err());
+
+        let resumed = tested.process(&samples[1_000..]).unwrap();
+        let expected = control.process(&samples[1_000..]).unwrap();
+        assert_eq!(resumed.first_sample(), expected.first_sample());
+        assert_eq!(resumed.frequency_hz(), expected.frequency_hz());
     }
 }

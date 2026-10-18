@@ -25,6 +25,7 @@ pub const MANUAL_URL: &str = "https://grayline.jl1his.radio/wefax/";
 pub const IDENTITY: grayline_shell::Identity = grayline_shell::Identity {
     app_directory: APP_DIRECTORY,
     display_name: DISPLAY_NAME,
+    version: env!("CARGO_PKG_VERSION"),
     process_name: PROCESS_NAME,
     pictures_directory: PICTURES_DIRECTORY,
     manual_url: MANUAL_URL,

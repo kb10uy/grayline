@@ -1,10 +1,9 @@
-use std::{collections::BTreeMap, fs, io, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
-use grayline_qso::DEFAULT_FIELDS;
-use grayline_rig_control::DEFAULT_ADDRESS;
-use grayline_shell::log;
-use toml_edit::{Array, DocumentMut, Item, Table, value};
+use grayline_qso::{ContactSettings, DEFAULT_FIELDS};
+use grayline_shell::config::{self, Document};
+use toml_edit::{Item, Table, value};
 
 use crate::app::macros::{Station, valid_variable_name};
 
@@ -14,7 +13,7 @@ use crate::app::macros::{Station, valid_variable_name};
 /// what the settings in it mean belongs to rig control. The section is spelled
 /// as the SSTV application spells it, so a station that keys both can copy one
 /// block between the two files.
-pub use grayline_rig_control::{PortSettings, RigSettings};
+pub use grayline_rig_control::RigSettings;
 
 /// Bounds on the mark tone, in hertz.
 ///
@@ -47,14 +46,21 @@ pub const MAXIMUM_SQUELCH: f64 = 1.0;
 pub const MINIMUM_TX_LEVEL: f64 = 0.0;
 pub const MAXIMUM_TX_LEVEL: f64 = 1.0;
 
-/// The longest either side of a transmission may be padded by, in seconds.
-pub const KEYING_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=5.0;
-/// How far apart frequency reads may be asked to be, in seconds.
-///
-/// Zero turns reading off, which is what this application starts on: nothing
-/// here shows a frequency yet, so asking for one would put CAT traffic on the
-/// wire for a reading nobody sees.
-pub const POLL_SECONDS_RANGE: core::ops::RangeInclusive<f32> = 0.0..=60.0;
+/// The top-level keys, each named once so the reader and the writer cannot
+/// spell one differently.
+const DEVICE: &str = "device";
+const OUTPUT_DEVICE: &str = "output_device";
+const MARK_HZ: &str = "mark_hz";
+const SHIFT_HZ: &str = "shift_hz";
+const BAUD: &str = "baud";
+const REVERSE: &str = "reverse";
+const AFC: &str = "afc";
+const SQUELCH_THRESHOLD: &str = "squelch_threshold";
+const UNSHIFT_ON_SPACE: &str = "unshift_on_space";
+const ATC: &str = "atc";
+const TX_UNSHIFT_ON_SPACE: &str = "tx_unshift_on_space";
+const TX_LEVEL: &str = "tx_level";
+const SCOPE: &str = "scope";
 
 /// Everything the application remembers between sessions.
 ///
@@ -100,31 +106,22 @@ pub struct Settings {
     pub scope: bool,
 }
 
-/// Where the contact directory looks a callsign up.
+/// The contact directory a first run starts on.
 ///
-/// Written under `[qso]`, the section name the SSTV application already uses
-/// for the same three settings: one operator's two applications ask the same
-/// logger about the same stations, and a station set up once should not have
-/// to be set up twice.
-///
-/// The API key is deliberately absent, and is read from the family's own
-/// credentials file instead. This file is the one the operator is invited to
-/// open from the menu and the one the application rewrites at the end of any
-/// frame that changed a setting; a credential belongs in neither.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContactSettings {
-    /// Whether the operator's own logger is asked about a callsign the store
-    /// has nothing recent to say about.
-    pub lookup: bool,
-    /// The base URL of that logger.
-    pub wavelog_url: String,
-    /// Which fields the contact dialog offers, as written: keys, and groups
-    /// spelled `!name`.
-    ///
-    /// Kept as written rather than expanded, so the file the operator reads
-    /// back says `!ja` where they wrote `!ja`. What the dialog lays out is
-    /// `grayline_qso::expand_fields` of this.
-    pub fields: Vec<String>,
+/// The Latin spellings are offered as well as the core three, which is where
+/// this parts from SSTV. ITA2 carries no kanji, so the name this mode can
+/// actually send is the one `!latin` keeps; a station that files only a kanji
+/// name has nothing a macro could put on the air.
+fn default_contact() -> ContactSettings {
+    ContactSettings {
+        fields: DEFAULT_FIELDS
+            .iter()
+            .copied()
+            .chain(["!latin"])
+            .map(str::to_owned)
+            .collect(),
+        ..ContactSettings::default()
+    }
 }
 
 /// Where a transmission goes when it is keyed as FSK rather than played.
@@ -145,30 +142,6 @@ impl Default for KeyerSettings {
         Self {
             enabled: false,
             address: DEFAULT_KEYER_ADDRESS.to_owned(),
-        }
-    }
-}
-
-impl Default for ContactSettings {
-    fn default() -> Self {
-        Self {
-            // On, for the reason recorded beside the SSTV application's own
-            // copy: with no instance and no key there is nobody to ask and the
-            // store answers alone, so a switch that started off would only
-            // leave an operator who wrote a credentials file wondering why
-            // nothing happened.
-            lookup: true,
-            wavelog_url: String::new(),
-            // The Latin spellings as well as the core three, which is where
-            // this parts from SSTV. ITA2 carries no kanji, so the name this
-            // mode can actually send is the one `!latin` keeps; a station that
-            // files only a kanji name has nothing a macro could put on the air.
-            fields: DEFAULT_FIELDS
-                .iter()
-                .copied()
-                .chain(["!latin"])
-                .map(str::to_owned)
-                .collect(),
         }
     }
 }
@@ -202,7 +175,7 @@ impl Default for Settings {
             tx_level: 0.95,
             station: Station::default(),
             custom_variables: BTreeMap::new(),
-            contact: ContactSettings::default(),
+            contact: default_contact(),
             rig: RigSettings {
                 // Nothing here reads a frequency back yet, so the poll starts
                 // off rather than at the interval the SSTV application uses.
@@ -241,126 +214,84 @@ impl Settings {
 /// save that did not concern it.
 #[derive(Debug)]
 pub struct Config {
-    path: Option<PathBuf>,
-    document: DocumentMut,
-    /// Set when the file could not be parsed.
-    ///
-    /// The application starts on defaults and refuses to save, because
-    /// overwriting a file it could not read would throw away whatever the
-    /// operator had written in it.
-    read_only: bool,
-    error: Option<String>,
+    document: Document,
 }
 
 impl Config {
     /// Reads the settings file, falling back to defaults it will not save over.
     pub fn load(path: PathBuf) -> (Self, Settings) {
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
-            Err(error) => {
-                return (Self::unreadable(path, &error.to_string()), Settings::default());
-            }
-        };
-        match text.parse::<DocumentMut>() {
-            Ok(document) => {
-                let settings = read(&document);
-                (
-                    Self {
-                        path: Some(path),
-                        document,
-                        read_only: false,
-                        error: None,
-                    },
-                    settings,
-                )
-            }
-            Err(error) => (Self::unreadable(path, &error.to_string()), Settings::default()),
-        }
+        let document = Document::load(path);
+        let settings = read(document.table());
+        (Self { document }, settings)
     }
 
     /// A configuration with nowhere to write, for tests and headless runs.
     #[cfg(test)]
     pub fn detached() -> Self {
         Self {
-            path: None,
-            document: DocumentMut::new(),
-            read_only: false,
-            error: None,
+            document: Document::detached(),
         }
     }
 
-    fn unreadable(path: PathBuf, error: &str) -> Self {
-        log::note(&format!("could not read {}: {error}", path.display()));
-        Self {
-            path: Some(path),
-            document: DocumentMut::new(),
-            read_only: true,
-            error: Some(error.to_owned()),
-        }
-    }
-
-    /// Returns what went wrong reading the file, if anything did.
+    /// Returns what went wrong reading or writing the file, if anything did.
     pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+        self.document.error()
     }
 
     /// Writes `settings` into the document and saves it.
     pub fn save(&mut self, settings: &Settings) {
-        if self.path.is_none() || self.read_only {
-            return;
-        }
-        let table = self.document.as_table_mut();
-        for (key, name) in [("device", &settings.device), ("output_device", &settings.output_device)] {
-            match name {
-                Some(name) => table[key] = value(name.as_str()),
-                None => {
-                    table.remove(key);
+        self.document.save(|table| {
+            for (key, name) in [(DEVICE, &settings.device), (OUTPUT_DEVICE, &settings.output_device)] {
+                match name {
+                    Some(name) => table[key] = value(name.as_str()),
+                    None => {
+                        table.remove(key);
+                    }
                 }
             }
-        }
-        table["mark_hz"] = value(settings.mark_hz);
-        table["shift_hz"] = value(settings.shift_hz);
-        table["baud"] = value(settings.baud);
-        table["reverse"] = value(settings.reverse);
-        table["afc"] = value(settings.afc);
-        table["squelch_threshold"] = value(settings.squelch_threshold);
-        table["unshift_on_space"] = value(settings.unshift_on_space);
-        table["atc"] = value(settings.atc);
-        table["tx_unshift_on_space"] = value(settings.tx_unshift_on_space);
-        table["tx_level"] = value(settings.tx_level);
-        table["scope"] = value(settings.scope);
+            table[MARK_HZ] = value(settings.mark_hz);
+            table[SHIFT_HZ] = value(settings.shift_hz);
+            table[BAUD] = value(settings.baud);
+            table[REVERSE] = value(settings.reverse);
+            table[AFC] = value(settings.afc);
+            table[SQUELCH_THRESHOLD] = value(settings.squelch_threshold);
+            table[UNSHIFT_ON_SPACE] = value(settings.unshift_on_space);
+            table[ATC] = value(settings.atc);
+            table[TX_UNSHIFT_ON_SPACE] = value(settings.tx_unshift_on_space);
+            table[TX_LEVEL] = value(settings.tx_level);
+            table[SCOPE] = value(settings.scope);
 
-        let station = table
-            .entry("station")
-            .or_insert_with(|| Item::Table(Table::new()))
-            .as_table_mut();
-        if let Some(station_table) = station {
-            station_table["callsign"] = value(settings.station.callsign.as_str());
-            station_table["name"] = value(settings.station.name.as_str());
-            station_table["qth"] = value(settings.station.qth.as_str());
-            station_table["grid"] = value(settings.station.grid.as_str());
-        }
+            let station = table
+                .entry("station")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut();
+            if let Some(station_table) = station {
+                station_table["callsign"] = value(settings.station.callsign.as_str());
+                station_table["name"] = value(settings.station.name.as_str());
+                station_table["qth"] = value(settings.station.qth.as_str());
+                station_table["grid"] = value(settings.station.grid.as_str());
+            }
 
-        // Written once and then left alone. There is no editor for them here,
-        // so the file is where they are changed, and rewriting the array on
-        // every save would reformat what the operator had written in it.
-        store_custom_variables(table, &settings.custom_variables);
-        store_contact(table, &settings.contact);
-        store_rig(table, &settings.rig);
-        store_keyer(table, &settings.keyer);
-
-        self.write();
-    }
-
-    fn write(&self) {
-        let Some(path) = self.path.as_ref() else { return };
-        if self.read_only {
-            return;
-        }
-        if let Err(error) = fs::write(path, self.document.to_string()) {
-            log::note(&format!("could not save {}: {error}", path.display()));
-        }
+            // Written once and then left alone. There is no editor for them here,
+            // so the file is where they are changed, and rewriting the array on
+            // every save would reformat what the operator had written in it.
+            config::write_strings(table, "variables", &settings.custom_variables);
+            if let Some(qso) = table
+                .entry("qso")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut()
+            {
+                settings.contact.write(qso);
+            }
+            if let Some(rig) = table
+                .entry("rig")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut()
+            {
+                settings.rig.write(rig);
+            }
+            store_keyer(table, &settings.keyer);
+        });
     }
 }
 
@@ -369,14 +300,13 @@ impl Config {
 /// A value that is the wrong type, or names something this build does not
 /// support, is dropped rather than rejected: the file is the operator's, and
 /// one unusable key is not a reason to start on nothing.
-fn read(document: &DocumentMut) -> Settings {
+fn read(table: &Table) -> Settings {
     let mut settings = Settings::default();
-    let table = document.as_table();
     let get = |key: &str| table.get(key).and_then(Item::as_value);
 
     for (key, target) in [
-        ("device", &mut settings.device),
-        ("output_device", &mut settings.output_device),
+        (DEVICE, &mut settings.device),
+        (OUTPUT_DEVICE, &mut settings.output_device),
     ] {
         if let Some(name) = get(key).and_then(|value| value.as_str()) {
             *target = Some(name.to_owned());
@@ -386,23 +316,23 @@ fn read(document: &DocumentMut) -> Settings {
     // a hand-edited `shift_hz = 170` is not thrown away for having no point
     // in it.
     for (key, target) in [
-        ("mark_hz", &mut settings.mark_hz),
-        ("shift_hz", &mut settings.shift_hz),
-        ("baud", &mut settings.baud),
-        ("squelch_threshold", &mut settings.squelch_threshold),
-        ("tx_level", &mut settings.tx_level),
+        (MARK_HZ, &mut settings.mark_hz),
+        (SHIFT_HZ, &mut settings.shift_hz),
+        (BAUD, &mut settings.baud),
+        (SQUELCH_THRESHOLD, &mut settings.squelch_threshold),
+        (TX_LEVEL, &mut settings.tx_level),
     ] {
         if let Some(number) = get(key).and_then(number) {
             *target = number;
         }
     }
     for (key, target) in [
-        ("reverse", &mut settings.reverse),
-        ("afc", &mut settings.afc),
-        ("unshift_on_space", &mut settings.unshift_on_space),
-        ("atc", &mut settings.atc),
-        ("tx_unshift_on_space", &mut settings.tx_unshift_on_space),
-        ("scope", &mut settings.scope),
+        (REVERSE, &mut settings.reverse),
+        (AFC, &mut settings.afc),
+        (UNSHIFT_ON_SPACE, &mut settings.unshift_on_space),
+        (ATC, &mut settings.atc),
+        (TX_UNSHIFT_ON_SPACE, &mut settings.tx_unshift_on_space),
+        (SCOPE, &mut settings.scope),
     ] {
         if let Some(flag) = get(key).and_then(|value| value.as_bool()) {
             *target = flag;
@@ -424,68 +354,11 @@ fn read(document: &DocumentMut) -> Settings {
             grid: field("grid"),
         };
     }
-    settings.custom_variables = read_custom_variables(table);
-    settings.contact = read_contact(table);
-    settings.rig = read_rig(table);
+    settings.custom_variables = config::read_strings(table, "variables", valid_variable_name);
+    settings.contact = ContactSettings::read(table.get("qso").and_then(Item::as_table), Settings::default().contact);
+    settings.rig = RigSettings::read(table.get("rig").and_then(Item::as_table), Settings::default().rig);
     settings.keyer = read_keyer(table);
     settings.clamped()
-}
-
-/// Reads the `[rig]` section, which is the whole of rig control's settings.
-///
-/// There is no editor for these: keying is wired once for a station and then
-/// left alone, so the file is where it is set up, and the application only
-/// reads it.
-fn read_rig(table: &Table) -> RigSettings {
-    let defaults = Settings::default().rig;
-    let Some(rig) = table.get("rig").and_then(Item::as_table) else {
-        return defaults;
-    };
-    let seconds = |key: &str, range: &core::ops::RangeInclusive<f32>, default: f32| {
-        rig.get(key)
-            .and_then(Item::as_value)
-            .and_then(number)
-            .map(|seconds| (seconds as f32).clamp(*range.start(), *range.end()))
-            .unwrap_or(default)
-    };
-    RigSettings {
-        enabled: rig
-            .get("enabled")
-            .and_then(Item::as_value)
-            .and_then(|flag| flag.as_bool())
-            .unwrap_or(defaults.enabled),
-        ports: read_ports(rig).unwrap_or(defaults.ports),
-        poll_seconds: seconds("poll-interval", &POLL_SECONDS_RANGE, defaults.poll_seconds),
-        lead_in_seconds: seconds("lead-in", &KEYING_SECONDS_RANGE, defaults.lead_in_seconds),
-        tail_seconds: seconds("tail", &KEYING_SECONDS_RANGE, defaults.tail_seconds),
-    }
-}
-
-/// Reads the ports to connect to, or nothing when the file names none.
-///
-/// A section that is present is taken as written: an entry that is not a
-/// section is dropped, and a section that leaves nothing behind leaves the
-/// script with no port to reach rather than being quietly given the default
-/// one back.
-fn read_ports(rig: &Table) -> Option<BTreeMap<String, PortSettings>> {
-    let ports = rig.get("ports")?.as_table()?;
-    Some(
-        ports
-            .iter()
-            .filter_map(|(name, item)| {
-                let address = item
-                    .as_table()?
-                    .get("address")
-                    .and_then(Item::as_value)
-                    .and_then(|address| address.as_str())
-                    .map(str::trim)
-                    .filter(|address| !address.is_empty())
-                    .unwrap_or(DEFAULT_ADDRESS)
-                    .to_owned();
-                Some((name.to_owned(), PortSettings { address }))
-            })
-            .collect(),
-    )
 }
 
 /// Reads the `[keyer]` section.
@@ -507,151 +380,6 @@ fn read_keyer(table: &Table) -> KeyerSettings {
             .map(str::trim)
             .filter(|address| !address.is_empty())
             .map_or(defaults.address, str::to_owned),
-    }
-}
-
-fn read_contact(table: &Table) -> ContactSettings {
-    let defaults = ContactSettings::default();
-    let Some(qso) = table.get("qso").and_then(Item::as_table) else {
-        return defaults;
-    };
-    ContactSettings {
-        lookup: qso
-            .get("lookup")
-            .and_then(Item::as_value)
-            .and_then(|flag| flag.as_bool())
-            .unwrap_or(defaults.lookup),
-        wavelog_url: qso
-            .get("wavelog")
-            .and_then(Item::as_table)
-            .and_then(|wavelog| wavelog.get("url"))
-            .and_then(Item::as_value)
-            .and_then(|url| url.as_str())
-            .map(str::trim)
-            .map(str::to_owned)
-            .unwrap_or(defaults.wavelog_url),
-        fields: contact_fields(qso).unwrap_or(defaults.fields),
-    }
-}
-
-/// Reads the field list, or nothing when the file names none.
-///
-/// A list that is present is taken as written, an empty one included: an
-/// operator who wrote `fields = []` asked for a dialog holding only what the
-/// station already has, and handing the default back would be arguing with
-/// them. Entries that are not strings are dropped; what the remaining ones
-/// mean is `expand_fields`'s business.
-fn contact_fields(qso: &Table) -> Option<Vec<String>> {
-    let array = qso.get("fields")?.as_array()?;
-    Some(
-        array
-            .iter()
-            .filter_map(|entry| entry.as_str().map(str::trim).map(str::to_owned))
-            .collect(),
-    )
-}
-
-/// Writes the directory's settings back, the instance's address included.
-///
-/// The address is written even while it is empty: this file is where it is
-/// edited, and an operator who has to invent the key before they can change it
-/// has no way to learn it exists.
-fn store_contact(table: &mut Table, contact: &ContactSettings) {
-    let Some(qso) = table
-        .entry("qso")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
-    else {
-        return;
-    };
-    qso["lookup"] = value(contact.lookup);
-    let mut fields = Array::new();
-    fields.extend(contact.fields.iter().map(String::as_str));
-    qso["fields"] = Item::Value(fields.into());
-    let Some(wavelog) = qso
-        .entry("wavelog")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
-    else {
-        return;
-    };
-    wavelog["url"] = value(contact.wavelog_url.as_str());
-}
-
-/// Reads the operator's own fields.
-///
-/// A name no `${...}` expression could ever hold is dropped rather than
-/// carried around unreachable, which is the treatment every other unusable
-/// value in the file gets.
-fn read_custom_variables(table: &toml_edit::Table) -> BTreeMap<String, String> {
-    let Some(variables) = table.get("variables").and_then(Item::as_table) else {
-        return BTreeMap::new();
-    };
-    variables
-        .iter()
-        .filter(|(name, _)| valid_variable_name(name))
-        .filter_map(|(name, item)| Some((name.to_owned(), item.as_value()?.as_str()?.to_owned())))
-        .collect()
-}
-
-/// Writes the fields back, leaving the keys that survived in place.
-///
-/// Keys are assigned rather than the table being rebuilt, so a comment written
-/// beside one by hand outlives a save that did not touch it.
-fn store_custom_variables(table: &mut Table, variables: &BTreeMap<String, String>) {
-    if variables.is_empty() {
-        table.remove("variables");
-        return;
-    }
-    let Some(stored) = table
-        .entry("variables")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
-    else {
-        return;
-    };
-    stored.retain(|name, _| variables.contains_key(name));
-    for (name, text) in variables {
-        stored[name.as_str()] = value(text.as_str());
-    }
-}
-
-/// Writes the rig section back, ports and all.
-///
-/// Written even at its defaults, and even though nothing here edits it: the
-/// file is the only place keying is set up, so an operator who had to invent
-/// the keys before they could change them would have no way to learn the keys
-/// exist.
-fn store_rig(table: &mut Table, rig: &RigSettings) {
-    let section = table
-        .entry("rig")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut();
-    let Some(section) = section else { return };
-    section["enabled"] = value(rig.enabled);
-    for (key, seconds) in [
-        ("poll-interval", rig.poll_seconds),
-        ("lead-in", rig.lead_in_seconds),
-        ("tail", rig.tail_seconds),
-    ] {
-        // Rounded to the millisecond on the way out, so a widened f32 does not
-        // write 0.20000000298023224 into a file meant to be read.
-        section[key] = value((f64::from(seconds) * 1_000.0).round() / 1_000.0);
-    }
-    let ports = section
-        .entry("ports")
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut();
-    let Some(ports) = ports else { return };
-    ports.retain(|name, _| rig.ports.contains_key(name));
-    for (name, port) in &rig.ports {
-        let entry = ports
-            .entry(name.as_str())
-            .or_insert_with(|| Item::Table(Table::new()))
-            .as_table_mut();
-        if let Some(entry) = entry {
-            entry["address"] = value(port.address.as_str());
-        }
     }
 }
 
@@ -677,12 +405,16 @@ fn number(item: &toml_edit::Value) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
+    use grayline_rig_control::PortSettings;
+    use tempfile::TempDir;
+
     use super::*;
-    use crate::test_util::TempDir;
 
     #[test]
     fn a_missing_file_starts_on_defaults_and_can_be_saved() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
         assert_eq!(settings, Settings::default());
@@ -695,7 +427,7 @@ mod tests {
 
     #[test]
     fn stored_settings_survive_a_round_trip() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let wanted = Settings {
             device: Some("Line In".to_owned()),
@@ -756,7 +488,7 @@ mod tests {
 
     #[test]
     fn the_rig_section_is_read_as_the_sstv_application_writes_it() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(
             &path,
@@ -783,7 +515,7 @@ mod tests {
 
         assert!(rig.enabled);
         // Clamped where it is read, as every other hand-edited figure is.
-        assert_eq!(rig.lead_in_seconds, *KEYING_SECONDS_RANGE.end());
+        assert_eq!(rig.lead_in_seconds, *grayline_rig_control::KEYING_SECONDS_RANGE.end());
         assert_eq!(rig.tail_seconds, 0.08);
         assert_eq!(rig.poll_seconds, 2.0);
         assert_eq!(
@@ -798,7 +530,7 @@ mod tests {
     /// station that never touched them should still find them written out.
     #[test]
     fn a_first_save_writes_the_keying_settings_out() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
 
@@ -814,7 +546,7 @@ mod tests {
 
     #[test]
     fn a_blank_keyer_address_falls_back_to_the_default() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "[keyer]\nenabled = true\naddress = \"  \"\n").unwrap();
 
@@ -826,7 +558,7 @@ mod tests {
 
     #[test]
     fn saving_preserves_comments_and_unknown_keys() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "# the station's own note\nunknown = 7\nbaud = 75.0\n").unwrap();
 
@@ -841,7 +573,7 @@ mod tests {
 
     #[test]
     fn an_unparsable_file_is_never_written_over() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "this is not toml = = =\n").unwrap();
 
@@ -855,7 +587,7 @@ mod tests {
 
     #[test]
     fn unusable_values_fall_back_without_discarding_the_rest() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "mark_hz = \"low\"\nbaud = nan\nreverse = true\n").unwrap();
 
@@ -867,7 +599,7 @@ mod tests {
 
     #[test]
     fn stored_figures_are_brought_back_into_range() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(
             &path,
@@ -884,7 +616,7 @@ mod tests {
 
     #[test]
     fn a_whole_number_is_read_as_the_figure_it_is() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "shift_hz = 425\nbaud = 75\n").unwrap();
 
@@ -895,7 +627,7 @@ mod tests {
 
     #[test]
     fn operator_fields_survive_a_round_trip() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let wanted = Settings {
             custom_variables: BTreeMap::from([
@@ -912,7 +644,7 @@ mod tests {
 
     #[test]
     fn an_unusable_field_name_is_dropped() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(
             &path,
@@ -931,7 +663,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn a_removed_field_leaves_the_file() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let mut settings = Settings {
             custom_variables: BTreeMap::from([
@@ -953,7 +685,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn no_fields_leaves_no_table() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let mut settings = Settings {
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]),
@@ -969,20 +701,20 @@ grid = \"PM95UQ\"
     }
     #[test]
     fn a_file_that_says_nothing_about_the_directory_gets_the_defaults() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "baud = 75.0\n").unwrap();
 
         let (_, settings) = Config::load(path);
 
-        assert_eq!(settings.contact, ContactSettings::default());
+        assert_eq!(settings.contact, default_contact());
     }
 
     /// ITA2 has no kanji, so the spelling this mode can send is one the dialog has
     /// to offer somewhere to put.
     #[test]
     fn the_latin_spellings_are_offered_by_default() {
-        let offered = grayline_qso::expand_fields(ContactSettings::default().fields.iter().map(String::as_str));
+        let offered = grayline_qso::expand_fields(default_contact().fields.iter().map(String::as_str));
 
         for key in ["name", "name_latin", "qth", "qth_latin"] {
             assert!(offered.iter().any(|field| field == key), "{key} is not offered");
@@ -991,7 +723,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn an_empty_field_list_is_taken_as_written() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         fs::write(&path, "[qso]\nfields = []\n").unwrap();
 
@@ -1002,7 +734,7 @@ grid = \"PM95UQ\"
 
     #[test]
     fn the_logger_address_is_written_out_even_while_it_is_empty() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("config.toml");
         let (mut config, settings) = Config::load(path.clone());
 

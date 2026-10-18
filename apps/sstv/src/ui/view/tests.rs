@@ -10,7 +10,7 @@ use rstest::rstest;
 use super::*;
 use grayline_shell::i18n::Locale;
 
-use crate::app::{App, FIRST_QSO_NUMBER};
+use crate::app::{App, FIRST_QSO_NUMBER, outgoing::Kind};
 use crate::test_util::refused_port;
 
 use super::panels::decibels;
@@ -22,7 +22,7 @@ use super::panels::decibels;
 fn render(app: &mut App) -> Harness<'_> {
     let mut harness = Harness::new_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     harness.run();
     harness
@@ -56,7 +56,7 @@ fn every_locale_renders(#[case] locale: Locale) {
 #[test]
 fn the_variable_dialog_renders_a_row_for_every_name() {
     let mut app = App::headless();
-    app.custom_variables = std::collections::BTreeMap::from([
+    app.settings.custom_variables = std::collections::BTreeMap::from([
         ("club".to_owned(), "JARL".to_owned()),
         ("rig".to_owned(), "FT-991A".to_owned()),
     ]);
@@ -73,20 +73,24 @@ fn the_variable_dialog_renders_a_row_for_every_name() {
 fn the_contact_dialog_renders_every_kind_of_row() {
     let mut app = App::headless();
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
-    app.contact_snapshot.fields = std::collections::BTreeMap::from([
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.fields = std::collections::BTreeMap::from([
         ("name".to_owned(), "Taro".to_owned()),
         ("qth".to_owned(), "Tokyo".to_owned()),
         ("rig".to_owned(), "IC-705".to_owned()),
     ]);
     app.open_contact();
     assert_eq!(
-        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        app.directory
+            .draft
+            .iter()
+            .map(|row| row.key.as_str())
+            .collect::<Vec<_>>(),
         ["name", "qth", "grid", "rig"],
         "the fields asked for lead, and what the station also has follows"
     );
-    assert!(app.contact_draft.iter().take(3).all(|row| row.offered));
-    assert!(!app.contact_draft[3].offered);
+    assert!(app.directory.draft.iter().take(3).all(|row| row.offered));
+    assert!(!app.directory.draft[3].offered);
     let title = app.i18n.text("contact-title");
 
     let harness = render(&mut app);
@@ -97,14 +101,18 @@ fn the_contact_dialog_renders_every_kind_of_row() {
 #[test]
 fn the_dialog_offers_the_fields_the_settings_asked_for() {
     let mut app = App::headless();
-    app.contact_settings.fields = vec!["!ja".to_owned()];
+    app.settings.contact.fields = vec!["!ja".to_owned()];
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
 
     app.open_contact();
 
     assert_eq!(
-        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        app.directory
+            .draft
+            .iter()
+            .map(|row| row.key.as_str())
+            .collect::<Vec<_>>(),
         ["name", "name_latin", "qth", "qth_latin", "grid", "jcc"]
     );
     let jcc = app.i18n.text("contact-jcc");
@@ -114,9 +122,9 @@ fn the_dialog_offers_the_fields_the_settings_asked_for() {
 #[test]
 fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
     let mut app = App::headless();
-    app.contact_settings.fields = vec!["oblast".to_owned()];
+    app.settings.contact.fields = vec!["oblast".to_owned()];
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
 
     app.open_contact();
 
@@ -130,7 +138,7 @@ fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
 fn labels_are_inert_inside_a_dialog_as_well_as_behind_it() {
     let mut app = App::headless();
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
     app.open_contact();
 
     let harness = render(&mut app);
@@ -172,7 +180,7 @@ fn the_radio_panel_is_where_the_connection_is_worked() {
         harness.get_by_label(&retry);
     }
 
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Receiving;
     app.rig_snapshot.reading = Some(grayline_rig_control::Reading {
         frequency_hz: 7_100_000,
@@ -203,7 +211,7 @@ fn the_transmit_tab_keeps_mode_detection_visible_but_inactive() {
     let mut app = App::headless();
     app.tab = Tab::Transmit;
     let automatic = app.i18n.text("label-auto-vis");
-    let before = app.auto_mode;
+    let before = app.settings.auto_mode;
 
     {
         let mut harness = render(&mut app);
@@ -211,7 +219,7 @@ fn the_transmit_tab_keeps_mode_detection_visible_but_inactive() {
         harness.run();
     }
 
-    assert_eq!(app.auto_mode, before);
+    assert_eq!(app.settings.auto_mode, before);
 }
 
 #[test]
@@ -233,7 +241,7 @@ fn the_qso_panel_reads_from_the_call_down_to_the_report_being_sent() {
 #[test]
 fn the_serial_number_buttons_work_it() {
     let mut app = App::headless();
-    app.contest_mode = true;
+    app.settings.contest_mode = true;
     app.qso.number = "007".to_owned();
     let increment = app.i18n.text("qso-nr-increment");
     let reset = app.i18n.text("qso-nr-reset");
@@ -256,7 +264,7 @@ fn the_serial_number_buttons_work_it() {
 #[test]
 fn the_serial_number_is_inert_outside_contest_mode() {
     let mut app = App::headless();
-    assert!(!app.contest_mode);
+    assert!(!app.settings.contest_mode);
     let increment = app.i18n.text("qso-nr-increment");
     let reset = app.i18n.text("qso-nr-reset");
 
@@ -449,7 +457,7 @@ fn the_receive_tab_reports_that_reception_is_muted() {
     let muted = app.i18n.text("state-rx-muted");
     assert_eq!(state(&app), waiting);
 
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing.begin_for_test(Kind::Picture, TxPhase::Producing);
     app.poll_workers();
 
     assert_eq!(state(&app), muted);
@@ -508,7 +516,7 @@ fn clicking_a_row_label_selects_that_row() {
     {
         let mut harness = Harness::new_ui(|ui| {
             let model = menu::model(&app);
-            view(ui, &mut app, &model, menu::is_in_window());
+            view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
         harness.run();
         harness.get_by_label("shack.png").click();
@@ -521,7 +529,7 @@ fn clicking_a_row_label_selects_that_row() {
 #[test]
 fn a_transmission_locks_the_library_lists() {
     let mut app = App::headless();
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing.begin_for_test(Kind::Picture, TxPhase::Producing);
     app.library.stocks = vec![
         crate::app::Entry::sample("antenna.png", "640x496"),
         crate::app::Entry::sample("shack.png", "320x256"),
@@ -531,7 +539,7 @@ fn a_transmission_locks_the_library_lists() {
     {
         let mut harness = Harness::new_ui(|ui| {
             let model = menu::model(&app);
-            view(ui, &mut app, &model, menu::is_in_window());
+            view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
         harness.run();
         harness.get_by_label("shack.png").click();
@@ -575,14 +583,14 @@ fn the_library_fits_the_height_it_is_given() {
 #[test]
 fn the_station_dialog_closes_from_its_own_button() {
     let mut app = App::headless();
-    app.station.open = true;
+    app.station_dialog_open = true;
     let title = app.i18n.text("station-title");
     let close = app.i18n.text("station-close");
 
     {
         let mut harness = Harness::new_ui(|ui| {
             let model = menu::model(&app);
-            view(ui, &mut app, &model, menu::is_in_window());
+            view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
         harness.run();
         harness.get_by_label(&title);
@@ -590,7 +598,7 @@ fn the_station_dialog_closes_from_its_own_button() {
         harness.run();
     }
 
-    assert!(!app.station.open);
+    assert!(!app.station_dialog_open);
 }
 
 #[test]
@@ -611,7 +619,7 @@ fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     {
         let mut harness = Harness::new_ui(|ui| {
             let model = menu::model(&app);
-            view(ui, &mut app, &model, menu::is_in_window());
+            view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
         harness.run();
         harness.get_by_label("TX").click();
@@ -619,7 +627,7 @@ fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     }
 
     assert_eq!(app.tx_error, None);
-    assert_eq!(app.tx_snapshot.phase, TxPhase::Idle);
+    assert!(!app.outgoing.is_active());
 }
 
 #[test]
@@ -678,7 +686,7 @@ fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
     let mut app = App::headless();
     let mut harness = Harness::builder().with_size(egui::vec2(900.0, 700.0)).build_ui(|ui| {
         let model = menu::model(&app);
-        view(ui, &mut app, &model, menu::is_in_window());
+        view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
     });
 
     harness.run();

@@ -1,6 +1,18 @@
 /// The number of picoseconds in one second.
 pub const PICOS_PER_SECOND: u128 = 1_000_000_000_000;
 
+const PICOS_PER_SECOND_F64: f64 = 1.0e12;
+
+/// Returns how many samples `picos` picoseconds span at `rate_hz`, unrounded.
+pub(crate) fn samples_spanned(rate_hz: f64, picos: u64) -> f64 {
+    rate_hz * picos as f64 / PICOS_PER_SECOND_F64
+}
+
+/// Returns the rate at which `samples` samples span `picos` picoseconds.
+pub(crate) fn rate_spanning(samples: f64, picos: u64) -> f64 {
+    samples * PICOS_PER_SECOND_F64 / picos as f64
+}
+
 /// A non-negative SSTV protocol duration with picosecond precision.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SstvDuration(u64);

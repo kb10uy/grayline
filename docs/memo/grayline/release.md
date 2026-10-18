@@ -17,7 +17,9 @@ system packages nor the compiled dependencies the other jobs wait for, so a
 misformatted change is reported in under a minute instead of behind a build.
 
 `core` runs Clippy with warnings denied, the tests, and a build over the
-workspace with the applications excluded, followed by the `no_std` builds.
+workspace with the applications excluded, followed by the `no_std` builds,
+each of one crate on its own with its default features off, since the
+workspace would turn `std` on around it.
 The exclusion list is named once in the job's environment and reused by the
 three commands, so a member that leaves the core cannot be dropped from one of
 them alone. The browser demo stays in this job: its host build is cheap,
@@ -40,9 +42,10 @@ lose the reservation and cache nothing, which is why only the largest writes.
 These three run on Linux alone. That is a deliberate asymmetry rather than full
 coverage: Linux selects `platform/other.rs` and the in-window menu bar, which
 is the configuration least likely to be exercised during development on
-Windows, so CI covers the side the author does not. macOS compiles nowhere
-until a release builds it, and `platform/macos.rs` is the code this leaves
-unchecked.
+Windows, so CI covers the side the author does not. macOS shares
+`platform/other.rs` with Linux and differs from it only in a few constants, so
+those `cfg(target_os = "macos")` constants are all a Linux build leaves
+unchecked until a release builds for macOS.
 
 Only ALSA needs a system package to build. The window, the graphics context,
 and the Wayland and X11 clients are all opened at run time rather than linked,

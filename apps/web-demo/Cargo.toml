@@ -25,6 +25,5 @@ wasm-opt = [
 [dependencies]
 console_error_panic_hook.workspace = true
 grayline-sstv-rx = { path = "../../crates/sstv-rx" }
-grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
 wasm-bindgen.workspace = true

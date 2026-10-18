@@ -6,7 +6,7 @@ use super::{
     input::{SampleBuffer, load_frequency, load_sync},
     raster::RasterProfile,
 };
-use crate::time::SstvDuration;
+use crate::time::{SstvDuration, samples_spanned};
 
 pub(super) const HISTORY_LEN: usize = 16;
 pub(super) const MIN_CONFIDENCE: f32 = 0.20;
@@ -96,10 +96,7 @@ pub(super) fn observe(
     } else {
         peak_sample
     };
-    let center_sample = refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay)
-        .unwrap_or_else(|| {
-            (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay)).max(0.0) as u64
-        });
+    let center_sample = refine_or_estimate(input, profile, envelope_center, sample_rate_hz, sync_detector_delay);
     Some(SyncObservation {
         unit,
         peak_sample,
@@ -110,6 +107,20 @@ pub(super) fn observe(
             0.0
         },
         contrast,
+    })
+}
+
+/// Refines the pulse centre near `envelope_center`, or falls back on the
+/// envelope estimate less the sync detector's delay when no pulse is plain.
+pub(super) fn refine_or_estimate(
+    input: &SampleBuffer,
+    profile: RasterProfile,
+    envelope_center: u64,
+    sample_rate_hz: u32,
+    sync_detector_delay: SstvDuration,
+) -> u64 {
+    refine_center(input, profile, envelope_center, sample_rate_hz, sync_detector_delay).unwrap_or_else(|| {
+        (envelope_center as f64 - sync_detector_delay_samples(sample_rate_hz, sync_detector_delay)).max(0.0) as u64
     })
 }
 
@@ -132,7 +143,7 @@ pub(super) fn observe(
 ///
 /// Returns `None` when no plausible pulse is present, which leaves the caller
 /// with the envelope estimate it already has.
-pub(super) fn refine_center(
+fn refine_center(
     input: &SampleBuffer,
     profile: RasterProfile,
     envelope_center: u64,
@@ -142,7 +153,7 @@ pub(super) fn refine_center(
     if profile.sync_duration_ps == 0 {
         return None;
     }
-    let expected = f64::from(sample_rate_hz) * profile.sync_duration_ps as f64 / 1.0e12;
+    let expected = samples_spanned(f64::from(sample_rate_hz), profile.sync_duration_ps);
     let delay = sync_detector_delay_samples(sample_rate_hz, sync_detector_delay);
     let center = (envelope_center as f64 - delay).max(0.0) as u64;
     let reach = (expected * 1.5) as u64 + 2;

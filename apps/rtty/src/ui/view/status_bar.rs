@@ -46,17 +46,18 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
             // Only for a station that keys through rig control: one that keys
             // with VOX has nothing here to report, and a line saying so would
             // be a fault where there is none.
-            if app.rig.enabled {
+            if app.settings.rig.enabled {
                 let state = app.i18n.text(app.rig_snapshot.state.label_key());
                 let rig = app.i18n.text_with("status-rig", &[("state", owned(state))]);
                 ui.label(RichText::new(rig).size(LABEL));
             }
             // Said because nothing else on screen is: a station keying FSK
             // sends no audio, and the level fader still moves.
-            if app.keyer.enabled {
-                let keyer = app
-                    .i18n
-                    .text_with("status-keyer", &[("address", owned(app.keyer.address.clone()))]);
+            if app.settings.keyer.enabled {
+                let keyer = app.i18n.text_with(
+                    "status-keyer",
+                    &[("address", owned(app.settings.keyer.address.clone()))],
+                );
                 ui.label(RichText::new(keyer).size(LABEL));
             }
             // After the reading rather than before it, so that the reading

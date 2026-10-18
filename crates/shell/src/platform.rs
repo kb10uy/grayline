@@ -26,8 +26,7 @@ use crate::Identity;
 // not made to restate it three times over.
 #[allow(missing_docs)]
 #[cfg_attr(target_os = "windows", path = "platform/windows.rs")]
-#[cfg_attr(target_os = "macos", path = "platform/macos.rs")]
-#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), path = "platform/other.rs")]
+#[cfg_attr(not(target_os = "windows"), path = "platform/other.rs")]
 mod imp;
 
 /// Font families the interface is drawn with, in priority order.
@@ -47,6 +46,13 @@ pub use imp::UI_FONTS;
 /// drawn for column alignment at small sizes. What follows it is the face that
 /// was there before it shipped, so an older release of the same system still
 /// finds one.
+///
+/// Monaspace leads the list on every platform. It is the one family here that
+/// an operator installs on purpose rather than finds already present, and the
+/// one that covers the arrows and box drawing a teleprinter transcript is
+/// annotated with: neither Consolas, Courier New, nor Segoe UI carries U+21B5,
+/// the mark a transmit message shows a line ending with, so without it that
+/// mark is drawn by a bundled fallback at a scale of its own.
 pub use imp::MONOSPACE_FONTS;
 
 /// The directory every application in this family keeps its files under.
@@ -85,7 +91,7 @@ pub use imp::window_icon;
 /// Only Windows has anything to take off the screen this way: it is the one
 /// platform where the menu bar owns a window handle of its own.
 #[cfg(target_os = "windows")]
-pub use imp::hide_window;
+pub(crate) use imp::hide_window;
 
 fn embedded_icon(identity: &Identity) -> Option<IconData> {
     let image = image::load_from_memory_with_format(identity.icon_png, ImageFormat::Png)
@@ -153,26 +159,11 @@ pub fn host() -> Box<dyn Platform> {
     Box::<imp::Host>::default()
 }
 
-/// A platform with nothing to say about activity.
-///
-/// The real platform on the targets that cannot report it yet, so it is
-/// compiled only there rather than being carried into a build that would never
-/// construct it. Everything it does not answer for itself, such as opening a
-/// directory, still reaches the shared implementation.
-#[cfg(not(target_os = "windows"))]
-#[derive(Default)]
-pub struct InertPlatform;
-
-#[cfg(not(target_os = "windows"))]
-impl Platform for InertPlatform {
-    fn set_activity(&mut self, _activity: Activity) {}
-}
-
 /// A platform that answers without doing anything at all.
 ///
-/// `InertPlatform` is the real platform on the targets without their own
-/// integration, so it still opens directories for the operator. Tests want the
-/// opposite, and take this instead.
+/// The real platform on the targets without their own integration still
+/// opens directories for the operator. Tests want the opposite, and take this
+/// instead.
 ///
 /// Compiled unconditionally rather than under `#[cfg(test)]`, which would
 /// cover this crate's own tests and not the applications', which are where it
@@ -217,43 +208,6 @@ impl SingleInstance {
     pub fn publish_window(&self, cc: &eframe::CreationContext<'_>) {
         self.0.publish_window(cc);
     }
-}
-
-/// A claim backed by a locked file, for the platforms without a better one.
-///
-/// The lock is released by the operating system when the process ends, so a
-/// copy that crashed does not keep the next launch out.
-#[cfg(not(target_os = "windows"))]
-pub struct FileLock {
-    /// Never read: the lock lasts exactly as long as the file is open, so
-    /// holding the handle is the whole point of the field.
-    #[expect(dead_code, reason = "held open to hold the lock")]
-    file: std::fs::File,
-}
-
-#[cfg(not(target_os = "windows"))]
-impl FileLock {
-    /// Nothing is published: raising another process's window needs a
-    /// compositor-specific route that this application does not have yet, so
-    /// a second launch reports the situation and exits instead.
-    pub fn publish_window(&self, _cc: &eframe::CreationContext<'_>) {}
-}
-
-#[cfg(not(target_os = "windows"))]
-fn lock_file_claim(identity: &Identity) -> Option<FileLock> {
-    use std::fs::OpenOptions;
-
-    let directory = directories::BaseDirs::new()
-        .and_then(|directories| directories.runtime_dir().map(Path::to_path_buf))
-        .unwrap_or_else(std::env::temp_dir);
-    let file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(directory.join(format!("{}.lock", identity.process_name)))
-        .ok()?;
-    file.try_lock().ok()?;
-    Some(FileLock { file })
 }
 
 /// Opens `path` with whatever the platform opens it with.

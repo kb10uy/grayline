@@ -32,10 +32,10 @@ A key is one identifier segment: a letter or underscore, then letters, digits
 and underscores. The rule is not arbitrary. A key is read from a template as
 `${contact.<key>}`, so a key holding a hyphen or a dot would be filed perfectly
 well and then be unreachable from the only place it is wanted. `grayline-qso`
-restates the rule that `grayline_sstv_template::valid_variable_name` applies to
-each segment rather than depending on that crate, which would drag the SVG stack
-into a command-line tool; the SSTV application is where both are in view, and it
-carries the test that holds them to each other. The key `callsign` is refused
+restates the rule that `grayline_variables::valid_variable_name` applies to
+each segment rather than depending on that crate, so the directory depends on
+nothing in the workspace; the SSTV application is where both are in view, and
+it carries the test that holds them to each other. The key `callsign` is refused
 outright, so a record can never shadow the field the operator typed.
 
 ### The keys this crate names
@@ -304,6 +304,11 @@ The address is written even while it is empty, for the same reason the rig ports
 are: this file is where it is edited, and an operator who has to invent the key
 before they can change it has no way to learn it exists.
 
+`grayline-qso::ContactSettings` is what the section holds, and its `read` and
+`write` are the only code that parses or writes it: each application finds the
+`[qso]` table in its own file, hands it over with the defaults it starts on,
+and leaves its own keys in that table, such as SSTV's serial number, alone.
+
 Both paths are named by whoever builds the worker rather than discovered inside
 it. A discovered path is one a test cannot escape: the suite would otherwise
 write its store into the operator's own directory and read the operator's own
@@ -379,13 +384,17 @@ snapshot for both desktop applications. `ContactPaths::open` selects the named
 store and optional logger; absent paths keep tests in memory and offline. The
 worker accepts the opened directory, a thread name and a notification callback,
 without depending on egui or application error types. Snapshot errors are shared
-`QsoError` values. Each application's `worker/contact.rs` only adapts its settings
-and `Waker` to that interface.
+`QsoError` values. `ContactEditor` wraps it for an interface; each application
+hands that its settings and a wake function.
 
 The worker is kept for the session, works with the network switched off, and
-writes corrected records. Turning lookup off replaces the worker with one whose
-directory has no logger. Dropping it drains queued requests and checkpoints the
-store before joining the thread.
+writes corrected records. Turning lookup on or off sends the worker the logger
+to ask from then on, queued behind whatever it was already asked, rather than
+replacing it: a replacement would wait in the frame for a lookup that can be
+waiting on the network, and a save queued on the old worker could land after
+the new one had read the store. Only a worker that could not open its
+directory, and so has stopped, is opened again. Dropping it drains queued
+requests and checkpoints the store before joining the thread.
 
 A lookup is asked for when the callsign is **committed**, which is leaving the
 field, and again when an FSK identifier arrives — the identifier path writes the
@@ -422,8 +431,12 @@ write that only ever added would hand it straight back on the next lookup.
 
 ## In the RTTY application
 
-RTTY uses the same `grayline-qso::ContactWorker` as SSTV. The dialog and `[qso]`
-settings remain application-owned, including their field lists and defaults.
+RTTY uses the same `grayline-qso::ContactWorker` and `ContactSettings` as
+SSTV, and the same `ContactEditor` around them: the lookup that does not ask
+twice, the dialog's rows, what a commit files and drops, and reopening the
+worker when the lookup is switched. Each application hands it the callsign
+field it has. The dialog's widgets and the defaults remain application-owned,
+including the field list a first run offers.
 What differs downstream of the answer follows from ITA2 having no kanji.
 
 **The default field list is `["!core", "!latin"]` rather than `["!core"]`.**

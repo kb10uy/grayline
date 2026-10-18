@@ -120,7 +120,7 @@ always one color.
 accepts `contain`, `cover`, `stretch`, or `preserve`. `aspect="preserve"` is
 accepted as an equivalent spelling, but `fit` and `aspect` cannot both appear.
 Shapes require both width and height. Images may omit one dimension, in which
-case it is derived from the PNG aspect ratio.
+case it is derived from the image's aspect ratio.
 
 `font.style` is optional, defaults to `normal`, and accepts `normal` or
 `italic`.
@@ -414,16 +414,18 @@ The desktop composition worker currently supplies:
 | `contact.*` | The contact directory, looked up from that field |
 | `report.sent`, `report.number` | QSO RSV and serial-number fields |
 | `report.received` | QSO received-RSV field |
-| `radio.frequency`, `radio.band` | Fixed until rig control arrives |
+| `radio.frequency`, `radio.band` | The rig, once rig control has read it; a fixed 7.178 MHz and `40m` until then |
 | `tx.timestamp.*` | The clock, as the composition is made |
 | `rx.timestamp.*` | When the image `rximage` shows was adopted |
 | `custom.*` | The template variable dialog |
 | `application.version` | The crate version |
 
-`radio.frequency` and `radio.band` are a fixed pair rather than an absent one:
-a template that prints the frequency has to compose to something before there
-is a radio to ask, and a missing variable would refuse to render at all. Rig
-control replaces the values without the template changing.
+Until rig control has read the rig, `radio.frequency` and `radio.band` are a
+fixed pair rather than an absent one: a template that prints the frequency has
+to compose to something before there is a radio to ask, and a missing variable
+would refuse to render at all. A reading replaces both without the template
+changing; a rig tuned between the bands leaves `radio.band` empty rather than
+naming one that contradicts the frequency beside it.
 
 Both callsign variables stand in for themselves the same way, as the word
 `Callsign`, while nothing has been entered in the field they come from. A
@@ -588,7 +590,7 @@ image:
 cargo run -p grayline-sstv-template --example compose -- template.kdl background.png output.png
 ```
 
-`grayline-sstv-template/examples/sample.kdl` is a variable-free sample suitable for a
+`crates/sstv-template/examples/sample.kdl` is a variable-free sample suitable for a
 quick render.
 
 The example resolves `image` references relative to the process current working

@@ -1,25 +1,11 @@
 use std::{
-    fs::{self, OpenOptions},
     io,
     path::{Path, PathBuf},
 };
 
-use directories::{BaseDirs, UserDirs};
+use grayline_shell::paths::{self, Roots};
 
-use grayline_shell::platform::FAMILY_DIRECTORY;
-
-use crate::identity::{APP_DIRECTORY, PICTURES_DIRECTORY};
-
-/// The settings file, named here because a test writes one directly.
-pub const CONFIG_FILE: &str = "config.toml";
-
-/// The rolling log the application writes under its state directory.
-///
-/// Named after the executable rather than after the directory holding it, so a
-/// log sent to someone else still says which application wrote it.
-const LOG_FILE: &str = "grayline-sstv.log";
-
-const DEFAULT_CONFIG: &str = "";
+use crate::identity::IDENTITY;
 
 /// One of the directories the application keeps for the operator.
 ///
@@ -70,75 +56,33 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn discover() -> io::Result<Self> {
-        let base_dirs = BaseDirs::new()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not determine the user directories"))?;
-        let pictures_dir = UserDirs::new()
-            .and_then(|directories| directories.picture_dir().map(Path::to_path_buf))
-            .unwrap_or_else(|| base_dirs.home_dir().join("Pictures"));
-
-        // The log belongs to the machine it was written on, not to the
-        // account: on Windows `data_dir` is the roaming profile, which would
-        // synchronize a log describing hardware the other machine does not
-        // have. Linux keeps a directory for exactly this; elsewhere the local
-        // half of the data directory is the closest equivalent.
-        let state_dir = base_dirs.state_dir().unwrap_or_else(|| base_dirs.data_local_dir());
-
-        // Every application in the family nests under one directory, so the
-        // settings they share have somewhere to sit beside them and the whole
-        // family can be backed up or removed as a unit. The pictures directory
-        // is the exception: the operator browses that one themselves, so it is
-        // flat and spelled the way the application is.
-        Ok(Self::from_roots(
-            base_dirs.config_dir().join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
-            base_dirs.data_dir().join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
-            pictures_dir.join(PICTURES_DIRECTORY),
-            state_dir.join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
-        ))
+        Roots::discover(&IDENTITY).map(Self::from_roots)
     }
 
-    pub(crate) fn from_roots(
-        config_dir: PathBuf,
-        data_dir: PathBuf,
-        pictures_dir: PathBuf,
-        state_dir: PathBuf,
-    ) -> Self {
+    pub(crate) fn from_roots(roots: Roots) -> Self {
         Self {
-            config_file: config_dir.join(CONFIG_FILE),
-            templates_dir: data_dir.join("templates"),
-            assets_dir: data_dir.join("assets"),
-            stocks_dir: pictures_dir.join("Stocks"),
-            sent_dir: pictures_dir.join("Sent"),
-            received_dir: pictures_dir.join("Received"),
-            log_file: state_dir.join("logs").join(LOG_FILE),
+            config_file: roots.config_file(),
+            templates_dir: roots.data_dir.join("templates"),
+            assets_dir: roots.data_dir.join("assets"),
+            stocks_dir: roots.pictures_dir.join("Stocks"),
+            sent_dir: roots.pictures_dir.join("Sent"),
+            received_dir: roots.pictures_dir.join("Received"),
+            log_file: roots.log_file(&IDENTITY),
         }
     }
 
     pub fn initialize(&self) -> io::Result<()> {
-        let config_dir = self.config_file.parent().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "the configuration file has no parent directory",
-            )
-        })?;
-
-        let log_dir = self
-            .log_file
-            .parent()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the log file has no parent directory"))?;
-
-        for directory in [
-            config_dir,
-            log_dir,
-            &self.templates_dir,
-            &self.assets_dir,
-            &self.stocks_dir,
-            &self.sent_dir,
-            &self.received_dir,
-        ] {
-            fs::create_dir_all(directory)?;
-        }
-
-        create_default_config(&self.config_file)
+        paths::initialize(
+            &self.config_file,
+            &self.log_file,
+            &[
+                &self.templates_dir,
+                &self.assets_dir,
+                &self.stocks_dir,
+                &self.sent_dir,
+                &self.received_dir,
+            ],
+        )
     }
 
     pub fn config_file(&self) -> &Path {
@@ -186,54 +130,23 @@ impl AppPaths {
     }
 }
 
-fn create_default_config(path: &Path) -> io::Result<()> {
-    match OpenOptions::new().write(true).create_new(true).open(path) {
-        Ok(mut file) => io::Write::write_all(&mut file, DEFAULT_CONFIG.as_bytes()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            if path.is_file() {
-                Ok(())
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!("configuration path is not a file: {}", path.display()),
-                ))
-            }
-        }
-        Err(error) => Err(error),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
+
     use super::*;
-    use crate::test_util::TempDir;
 
     #[test]
-    fn initialize_creates_application_directories_and_default_config() {
-        let root = TempDir::new();
-        let paths = AppPaths::from_roots(
-            root.path().join("config"),
-            root.path().join("data"),
-            root.path().join("pictures"),
-            root.path().join("state"),
-        );
+    fn initialize_creates_every_directory_the_application_keeps() {
+        let root = TempDir::new().unwrap();
+        let paths = AppPaths::from_roots(Roots::under(root.path()));
 
         paths.initialize().unwrap();
 
-        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), DEFAULT_CONFIG);
-        for directory in [
-            &paths.templates_dir,
-            &paths.assets_dir,
-            &paths.stocks_dir,
-            &paths.sent_dir,
-            &paths.received_dir,
-        ] {
-            assert!(directory.is_dir());
+        assert!(paths.config_file.is_file());
+        for folder in Folder::ALL {
+            assert!(paths.folder(folder).is_dir(), "{folder:?}");
         }
-        assert!(
-            paths.log_file.parent().unwrap().is_dir(),
-            "the log has to have somewhere to be written before anything reports"
-        );
     }
 
     /// The contact store is shared by every application in the family, and the
@@ -242,39 +155,9 @@ mod tests {
     /// view, so it is where they are held to each other.
     #[test]
     fn the_contact_directory_agrees_with_the_shell_on_where_the_family_lives() {
-        assert_eq!(grayline_qso::FAMILY_DIRECTORY, FAMILY_DIRECTORY);
-    }
-
-    #[test]
-    fn the_log_is_kept_apart_from_the_roaming_data_directory() {
-        let paths = AppPaths::from_roots(
-            PathBuf::from("config"),
-            PathBuf::from("data"),
-            PathBuf::from("pictures"),
-            PathBuf::from("state"),
-        );
-
-        assert!(paths.log_file.starts_with("state"));
-        assert!(!paths.log_file.starts_with("data"));
-    }
-
-    #[test]
-    fn initialize_does_not_replace_existing_config() {
-        let root = TempDir::new();
-        let paths = AppPaths::from_roots(
-            root.path().join("config"),
-            root.path().join("data"),
-            root.path().join("pictures"),
-            root.path().join("state"),
-        );
-        fs::create_dir_all(paths.config_file.parent().unwrap()).unwrap();
-        fs::write(&paths.config_file, "callsign = \"JA1ABC\"\n").unwrap();
-
-        paths.initialize().unwrap();
-
         assert_eq!(
-            fs::read_to_string(&paths.config_file).unwrap(),
-            "callsign = \"JA1ABC\"\n"
+            grayline_qso::FAMILY_DIRECTORY,
+            grayline_shell::platform::FAMILY_DIRECTORY
         );
     }
 }

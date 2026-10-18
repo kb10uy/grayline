@@ -1,13 +1,10 @@
 use grayline_audio::{AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault};
-use grayline_sstv_rx::SyncStart;
+
+use grayline_shell::worker::Waker;
 
 use crate::{
     error::AppError,
-    worker::{
-        Waker,
-        receive::{HistoryCandidate, RxSnapshot, RxWorker},
-        transmit::{TxSnapshot, TxWorker},
-    },
+    worker::receive::{HistoryCandidate, RxSettings, RxSnapshot, RxWorker},
 };
 
 /// One second of queue at the preferred capture rate.
@@ -34,10 +31,9 @@ pub struct AudioState {
     /// previous one grown or shrunk.
     session: u64,
     muted_for_transmit: bool,
-    live_slant: bool,
-    vis_restart: bool,
-    vis_strict: bool,
-    sync_start: SyncStart,
+    /// What the operator chose about reception, kept so a device opened later
+    /// starts the same way.
+    rx_settings: RxSettings,
     /// Handed to every worker opened here, so a decoded row reaches the canvas
     /// without the interface having to redraw on the chance that one has.
     waker: Waker,
@@ -46,19 +42,9 @@ pub struct AudioState {
 }
 
 impl AudioState {
-    /// Opens `preferred` when the host still offers a device by that name.
-    ///
-    /// The name is matched rather than an identifier because the host assigns
-    /// identifiers per run; a device that disappeared since the last session
-    /// falls back to the host default.
-    pub fn new(
-        preferred: Option<&str>,
-        preferred_output: Option<&str>,
-        live_slant: bool,
-        vis_restart: bool,
-        vis_strict: bool,
-        waker: Waker,
-    ) -> Self {
+    /// Opens the device named `preferred`, or the one
+    /// [`AudioHost::preferred_input`] falls back to.
+    pub fn new(preferred: Option<&str>, preferred_output: Option<&str>, rx_settings: RxSettings, waker: Waker) -> Self {
         let host = AudioHost::new();
         let (devices, input_error) = match host.input_devices() {
             Ok(devices) => (devices, None),
@@ -68,17 +54,8 @@ impl AudioState {
             Ok(devices) => (devices, None),
             Err(error) => (Vec::new(), Some(error.into())),
         };
-        let device = preferred
-            .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
-            .or_else(|| host.default_input_device().filter(|device| devices.contains(device)))
-            .or_else(|| devices.first().cloned());
-        let output_device = preferred_output
-            .and_then(|name| output_devices.iter().find(|device| device.name() == name).cloned())
-            .or_else(|| {
-                host.default_output_device()
-                    .filter(|device| output_devices.contains(device))
-            })
-            .or_else(|| output_devices.first().cloned());
+        let device = host.preferred_input(&devices, preferred);
+        let output_device = host.preferred_output(&output_devices, preferred_output);
         let error = input_error.or(output_error);
         let mut state = Self {
             host,
@@ -92,10 +69,7 @@ impl AudioState {
             snapshot: RxSnapshot::default(),
             session: 0,
             muted_for_transmit: false,
-            live_slant,
-            vis_restart,
-            vis_strict,
-            sync_start: SyncStart::default(),
+            rx_settings,
             waker,
             #[cfg(test)]
             resets: 0,
@@ -111,7 +85,7 @@ impl AudioState {
     /// Tests drive the interface without enumerating or opening devices, so
     /// they stay deterministic and do not depend on the machine's hardware.
     #[cfg(test)]
-    pub fn disconnected() -> Self {
+    pub fn disconnected(rx_settings: RxSettings) -> Self {
         Self {
             host: AudioHost::new(),
             devices: Vec::new(),
@@ -124,10 +98,7 @@ impl AudioState {
             snapshot: RxSnapshot::default(),
             session: 0,
             muted_for_transmit: false,
-            live_slant: true,
-            vis_restart: true,
-            vis_strict: false,
-            sync_start: SyncStart::default(),
+            rx_settings,
             waker: Waker::default(),
             #[cfg(test)]
             resets: 0,
@@ -167,14 +138,7 @@ impl AudioState {
         self.session += 1;
         match self.host.open_capture(device, QUEUE_CAPACITY_SAMPLES) {
             Ok((capture, reader)) => {
-                let worker = RxWorker::spawn(
-                    reader,
-                    self.live_slant,
-                    self.vis_restart,
-                    self.vis_strict,
-                    self.sync_start,
-                    self.waker.clone(),
-                );
+                let worker = RxWorker::spawn(reader, self.rx_settings, self.waker.clone());
                 worker.set_muted_for_transmit(self.muted_for_transmit);
                 self.worker = Some(worker);
                 self.capture = Some(capture);
@@ -248,65 +212,21 @@ impl AudioState {
         self.resets
     }
 
-    pub fn set_live_slant(&mut self, enabled: bool) {
-        self.live_slant = enabled;
-        if let Some(worker) = self.worker.as_ref() {
-            worker.set_live_slant(enabled);
-        }
-    }
-
-    pub fn set_vis_restart(&mut self, enabled: bool) {
-        if self.vis_restart == enabled {
+    /// Hands the worker what the operator chose about reception, and keeps it
+    /// for the next device.
+    pub fn set_rx_settings(&mut self, settings: RxSettings) {
+        if self.rx_settings == settings {
             return;
         }
-        self.vis_restart = enabled;
+        self.rx_settings = settings;
         if let Some(worker) = self.worker.as_ref() {
-            worker.set_vis_restart(enabled);
-        }
-    }
-
-    pub fn set_vis_strict(&mut self, enabled: bool) {
-        if self.vis_strict == enabled {
-            return;
-        }
-        self.vis_strict = enabled;
-        if let Some(worker) = self.worker.as_ref() {
-            worker.set_vis_strict(enabled);
-        }
-    }
-
-    /// Chooses whether a reception may start without a VIS header.
-    ///
-    /// Kept here as well as pushed to the worker, because a device opened
-    /// later spawns a worker that has to start with the same scope.
-    pub fn set_sync_start(&mut self, scope: SyncStart) {
-        if self.sync_start == scope {
-            return;
-        }
-        self.sync_start = scope;
-        if let Some(worker) = self.worker.as_ref() {
-            worker.set_sync_start(scope);
+            worker.set_settings(settings);
         }
     }
 
     #[cfg(test)]
-    pub const fn sync_start(&self) -> SyncStart {
-        self.sync_start
-    }
-
-    #[cfg(test)]
-    pub const fn live_slant(&self) -> bool {
-        self.live_slant
-    }
-
-    #[cfg(test)]
-    pub const fn vis_restart(&self) -> bool {
-        self.vis_restart
-    }
-
-    #[cfg(test)]
-    pub const fn vis_strict(&self) -> bool {
-        self.vis_strict
+    pub const fn rx_settings(&self) -> RxSettings {
+        self.rx_settings
     }
 
     /// Returns the physical capture rate, if a device is open.
@@ -365,82 +285,6 @@ impl AudioState {
         };
         self.open(&device);
         self.is_capturing()
-    }
-}
-
-/// The playback device and worker one transmission runs on.
-///
-/// The receive half keeps its device and worker together in [`AudioState`];
-/// this is the transmit mirror, so the orchestrator holds one facade per
-/// direction instead of spreading the transmit device across its own fields.
-#[derive(Default)]
-pub struct TxState {
-    playback: Option<Playback>,
-    /// Whether the device was told to start consuming the queue.
-    started: bool,
-    worker: Option<TxWorker>,
-}
-
-impl TxState {
-    pub fn begin(&mut self, playback: Playback) {
-        self.playback = Some(playback);
-        self.started = false;
-    }
-
-    pub fn attach_worker(&mut self, worker: TxWorker) {
-        self.worker = Some(worker);
-    }
-
-    pub fn latest(&self) -> Option<TxSnapshot> {
-        self.worker.as_ref().map(TxWorker::latest)
-    }
-
-    pub fn start_playback(&mut self) -> Result<(), AppError> {
-        self.playback.as_ref().ok_or(AppError::PlaybackClosed)?.play()?;
-        self.started = true;
-        Ok(())
-    }
-
-    pub const fn is_started(&self) -> bool {
-        self.started
-    }
-
-    /// Whether the device ran the queue dry while a picture was going out.
-    pub fn has_underrun(&self) -> bool {
-        self.started
-            && self
-                .playback
-                .as_ref()
-                .is_some_and(|playback| playback.underrun_samples() > 0)
-    }
-
-    /// Whether the queue was closed by the worker and played to its end.
-    pub fn is_drained(&self) -> bool {
-        self.playback.as_ref().is_some_and(Playback::is_complete)
-    }
-
-    pub fn played_samples(&self) -> u64 {
-        self.playback.as_ref().map_or(0, Playback::played_samples)
-    }
-
-    /// Returns the physical playback rate, if a stream is open.
-    pub fn sample_rate_hz(&self) -> Option<u32> {
-        self.playback.as_ref().map(Playback::sample_rate_hz)
-    }
-
-    pub fn stop(&mut self) {
-        self.playback = None;
-        self.worker = None;
-        self.started = false;
-    }
-}
-
-impl core::fmt::Debug for TxState {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("TxState")
-            .field("started", &self.started)
-            .finish_non_exhaustive()
     }
 }
 

@@ -27,4 +27,10 @@ ignore = [
     "RUSTSEC-2026-0192",
     # rustybuzz
     "RUSTSEC-2026-0206",
+    # zvariant
+    "RUSTSEC-2026-0370",
+    # zbus_names
+    "RUSTSEC-2026-0371",
+    # zvariant_derive
+    "RUSTSEC-2026-0372",
 ]

@@ -1,9 +1,11 @@
 use std::sync::mpsc;
 
+use tempfile::TempDir;
+
 use super::{ContactPaths, ContactState, ContactWorker, Request, collapse_lookups};
 use crate::{
     Directory, QsoError, Record, Store,
-    test_util::{FakeWavelog, TEST_TIMEOUT, TempDir},
+    test_util::{FakeWavelog, TEST_TIMEOUT},
 };
 
 fn record(callsign: &str, name: &str) -> Record {
@@ -56,9 +58,9 @@ fn collapsing_keeps_the_last_lookup_and_every_save_in_order() {
 
 #[test]
 fn saves_publish_changes_and_drop_drains_writes_to_disk() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = ContactPaths {
-        store: Some(root.store()),
+        store: Some(root.path().join(crate::STORE_FILE)),
         credentials: None,
     };
     let (sent, received) = mpsc::channel();
@@ -78,7 +80,7 @@ fn saves_publish_changes_and_drop_drains_writes_to_disk() {
     worker.save(record("JA1BBB", "Second"), vec![]);
     worker.save(record("JA1CCC", "Third"), vec![]);
     drop(worker);
-    let store = Store::open(&root.store()).unwrap();
+    let store = Store::open(&root.path().join(crate::STORE_FILE)).unwrap();
     assert!(store.get("JA1AAA").unwrap().unwrap().is_empty());
     assert_eq!(store.get("JA1BBB").unwrap().unwrap().get("name"), Some("Second"));
     assert_eq!(store.get("JA1CCC").unwrap().unwrap().get("name"), Some("Third"));
@@ -99,6 +101,34 @@ fn a_remote_failure_is_published_beside_the_local_answer() {
     assert_eq!(snapshot.state, ContactState::Known);
     assert_eq!(snapshot.fields["name"], "Filed");
     assert!(matches!(snapshot.error.as_deref(), Some(QsoError::Refused(503))));
+}
+
+#[test]
+fn a_logger_handed_over_to_a_running_worker_is_asked_from_then_on() {
+    let server = FakeWavelog::spawn(&[(503, "")]);
+    let (sent, received) = mpsc::channel();
+    let worker = ContactWorker::spawn(
+        Ok(Directory::new(Store::in_memory().unwrap(), None)),
+        "contact-test".to_owned(),
+        move || {
+            sent.send(()).unwrap();
+        },
+    );
+    worker.save(record("JA1AAA", "Filed"), vec![]);
+    received.recv_timeout(TEST_TIMEOUT).unwrap();
+    worker.use_remote(Some(server.client()));
+    worker.refresh("JA1AAA");
+    let snapshot = loop {
+        received.recv_timeout(TEST_TIMEOUT).unwrap();
+        let snapshot = worker.latest();
+        if snapshot.state != ContactState::Looking {
+            break snapshot;
+        }
+    };
+
+    assert_eq!(snapshot.fields["name"], "Filed");
+    assert!(matches!(snapshot.error.as_deref(), Some(QsoError::Refused(503))));
+    assert!(worker.is_running());
 }
 
 #[test]

@@ -39,7 +39,9 @@ pub(crate) struct Atc {
 impl Atc {
     pub(crate) fn new(sample_rate_hz: f64, design: AtcDesign) -> Result<Self, RttyError> {
         if design.blocks == 0 || design.blocks > MAXIMUM_BLOCKS {
-            return Err(RttyError::Dsp(grayline_dsp::DspError::InvalidOrder));
+            return Err(RttyError::InvalidAtcBlocks {
+                maximum: MAXIMUM_BLOCKS,
+            });
         }
         Ok(Self {
             lows: [0.0; MAXIMUM_BLOCKS + 1],
@@ -90,6 +92,8 @@ impl Atc {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     fn atc() -> Atc {
@@ -132,9 +136,15 @@ mod tests {
         assert!(low_output < CENTER, "low half at {low_output}");
     }
 
-    #[test]
-    fn an_invalid_block_count_is_rejected() {
-        assert!(Atc::new(11_025.0, AtcDesign { blocks: 0 }).is_err());
-        assert!(Atc::new(11_025.0, AtcDesign { blocks: 17 }).is_err());
+    #[rstest]
+    #[case(0)]
+    #[case(MAXIMUM_BLOCKS + 1)]
+    fn an_invalid_block_count_is_rejected(#[case] blocks: usize) {
+        assert_eq!(
+            Atc::new(11_025.0, AtcDesign { blocks }).err(),
+            Some(RttyError::InvalidAtcBlocks {
+                maximum: MAXIMUM_BLOCKS
+            })
+        );
     }
 }

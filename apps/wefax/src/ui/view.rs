@@ -112,15 +112,17 @@ fn group_id(salt: &str) -> Id {
 fn flags(ui: &mut Ui, app: &mut App) {
     let mut changed = false;
     changed |= ui
-        .checkbox(&mut app.auto_start, app.i18n.text("action-auto-start"))
+        .checkbox(&mut app.settings.auto_start, app.i18n.text("action-auto-start"))
         .changed();
     changed |= ui
-        .checkbox(&mut app.auto_stop, app.i18n.text("action-auto-stop"))
+        .checkbox(&mut app.settings.auto_stop, app.i18n.text("action-auto-stop"))
         .changed();
     changed |= ui
-        .checkbox(&mut app.slant_tracking, app.i18n.text("action-slant"))
+        .checkbox(&mut app.settings.slant_tracking, app.i18n.text("action-slant"))
         .changed();
-    changed |= ui.checkbox(&mut app.inverted, app.i18n.text("action-invert")).changed();
+    changed |= ui
+        .checkbox(&mut app.settings.inverted, app.i18n.text("action-invert"))
+        .changed();
     if changed {
         app.push_settings();
     }
@@ -180,22 +182,26 @@ fn status_row(ui: &mut Ui, app: &App) {
 fn geometry(ui: &mut Ui, app: &mut App) {
     let mut changed = false;
     ComboBox::from_id_salt("ioc")
-        .selected_text(format!("IOC {}", app.ioc.index()))
+        .selected_text(format!("IOC {}", app.settings.ioc.index()))
         .width(84.0)
         .show_ui(ui, |ui| {
             for ioc in Ioc::ALL {
                 changed |= ui
-                    .selectable_value(&mut app.ioc, ioc, format!("IOC {}", ioc.index()))
+                    .selectable_value(&mut app.settings.ioc, ioc, format!("IOC {}", ioc.index()))
                     .changed();
             }
         });
     ComboBox::from_id_salt("lpm")
-        .selected_text(format!("{} LPM", app.lines_per_minute.as_lpm()))
+        .selected_text(format!("{} LPM", app.settings.lines_per_minute.as_lpm()))
         .width(92.0)
         .show_ui(ui, |ui| {
             for rate in LinesPerMinute::ALL {
                 changed |= ui
-                    .selectable_value(&mut app.lines_per_minute, rate, format!("{} LPM", rate.as_lpm()))
+                    .selectable_value(
+                        &mut app.settings.lines_per_minute,
+                        rate,
+                        format!("{} LPM", rate.as_lpm()),
+                    )
                     .changed();
             }
         });

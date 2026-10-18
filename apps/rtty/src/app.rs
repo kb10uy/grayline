@@ -4,41 +4,42 @@
 //! draws. Keeping the two apart is what lets the whole of the state be driven
 //! from a test without a window.
 
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use grayline_rig_control::{Keying, RigControlError, RigSettings, RigSnapshot, RigState, RigWorker, bands::BandPlan};
+use grayline_qso::{ContactEditor, ContactPaths};
+use grayline_rig_control::{Keying, RigControlError, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale, owned},
     log,
     platform::{Activity, Platform},
+    worker::Waker,
 };
 
 use crate::{
     app::{
-        macros::{Contact, Macro, MacroContext, Station, Template, expand, valid_variable_name},
-        transmit::{Sending, Transmit},
+        macros::{Contact, Macro, MacroContext, Template, expand, valid_variable_name},
+        transmit::{Ending, Sending, Transmit},
     },
     error::AppError,
     locales::CATALOG,
     storage::{
-        config::{Config, ContactSettings, KeyerSettings, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
+        config::{Config, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
         library,
         paths::{AppPaths, Folder},
     },
     ui::{scope::Scope, scrollback::Scrollback},
     worker::{
-        Waker,
         audio::AudioState,
-        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
         receive::{ColumnSnapshot, DecodePath, WorkerSettings},
-        transmit::{TxPhase, TxState, TxWorker},
+        transmit::{Output, TxWorker},
     },
 };
 
 pub mod macros;
+pub mod text;
 pub mod transmit;
 
 /// How far one point of drag moves the mark tone, in hertz.
@@ -67,20 +68,6 @@ struct Stored {
     library: Library,
 }
 
-/// One row of the window showing what is filed under the contact.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ContactRow {
-    pub key: String,
-    pub value: String,
-    /// Whether the settings asked for this key, and so whether it is shown
-    /// with a label rather than with its name laid open for editing.
-    ///
-    /// A row is offered whether or not the station has a value for it, which
-    /// is what makes the window say what this operator files rather than only
-    /// what this contact happens to have.
-    pub offered: bool,
-}
-
 /// Everything the application is, other than the pixels on screen.
 pub struct App {
     pub i18n: I18n,
@@ -89,31 +76,14 @@ pub struct App {
     pub columns: Vec<Scrollback>,
     pub ui_scale: f32,
 
-    /// The tone a mark is expected at; space sits `shift_hz` above it.
-    pub mark_hz: f64,
-    pub shift_hz: f64,
-    pub baud: f64,
-    pub reverse: bool,
-    pub afc: bool,
-    /// The reading a signal has to beat to be printed; zero prints
-    /// everything, which is the squelch being off.
-    pub squelch_threshold: f64,
-    pub unshift_on_space: bool,
-    pub atc: bool,
-    /// Whether a transmission re-announces figures after a space.
+    /// What the operator chose, as it is saved.
     ///
-    /// Separate from the receive setting above, and on by default, because it
-    /// is about the station being sent to rather than this one: a receiver
-    /// with unshift-on-space would otherwise print a contest exchange after a
-    /// space as letters.
-    pub tx_unshift_on_space: bool,
-    /// How hard the transmission is driven, as fader travel in `0..=1`.
-    pub tx_level: f64,
+    /// The panels, the menus, and the dialogs edit this directly; the receive
+    /// worker is handed its part through [`push_settings`](Self::push_settings).
+    pub settings: Settings,
 
     /// The draft, the queue behind it, and the message on the air.
     pub transmit: Transmit,
-    /// Who this station is, for the macros that say so.
-    pub station: Station,
     /// The station being worked, as entered beside the received text.
     pub contact: Contact,
     /// The buttons under the message field.
@@ -121,23 +91,8 @@ pub struct App {
     /// The set messages listed beside the buttons, in the order they are
     /// offered.
     pub templates: Vec<Template>,
-    /// The operator's own fields, reached from a macro as `${custom.<name>}`.
-    pub custom_variables: BTreeMap<String, String>,
-    /// Where the contact directory looks a callsign up.
-    pub contact_settings: ContactSettings,
-    /// How the rig is keyed, read from the file and not edited here.
-    pub rig: RigSettings,
-    /// Whether a transmission goes to the FSK keyer rather than the audio
-    /// device, read from the file and not edited here either.
-    pub keyer: KeyerSettings,
-    /// The thread that reads and writes the contact directory.
-    pub contact_directory: ContactWorker,
-    /// What it last found, read once per frame.
-    pub contact_snapshot: ContactSnapshot,
-    /// Whether the window showing what is filed under the contact is open.
-    pub contact_dialog_open: bool,
-    /// The rows that window is editing.
-    pub contact_draft: Vec<ContactRow>,
+    /// The contact directory, what it last answered, and the dialog editing it.
+    pub directory: ContactEditor,
     /// Whether the window naming this station is open.
     pub station_dialog_open: bool,
     /// The rows the window is editing.
@@ -147,15 +102,6 @@ pub struct App {
     /// field: the rows are taken up once they are usable, and an unusable one
     /// stays on screen to be corrected rather than disappearing.
     pub variables_draft: Vec<(String, String)>,
-
-    /// The files the directory is opened over, named rather than discovered
-    /// so that a test never reaches the operator's own store or key.
-    contact_paths: ContactPaths,
-    /// Kept so the directory can be opened again when the lookup is switched.
-    contact_waker: Waker,
-    /// The callsign last asked about, so that leaving the field without
-    /// changing it asks nobody a second time.
-    contact_requested: String,
 
     /// The window the band and the two channels are drawn in.
     ///
@@ -176,8 +122,6 @@ pub struct App {
     common: CommonConfig,
     platform: Box<dyn Platform>,
     activity: Activity,
-    /// The playback stream and worker the message on the air is running on.
-    tx: TxState,
     /// The thread that keys the rig, once the file has asked for one.
     rig_worker: Option<RigWorker>,
     /// What rig control last published, read once per frame.
@@ -189,9 +133,6 @@ pub struct App {
     /// them would drop the carrier in the middle of what the other station is
     /// reading as one transmission.
     rig_keyed: bool,
-    /// The session an underrun was last reported for, so one gap in the
-    /// audio is one notice rather than one per frame.
-    underran: Option<u64>,
     /// The session the text on screen belongs to.
     ///
     /// A device change starts a new worker whose decoders begin again, so the
@@ -260,34 +201,19 @@ impl App {
             audio,
             columns: DecodePath::ALL.map(|_| Scrollback::default()).into_iter().collect(),
             ui_scale: shared.ui_scale,
-            mark_hz: settings.mark_hz,
-            shift_hz: settings.shift_hz,
-            baud: settings.baud,
-            reverse: settings.reverse,
-            afc: settings.afc,
-            squelch_threshold: settings.squelch_threshold,
-            unshift_on_space: settings.unshift_on_space,
-            atc: settings.atc,
-            tx_unshift_on_space: settings.tx_unshift_on_space,
-            tx_level: settings.tx_level,
+            settings: settings.clone(),
             transmit: Transmit::default(),
-            station: settings.station.clone(),
             contact: Contact::default(),
             macros: library.macros,
             templates: library.templates,
-            custom_variables: settings.custom_variables.clone(),
-            contact_settings: settings.contact.clone(),
-            rig: settings.rig.clone(),
-            keyer: settings.keyer.clone(),
-            contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
-            contact_snapshot: ContactSnapshot::default(),
-            contact_dialog_open: false,
-            contact_draft: Vec::new(),
+            directory: ContactEditor::new(
+                &settings.contact,
+                contact_paths,
+                "grayline-rtty-contact".to_owned(),
+                move || waker.wake(),
+            ),
             station_dialog_open: false,
             variables_draft: Vec::new(),
-            contact_paths,
-            contact_waker: waker,
-            contact_requested: String::new(),
             scope,
             notice: None,
             session,
@@ -297,11 +223,9 @@ impl App {
             common,
             platform,
             activity: Activity::Idle,
-            tx: TxState::default(),
             rig_worker: None,
             rig_snapshot: RigSnapshot::default(),
             rig_keyed: false,
-            underran: None,
         }
     }
 
@@ -317,7 +241,7 @@ impl App {
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
             AudioState::disconnected(worker_settings(&settings)),
-            AppPaths::from_roots(scratch.join("config"), scratch.join("state")),
+            AppPaths::from_roots(grayline_shell::paths::Roots::under(&scratch)),
             Stored {
                 config: Config::detached(),
                 common: CommonConfig::detached(),
@@ -340,14 +264,14 @@ impl App {
     /// either printing or idle, and a title that followed the squelch would
     /// flicker in the taskbar all evening.
     pub fn title(&self) -> String {
-        format!("{} {}", crate::identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION"))
+        crate::identity::IDENTITY.title()
     }
 
     /// The pair the receiver is listening for, before any AFC movement.
     pub fn tones(&self) -> ToneSet {
         ToneSet {
-            mark_hz: self.mark_hz,
-            space_hz: self.mark_hz + self.shift_hz,
+            mark_hz: self.settings.mark_hz,
+            space_hz: self.settings.mark_hz + self.settings.shift_hz,
         }
     }
 
@@ -370,7 +294,7 @@ impl App {
             // stream that stopped for a moment should not need a click.
             if !self.audio.reopen() {
                 let message = self.i18n.text("error-device-lost");
-                self.notice = Some(format!("{message}: {fault:?}"));
+                self.notice = Some(format!("{message}: {fault}"));
             }
         }
         let session = self.audio.session();
@@ -435,6 +359,7 @@ impl App {
     pub fn set_scope_open(&mut self, open: bool) {
         self.scope.set_open(open);
         self.audio.set_scope(open);
+        self.settings.scope = open;
     }
 
     /// Returns how long the interface may sleep for.
@@ -444,7 +369,7 @@ impl App {
     /// transmission is the exception: nothing wakes the interface as the
     /// underline advances, so it is drawn at a rate the eye reads as motion.
     pub fn repaint_after(&self) -> Option<Duration> {
-        if self.tx.is_running() {
+        if self.transmit.on_air().is_some() {
             return Some(Duration::from_millis(50));
         }
         self.audio.is_capturing().then(|| Duration::from_secs(1))
@@ -459,36 +384,14 @@ impl App {
             locale: self.i18n.locale(),
             ui_scale: self.ui_scale,
         });
-        let settings = self.settings();
-        if settings == self.saved {
+        self.settings.device = self.audio.device.as_ref().map(|device| device.name().to_owned());
+        self.settings.output_device = self.audio.output_device.as_ref().map(|device| device.name().to_owned());
+        self.settings = core::mem::take(&mut self.settings).clamped();
+        if self.settings == self.saved {
             return;
         }
-        self.config.save(&settings);
-        self.saved = settings;
-    }
-
-    fn settings(&self) -> Settings {
-        Settings {
-            device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
-            output_device: self.audio.output_device.as_ref().map(|device| device.name().to_owned()),
-            mark_hz: self.mark_hz,
-            shift_hz: self.shift_hz,
-            baud: self.baud,
-            reverse: self.reverse,
-            afc: self.afc,
-            squelch_threshold: self.squelch_threshold,
-            unshift_on_space: self.unshift_on_space,
-            atc: self.atc,
-            tx_unshift_on_space: self.tx_unshift_on_space,
-            tx_level: self.tx_level,
-            station: self.station.clone(),
-            custom_variables: self.custom_variables.clone(),
-            contact: self.contact_settings.clone(),
-            rig: self.rig.clone(),
-            keyer: self.keyer.clone(),
-            scope: self.scope.is_open(),
-        }
-        .clamped()
+        self.config.save(&self.settings);
+        self.saved = self.settings.clone();
     }
 
     /// Hands the receive settings to the worker.
@@ -498,7 +401,8 @@ impl App {
     /// a receiver cannot be retuned in place, so a frame that changed nothing
     /// does not restart the decoders.
     pub fn push_settings(&mut self) {
-        self.audio.set_settings(worker_settings(&self.settings()));
+        self.settings = core::mem::take(&mut self.settings).clamped();
+        self.audio.set_settings(worker_settings(&self.settings));
     }
 
     pub fn set_ui_scale(&mut self, scale: f32) {
@@ -519,13 +423,13 @@ impl App {
         let tones = column.tones;
         // The detected pair is reported in the roles the receiver is using,
         // so a reversed one has already been swapped back.
-        let (mark, space) = if self.reverse {
+        let (mark, space) = if self.settings.reverse {
             (tones.space_hz, tones.mark_hz)
         } else {
             (tones.mark_hz, tones.space_hz)
         };
-        self.mark_hz = mark.clamp(MINIMUM_MARK_HZ, MAXIMUM_MARK_HZ);
-        self.shift_hz = (space - mark).abs();
+        self.settings.mark_hz = mark.clamp(MINIMUM_MARK_HZ, MAXIMUM_MARK_HZ);
+        self.settings.shift_hz = (space - mark).abs();
         self.push_settings();
     }
 
@@ -573,12 +477,12 @@ impl App {
         TxConfig {
             tones: self.tones(),
             framing: TxFraming {
-                baud: BaudRate::new(self.baud).unwrap_or_default(),
+                baud: BaudRate::new(self.settings.baud).unwrap_or_default(),
                 ..default.framing
             },
-            reverse: self.reverse,
-            tx_unshift_on_space: self.tx_unshift_on_space,
-            amplitude: tx_amplitude(self.tx_level),
+            reverse: self.settings.reverse,
+            tx_unshift_on_space: self.settings.tx_unshift_on_space,
+            amplitude: tx_amplitude(self.settings.tx_level),
             ..default
         }
     }
@@ -589,12 +493,13 @@ impl App {
     /// pasted text and an expanded macro can, and this is what holds the send
     /// button until the operator has dealt with it.
     pub fn unsendable_character(&self) -> Option<char> {
-        crate::ui::input::first_unsendable(&self.transmit.draft)
+        text::first_unsendable(&self.transmit.draft)
     }
 
     /// Opens the window naming this station, with its fields loaded.
     pub fn open_station(&mut self) {
         self.variables_draft = self
+            .settings
             .custom_variables
             .iter()
             .map(|(name, value)| (name.clone(), value.clone()))
@@ -612,7 +517,7 @@ impl App {
     /// window to be corrected but left out of what the macros see, so a name
     /// still being typed never briefly becomes a field of its own.
     pub fn commit_custom_variables(&mut self) {
-        self.custom_variables = self
+        self.settings.custom_variables = self
             .variables_draft
             .iter()
             .filter(|(name, _)| valid_variable_name(name))
@@ -640,14 +545,14 @@ impl App {
         expand(
             text,
             &MacroContext {
-                station: &self.station,
+                station: &self.settings.station,
                 contact: &self.contact,
-                directory: &self.contact_snapshot.fields,
-                custom: &self.custom_variables,
+                directory: &self.directory.snapshot.fields,
+                custom: &self.settings.custom_variables,
                 now: &now,
             },
         )
-        .map(|text| crate::ui::input::normalize(&text))
+        .map(|text| text::normalize(&text))
         .map_err(AppError::from)
     }
 
@@ -720,7 +625,7 @@ impl App {
     /// itself: a callsign double-clicked out of the received text is as much a
     /// station being worked as one that was typed.
     pub fn set_contact_callsign(&mut self, callsign: &str) {
-        self.contact.callsign = crate::ui::input::normalize(callsign);
+        self.contact.callsign = text::normalize(callsign);
         self.look_up_contact();
     }
 
@@ -753,131 +658,40 @@ impl App {
     /// again and asked about again.
     pub fn clear_contact(&mut self) {
         self.contact.clear();
-        self.contact_requested.clear();
+        self.directory.forget_request();
     }
 
-    /// Asks the directory about the callsign in the contact panel.
-    ///
-    /// Text that is not a callsign asks nobody: a half-typed field and a word
-    /// picked out of a garbled line both arrive here, and neither is a station
-    /// worth putting a question to somebody's logger about.
     fn look_up_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.contact.callsign) else {
-            self.contact_requested.clear();
-            return;
-        };
-        if callsign == self.contact_requested {
-            return;
-        }
-        self.contact_requested = callsign.clone();
-        self.contact_directory.look_up(&callsign);
+        self.directory.look_up(&self.contact.callsign);
     }
 
-    /// Asks the logger about the callsign again, whatever the store holds.
     pub fn refresh_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.contact.callsign) else {
-            return;
-        };
-        self.contact_requested = callsign.clone();
-        self.contact_directory.refresh(&callsign);
+        self.directory.refresh(&self.contact.callsign);
     }
 
-    /// Whether asking the logger is something this station can do at all.
-    ///
-    /// A control that would do nothing is not offered: with the lookup off, or
-    /// with no instance and no key configured, there is nobody to ask again.
     pub fn can_refresh_contact(&self) -> bool {
-        self.contact_settings.lookup && grayline_qso::normalize_callsign(&self.contact.callsign).is_some()
+        ContactEditor::can_refresh(&self.settings.contact, &self.contact.callsign)
     }
 
-    /// Opens the window on what is filed under the callsign being worked.
-    ///
-    /// The fields the settings ask for lead, in the order they were written,
-    /// whether or not this station has any of them: a station in Japan wants
-    /// somewhere to put a JCC code and a station anywhere else does not, and
-    /// which of those an operator is was never something to decide here.
-    /// Anything else already filed follows, under its own name.
     pub fn open_contact(&mut self) {
-        let known = &self.contact_snapshot.fields;
-        let offered = grayline_qso::expand_fields(self.contact_settings.fields.iter().map(String::as_str));
-        let mut draft: Vec<ContactRow> = offered
-            .iter()
-            .map(|key| ContactRow {
-                value: known.get(key).cloned().unwrap_or_default(),
-                key: key.clone(),
-                offered: true,
-            })
-            .collect();
-        draft.extend(
-            known
-                .iter()
-                .filter(|(key, _)| !offered.contains(key))
-                .map(|(key, value)| ContactRow {
-                    key: key.clone(),
-                    value: value.clone(),
-                    offered: false,
-                }),
-        );
-        self.contact_draft = draft;
-        self.contact_dialog_open = true;
+        self.directory.open(&self.settings.contact.fields);
     }
 
     pub fn add_contact_field(&mut self) {
-        self.contact_draft.push(ContactRow::default());
+        self.directory.add_field();
     }
 
-    /// Files the edited rows under the callsign being worked.
-    ///
-    /// A row the operator emptied is dropped rather than left alone: clearing
-    /// a value is how a wrong one is taken back, and a write that only ever
-    /// added would hand it straight back on the next lookup. A row whose name
-    /// no `${...}` expression could hold is kept in the window to be corrected
-    /// and left out of the store, the way an operator's own fields are.
     pub fn commit_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.contact.callsign) else {
-            return;
-        };
-        let Some(mut record) = grayline_qso::Record::new(&callsign) else {
-            return;
-        };
-        let mut dropped = Vec::new();
-        for row in &self.contact_draft {
-            if !grayline_qso::valid_key(&row.key) {
-                continue;
-            }
-            if record.set(&row.key, &row.value) {
-                continue;
-            }
-            if self.contact_snapshot.fields.contains_key(&row.key) {
-                dropped.push(row.key.clone());
-            }
-        }
-        if record.iter().eq(self
-            .contact_snapshot
-            .fields
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())))
-            && dropped.is_empty()
-        {
-            return;
-        }
-        self.contact_directory.save(record, dropped);
+        self.directory.commit(&self.contact.callsign);
     }
 
-    /// Turns asking the operator's own logger on or off.
-    ///
-    /// The worker is opened again rather than told: what it holds is a
-    /// directory composed over a logger or over nothing, and which of those it
-    /// is was decided when it was built.
+    /// Turns asking the operator's own logger on or off, and asks again.
     pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.contact_settings.lookup == lookup {
+        if self.settings.contact.lookup == lookup {
             return;
         }
-        self.contact_settings.lookup = lookup;
-        self.contact_directory =
-            contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
-        self.contact_snapshot = ContactSnapshot::default();
-        self.contact_requested.clear();
+        self.settings.contact.lookup = lookup;
+        self.directory.reconfigure(&self.settings.contact);
         self.look_up_contact();
     }
 
@@ -886,11 +700,11 @@ impl App {
     /// Refuses to write over one that is already there: the file only exists
     /// because someone put a key in it.
     pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.contact_paths.credentials.clone() else {
+        let Some(path) = self.directory.paths().credentials.clone() else {
             return;
         };
         if !path.exists()
-            && let Err(error) = grayline_qso::Credentials::write(&path, Some(&self.contact_settings.wavelog_url), "")
+            && let Err(error) = grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
         {
             let message = self.i18n.text("error-credentials");
             self.notice = Some(format!("{message}: {error}"));
@@ -912,10 +726,7 @@ impl App {
     }
 
     fn poll_contact(&mut self) {
-        let latest = self.contact_directory.latest();
-        let changed = latest.fields != self.contact_snapshot.fields;
-        self.contact_snapshot = latest;
-        if changed {
+        if self.directory.poll() {
             self.adopt_contact_fields();
         }
     }
@@ -929,7 +740,7 @@ impl App {
     /// is being worked by the time it arrives.
     fn adopt_contact_fields(&mut self) {
         if grayline_qso::normalize_callsign(&self.contact.callsign).as_deref()
-            != Some(self.contact_snapshot.callsign.as_str())
+            != Some(self.directory.snapshot.callsign.as_str())
         {
             return;
         }
@@ -955,9 +766,9 @@ impl App {
     /// then hold the send button down.
     fn sendable_field(&self, keys: [&str; 2]) -> Option<String> {
         keys.into_iter()
-            .filter_map(|key| self.contact_snapshot.fields.get(key))
-            .map(|value| crate::ui::input::normalize(value.trim()))
-            .find(|value| !value.is_empty() && crate::ui::input::first_unsendable(value).is_none())
+            .filter_map(|key| self.directory.snapshot.fields.get(key))
+            .map(|value| text::normalize(value.trim()))
+            .find(|value| !value.is_empty() && text::first_unsendable(value).is_none())
     }
 
     /// Whether there is a message to send and a way to send it.
@@ -974,12 +785,16 @@ impl App {
     /// found out by the transmission that tries it, because nothing here holds
     /// a connection to it between messages.
     pub fn lacks_output(&self) -> bool {
-        !self.keyer.enabled && self.audio.output_device.is_none()
+        !self.settings.keyer.enabled && self.audio.output_device.is_none()
     }
 
     /// How a transmission reaches the rig.
     pub const fn keying(&self) -> Keying {
-        if self.keyer.enabled { Keying::Fsk } else { Keying::Audio }
+        if self.settings.keyer.enabled {
+            Keying::Fsk
+        } else {
+            Keying::Audio
+        }
     }
 
     /// Queues the draft.
@@ -1008,9 +823,7 @@ impl App {
         if !self.transmit.is_busy() {
             return;
         }
-        let played = self.tx.played_samples();
-        self.tx.stop();
-        let unsent = self.transmit.abandon(played);
+        let unsent = self.transmit.abandon();
         self.return_to_draft(unsent);
     }
 
@@ -1031,20 +844,19 @@ impl App {
 
     /// Whether a message is being keyed right now.
     pub fn is_transmitting(&self) -> bool {
-        self.tx.latest().is_some_and(|snapshot| snapshot.phase.is_active())
+        self.transmit
+            .on_air()
+            .is_some_and(|on_air| on_air.output().snapshot().phase.is_active())
     }
 
     /// How long the message on the air has left, if one is on the air.
     pub fn transmission_remaining(&self) -> Option<Duration> {
-        let sending = self.transmit.sending()?;
-        let rate = self.tx.sample_rate_hz()?;
-        let remaining = sending.remaining_samples(self.tx.played_samples());
-        Some(Duration::from_secs_f64(remaining as f64 / f64::from(rate)))
+        Some(self.transmit.on_air()?.remaining())
     }
 
     /// How much of the message on the air has left for the rig.
     pub fn sent_progress(&self) -> Option<transmit::SentProgress> {
-        Some(self.transmit.sending()?.progress(self.tx.played_samples()))
+        Some(self.transmit.on_air()?.progress())
     }
 
     /// Starts rig control if the file asked for it, and reads what it says.
@@ -1053,7 +865,7 @@ impl App {
     /// in a test asks for a rig: the setting is off by default, and a station
     /// that switched it on gets its transports opened on the first frame.
     fn poll_rig(&mut self) {
-        if self.rig.enabled && self.rig_worker.is_none() {
+        if self.settings.rig.enabled && self.rig_worker.is_none() {
             let (plan, problem) = BandPlan::load(self.paths.config_dir());
             // Logged rather than shown: nothing here draws a band, so a plan
             // that would not parse costs the script its `ctx.band` and costs
@@ -1062,7 +874,7 @@ impl App {
                 log::note(&problem);
             }
             self.rig_worker = Some(RigWorker::spawn(
-                &self.rig,
+                &self.settings.rig,
                 self.paths.config_dir(),
                 Arc::new(plan),
                 log::note,
@@ -1097,7 +909,7 @@ impl App {
     /// two would drop it in the middle of what the other station reads as one
     /// transmission.
     pub(crate) fn should_unkey(&self) -> bool {
-        self.rig_keyed && !self.tx.is_running() && !self.transmit.is_busy()
+        self.rig_keyed && !self.transmit.is_busy()
     }
 
     /// Reports why the rig could not be handed a transmission, if it could not.
@@ -1105,7 +917,7 @@ impl App {
     /// A rig that was asked to key and did not leaves a message nobody hears,
     /// so it holds the send button rather than being let through quietly.
     pub fn rig_problem(&self) -> Option<String> {
-        if !self.rig.enabled || self.rig_snapshot.state.is_ready() {
+        if !self.settings.rig.enabled || self.rig_snapshot.state.is_ready() {
             return None;
         }
         let detail = self.rig_snapshot.error.as_ref().map_or_else(
@@ -1119,82 +931,50 @@ impl App {
     }
 
     fn poll_transmit(&mut self) {
-        // A rig that refused one of the operator's commands has not been
-        // keyed, so the message it was keyed for cannot go out. The unsent
-        // text goes back to the draft rather than being dropped, as it does
-        // when the operator stops a transmission themselves.
-        if self.tx.is_running()
-            && self.rig_keyed
-            && let Some(error) = self.rig_snapshot.error.clone()
-        {
-            self.abort_transmission();
-            self.notice = Some(error.to_string());
-            return;
-        }
-        if self.tx.is_running() {
-            let played = self.tx.played_samples();
-            if let Some(sending) = self.transmit.sending_mut()
-                && let Some(echo) = sending.take_echo(played)
-            {
+        let ready = self.rig_ready_to_send();
+        let rig_error = self.rig_snapshot.error.as_ref().filter(|_| self.rig_keyed);
+        if let Some(on_air) = self.transmit.on_air_mut() {
+            let advance = on_air.advance(ready, rig_error);
+            if let Some(echo) = advance.echo {
                 self.echo_sent(&echo);
             }
-            let snapshot = self.tx.latest().unwrap_or_default();
-            match snapshot.phase {
+            if advance.underran {
+                self.notice = Some(self.i18n.text("error-underrun"));
+            }
+            match advance.ending {
+                None => {}
+                // The unsent text goes back to the draft rather than being
+                // dropped, as it does when the operator stops a transmission
+                // themselves.
+                Some(Ending::RigRefused(error)) => {
+                    self.abort_transmission();
+                    self.notice = Some(error.to_string());
+                    return;
+                }
                 // What had not gone out goes back to the draft, the queue
                 // behind it included, as it does when the rig fails: a keyer
                 // that is not running fails every message the same way, and
                 // the text is still what the operator wrote.
-                TxPhase::Failed => {
-                    let played = self.tx.played_samples();
-                    self.tx.stop();
-                    let unsent = self.transmit.abandon(played);
-                    self.return_to_draft(unsent);
-                    if let Some(error) = snapshot.error {
+                Some(Ending::Failed(error)) => {
+                    self.abort_transmission();
+                    if let Some(error) = error {
                         self.report(&error);
                     }
                     return;
                 }
-                // The device is told to start once the queue has something in
-                // it, so the lead-in is not the thing that underruns. A keyed
-                // rig is waited for first: audio sent while it is still
-                // switching over is lost.
-                _ if !self.tx.is_started() && snapshot.phase != TxPhase::Priming && self.rig_ready_to_send() => {
-                    if let Err(error) = self.tx.start_playback() {
-                        self.tx.stop();
-                        self.transmit.finish();
-                        self.report(&error);
+                Some(Ending::Finished { late }) => {
+                    // Logged rather than shown: it is what says whether a
+                    // serial adapter is fit to key with, which is a question
+                    // asked once while setting a station up rather than on
+                    // every message.
+                    if let Some(late) = late {
+                        log::note(&format!("FSK keyer: worst transition {} µs late", late.as_micros()));
                     }
+                    self.transmit.finish();
                 }
-                _ => {}
-            }
-            // A queue that ran dry put a gap in the middle of a character,
-            // which the station being sent to reads as noise. Nothing can be
-            // done about it now, but the operator should know the message
-            // that went out was not the message on screen.
-            if self.tx.has_underrun() && self.underran != Some(self.session) {
-                self.underran = Some(self.session);
-                self.notice = Some(self.i18n.text("error-underrun"));
-            }
-            if self.tx.is_started() && self.tx.is_drained() {
-                let played = self.tx.played_samples();
-                if let Some(sending) = self.transmit.sending_mut()
-                    && let Some(echo) = sending.take_echo(played)
-                {
-                    self.echo_sent(&echo);
-                }
-                // Logged rather than shown: it is what says whether a serial
-                // adapter is fit to key with, which is a question asked once
-                // while setting a station up rather than on every message.
-                if let Some(late) = self.tx.keyer_late() {
-                    log::note(&format!("FSK keyer: worst transition {} µs late", late.as_micros()));
-                }
-                self.tx.stop();
-                self.transmit.finish();
             }
         }
-        if !self.tx.is_running()
-            && let Some(text) = self.transmit.take_next()
-        {
+        if let Some(text) = self.transmit.take_next() {
             self.start_transmission(text);
         }
     }
@@ -1217,7 +997,7 @@ impl App {
             self.rig_keyed = true;
         }
         match self.open_transmission(&text) {
-            Ok(schedule) => self.transmit.begin(Sending::new(text, schedule)),
+            Ok((schedule, output)) => self.transmit.begin(Sending::new(text, schedule), output),
             Err(error) => {
                 self.report(&error);
                 // The message had already left the queue, so it is given back
@@ -1235,19 +1015,20 @@ impl App {
     /// The keyer counts in microseconds of its own timeline, so a message it
     /// keys is scheduled at that rate, as one played is scheduled at the
     /// device's.
-    fn open_transmission(&mut self, text: &str) -> Result<TxSchedule, AppError> {
+    fn open_transmission(&self, text: &str) -> Result<(TxSchedule, Output), AppError> {
         let config = self.tx_config();
         let codes = encode_text(text, &config)?;
-        if self.keyer.enabled {
+        if self.settings.keyer.enabled {
             let schedule = TxSchedule::new(text, KEYER_TICKS_PER_SECOND, &config)?;
-            self.tx
-                .begin_keyer(KeyerWorker::spawn(self.keyer.address.clone(), codes, config));
-            return Ok(schedule);
+            let worker = KeyerWorker::spawn(self.settings.keyer.address.clone(), codes, config);
+            return Ok((schedule, Output::keyer(worker)));
         }
         let (playback, writer) = self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES)?;
         let schedule = TxSchedule::new(text, playback.sample_rate_hz(), &config)?;
-        self.tx.begin_audio(playback, TxWorker::spawn(writer, codes, config));
-        Ok(schedule)
+        Ok((
+            schedule,
+            Output::audio(playback, TxWorker::spawn(writer, codes, config)),
+        ))
     }
 
     fn echo_sent(&mut self, text: &str) {
@@ -1360,7 +1141,7 @@ impl core::fmt::Debug for App {
             .debug_struct("App")
             .field("locale", &self.i18n.locale())
             .field("tones", &self.tones())
-            .field("baud", &self.baud)
+            .field("baud", &self.settings.baud)
             .finish_non_exhaustive()
     }
 }

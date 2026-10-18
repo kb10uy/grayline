@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
 
-use crate::mode::Mode;
+use crate::{
+    mode::Mode,
+    time::{rate_spanning, samples_spanned},
+};
 
 use super::{
     raster::RasterProfile,
@@ -106,7 +109,7 @@ impl SlantEstimator {
             .collect();
         let middle = intercepts.len() / 2;
         let seed_intercept = *intercepts.select_nth_unstable_by(middle, f64::total_cmp).1;
-        let nominal_period = self.configured_sample_rate_hz * self.period_ps as f64 / 1.0e12;
+        let nominal_period = samples_spanned(self.configured_sample_rate_hz, self.period_ps);
         let residual_limit = (nominal_period * 0.03).max(2.0);
         let filtered: Vec<_> = accepted
             .into_iter()
@@ -124,12 +127,12 @@ impl SlantEstimator {
             .map(|value| (value.unit as f64, value.center_sample as f64))
             .collect();
         let (slope, intercept, residual_variance) = super::fit::least_squares_line(&points)?;
-        let effective_sample_rate_hz = slope * 1.0e12 / self.period_ps as f64;
+        let effective_sample_rate_hz = rate_spanning(slope, self.period_ps);
         if !effective_sample_rate_hz.is_finite() || effective_sample_rate_hz <= 0.0 {
             return None;
         }
         let residual_samples = libm::sqrt(residual_variance);
-        let source_epoch = intercept - effective_sample_rate_hz * self.sync_center_ps as f64 / 1.0e12;
+        let source_epoch = intercept - samples_spanned(effective_sample_rate_hz, self.sync_center_ps);
         if !source_epoch.is_finite() || source_epoch < 0.0 {
             return None;
         }

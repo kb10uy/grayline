@@ -15,5 +15,4 @@ grayline-variables = { path = "../variables" }
 thiserror = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-proptest.workspace = true
 rstest.workspace = true

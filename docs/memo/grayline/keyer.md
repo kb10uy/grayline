@@ -83,6 +83,7 @@ clock.rs     Clock, and the host clock waited on as tightly as it allows
 method.rs    Method, and LineMethod: one deadline per element boundary
 stream.rs    key_stream: one stream from lead-in to tail, from a CodeSource
 session.rs   what clients asked for, with no I/O in it
+error.rs     KeyerError, from the port, the line, and the listener
 player.rs    the keying thread: owns the line and runs streams
 protocol.rs  parsing commands and rendering replies
 server.rs    the listener and one thread per connection

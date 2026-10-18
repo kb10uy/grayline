@@ -39,6 +39,17 @@ pub struct FirDesign {
 }
 
 impl FirDesign {
+    /// Returns the order MMSSTV and MMTTY give a receive band-pass at
+    /// `sample_rate_hz`.
+    ///
+    /// That is 24 at 11 025 Hz, scaled linearly with the rate so the filter
+    /// spans the same time at any rate, never below 12, and rounded up to the
+    /// even order a linear-phase design needs.
+    pub fn receive_band_pass_order(sample_rate_hz: f64) -> usize {
+        let order = (libm::round(24.0 * sample_rate_hz / 11_025.0) as usize).max(12);
+        order + order % 2
+    }
+
     /// Designs the filter and returns coefficients ordered newest sample first.
     pub fn coefficients(self) -> Result<Vec<f64>, DspError> {
         validate_fir_design(self)?;
@@ -287,6 +298,17 @@ fn bessel_i0(value: f64) -> f64 {
 mod tests {
     use super::*;
     use rstest::rstest;
+
+    #[rstest]
+    #[case(4_000.0, 12)]
+    #[case(6_000.0, 14)]
+    #[case(8_000.0, 18)]
+    #[case(11_025.0, 24)]
+    #[case(44_100.0, 96)]
+    #[case(48_000.0, 104)]
+    fn the_receive_band_pass_scales_with_the_rate(#[case] sample_rate_hz: f64, #[case] order: usize) {
+        assert_eq!(FirDesign::receive_band_pass_order(sample_rate_hz), order);
+    }
 
     fn response_at(coefficients: &[f64], frequency_hz: f64, sample_rate_hz: f64) -> f64 {
         let angular = 2.0 * PI * frequency_hz / sample_rate_hz;

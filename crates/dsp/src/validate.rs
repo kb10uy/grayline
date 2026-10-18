@@ -8,10 +8,15 @@ pub(crate) fn validate_order(order: usize) -> Result<(), DspError> {
     }
 }
 
-pub(crate) fn validate_frequency(sample_rate_hz: f64, frequency_hz: f64) -> Result<(), DspError> {
+pub(crate) fn validate_sample_rate(sample_rate_hz: f64) -> Result<(), DspError> {
     if !sample_rate_hz.is_finite() || sample_rate_hz <= 0.0 {
         return Err(DspError::InvalidSampleRate);
     }
+    Ok(())
+}
+
+pub(crate) fn validate_frequency(sample_rate_hz: f64, frequency_hz: f64) -> Result<(), DspError> {
+    validate_sample_rate(sample_rate_hz)?;
     if !frequency_hz.is_finite() || frequency_hz <= 0.0 || frequency_hz >= sample_rate_hz * 0.5 {
         return Err(DspError::InvalidFrequency);
     }

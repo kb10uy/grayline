@@ -18,8 +18,8 @@ use grayline_sstv::{
     RxDecoder,
     rx::{RxEvent, RxState},
 };
-use grayline_sstv_rx::{PipelineOptions, ReceivePipeline};
-use hound::{SampleFormat, WavReader};
+use grayline_sstv_rx::{MINIMUM_SAMPLE_RATE_HZ, PipelineOptions, ReceivePipeline};
+use grayline_wav::MonoReader;
 
 /// Matches the application's receive worker.
 const STAGING_SECONDS: usize = 300;
@@ -45,27 +45,6 @@ struct Options {
     input: PathBuf,
 }
 
-fn read_mono(reader: &mut WavReader<std::io::BufReader<std::fs::File>>) -> Result<Vec<f32>> {
-    let spec = reader.spec();
-    let channels = spec.channels as usize;
-    let scale = 2_f64.powi(i32::from(spec.bits_per_sample) - 1);
-    let mono = |index: usize| index.is_multiple_of(channels);
-    Ok(match spec.sample_format {
-        SampleFormat::Int => reader
-            .samples::<i32>()
-            .enumerate()
-            .filter(|(index, _)| mono(*index))
-            .map(|(_, sample)| Ok((f64::from(sample?) / scale) as f32))
-            .collect::<Result<_>>()?,
-        SampleFormat::Float => reader
-            .samples::<f32>()
-            .enumerate()
-            .filter(|(index, _)| mono(*index))
-            .map(|(_, sample)| Ok(sample?))
-            .collect::<Result<_>>()?,
-    })
-}
-
 /// Resamples by linear interpolation, which is enough to move timing about.
 fn resample(samples: &[f32], ratio: f64) -> Vec<f32> {
     (0..(samples.len() as f64 / ratio) as usize)
@@ -81,9 +60,9 @@ fn resample(samples: &[f32], ratio: f64) -> Vec<f32> {
 
 fn main() -> Result<()> {
     let options = Options::parse();
-    let mut reader = WavReader::open(&options.input)?;
-    let source_rate = reader.spec().sample_rate;
-    let samples = read_mono(&mut reader)?;
+    let mut reader = MonoReader::open(&options.input, MINIMUM_SAMPLE_RATE_HZ)?;
+    let source_rate = reader.sample_rate_hz();
+    let samples = reader.samples().collect::<Result<Vec<_>, _>>()?;
     let rate = options.rate.unwrap_or(source_rate);
     let played = f64::from(rate) * (1.0 + options.skew_ppm / 1.0e6);
     let samples = if played == f64::from(source_rate) {

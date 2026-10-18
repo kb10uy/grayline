@@ -2,41 +2,12 @@ use grayline_rig_control::{DEFAULT_PORT_NAME, RigControlError, RigError, script:
 
 use std::{
     env, fs,
-    io::{self, BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     net::TcpListener,
-    path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
+    path::PathBuf,
+    sync::{Arc, Mutex},
     thread,
 };
-
-/// A directory that removes itself when the test that made it finishes.
-pub struct TempDir(PathBuf);
-
-impl TempDir {
-    pub fn new() -> Self {
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let path = env::temp_dir().join(format!(
-            "grayline-rtty-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&path).expect("the temporary directory is writable");
-        Self(path)
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _: io::Result<()> = fs::remove_dir_all(&self.0);
-    }
-}
 
 /// A directory shared by every headless application in the suite.
 ///

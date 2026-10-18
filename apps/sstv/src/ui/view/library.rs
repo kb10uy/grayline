@@ -9,7 +9,7 @@ use super::*;
 /// something that could not take effect until it ends.
 pub(super) fn library(ui: &mut Ui, app: &mut App) {
     ui.add_space(2.0);
-    let transmitting = app.tx_snapshot.phase.is_active();
+    let transmitting = app.outgoing.is_active();
     ui.add_enabled_ui(!transmitting, |ui| {
         ui.horizontal_top(|ui| {
             let height = ui.available_height();
@@ -26,7 +26,7 @@ pub(super) fn library(ui: &mut Ui, app: &mut App) {
                 false,
             ) {
                 Some(ListAction::Reveal) => app.reveal(Folder::Templates),
-                Some(ListAction::Refresh) => app.refresh_templates(),
+                Some(ListAction::Refresh) => app.start_library_scan(),
                 None => {}
             }
             if app.library.template != previous_template {
@@ -37,7 +37,7 @@ pub(super) fn library(ui: &mut Ui, app: &mut App) {
             let previous_stock = app.library.stock;
             match entry_list(ui, &labels, size, &app.library.stocks, &mut app.library.stock, true) {
                 Some(ListAction::Reveal) => app.reveal(Folder::Stocks),
-                Some(ListAction::Refresh) => app.refresh_stocks(),
+                Some(ListAction::Refresh) => app.start_library_scan(),
                 None => {}
             }
             if app.library.stock != previous_stock {

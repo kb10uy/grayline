@@ -109,7 +109,7 @@ impl VisDecoder {
                 None
             }
             VisState::Cells { sample, cell } => {
-                let cell_samples = (self.sample_rate_hz * CELL_SECONDS).round() as usize;
+                let cell_samples = libm::round(self.sample_rate_hz * CELL_SECONDS) as usize;
                 if sample >= cell_samples / 4 && sample < cell_samples * 3 / 4 {
                     for (sum, value) in self.cell_sums[cell].iter_mut().zip(envelope) {
                         *sum += value;

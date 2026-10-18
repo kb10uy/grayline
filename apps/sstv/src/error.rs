@@ -10,14 +10,12 @@ use std::sync::Arc;
 use grayline_audio::AudioError;
 use grayline_dsp::DspError;
 use grayline_qso::QsoError;
-use grayline_rig::RigError;
+use grayline_rig_control::{RigControlError, RigError};
 use grayline_sstv::SstvError;
 use grayline_sstv_rx::DemodulatorError;
 use grayline_sstv_template::TemplateError;
 use grayline_tone_tx::ModulatorError;
 use thiserror::Error;
-
-use grayline_rig_control::RigControlError;
 
 #[derive(Clone, Debug, Error)]
 pub enum AppError {

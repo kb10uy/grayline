@@ -1,4 +1,6 @@
+use alloc::vec::Vec;
 use core::num::NonZeroU32;
+
 use grayline_dsp::{
     detector::{ToneDetector, ToneDetectorDesign},
     filter::{Fir, FirDesign, FirKind},
@@ -86,11 +88,7 @@ impl FrontEnd {
     pub(crate) fn new(sample_rate: u32) -> Result<Self, DemodulatorError> {
         let fsk = FskDecoder::new(NonZeroU32::new(sample_rate).ok_or(DemodulatorError::SampleRateTooLow(sample_rate))?);
         let sample_rate_hz = f64::from(sample_rate);
-        let mut order = (24.0 * sample_rate_hz / 11_025.0).round() as usize;
-        order = order.max(12);
-        if !order.is_multiple_of(2) {
-            order += 1;
-        }
+        let order = FirDesign::receive_band_pass_order(sample_rate_hz);
         let upper = 2_600.0_f64.min(sample_rate_hz * 0.5 - 100.0);
         let band_pass = Fir::from_design(FirDesign {
             kind: FirKind::BandPass,

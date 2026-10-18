@@ -8,10 +8,14 @@ authors.workspace = true
 [lib]
 bench = false
 
+[features]
+default = []
+std = ["thiserror/std", "grayline-dsp/std", "grayline-sstv/std"]
+
 [dependencies]
 grayline-dsp = { path = "../dsp" }
 grayline-sstv = { path = "../sstv" }
-thiserror = { workspace = true, features = ["std"] }
+thiserror.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

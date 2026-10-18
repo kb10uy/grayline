@@ -4,15 +4,20 @@
 //! draws. Keeping the two apart is what lets the whole of the state be driven
 //! from a test without a window.
 
-use std::time::Duration;
+use std::{
+    path::PathBuf,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale},
     log,
     platform::{Activity, Platform},
+    worker::Waker,
 };
-use grayline_wefax::{Format, Ioc, LinesPerMinute};
+use grayline_wefax::Format;
 
 use crate::{
     error::AppError,
@@ -24,7 +29,6 @@ use crate::{
     },
     ui::strip::Strip,
     worker::{
-        Waker,
         audio::AudioState,
         receive::{Chart, RxProgress, WorkerSettings},
     },
@@ -51,16 +55,11 @@ pub struct App {
     pub strip: Strip,
     pub ui_scale: f32,
 
-    /// The geometry a reception starts on, and falls back to.
-    pub ioc: Ioc,
-    pub lines_per_minute: LinesPerMinute,
-    pub auto_start: bool,
-    pub auto_stop: bool,
-    pub infer_lines_per_minute: bool,
-    pub slant_tracking: bool,
-    pub inverted: bool,
-    pub narrow_shift: bool,
-    pub auto_save: bool,
+    /// What the operator chose, as it is saved.
+    ///
+    /// The control bar and the menus edit this directly; the receive worker
+    /// is handed it through [`push_settings`](Self::push_settings).
+    pub settings: Settings,
 
     /// The last thing worth telling the operator, shown on the control bar.
     pub notice: Option<String>,
@@ -76,6 +75,8 @@ pub struct App {
     common: CommonConfig,
     platform: Box<dyn Platform>,
     activity: Activity,
+    /// Charts still being encoded and written, reported once each is done.
+    chart_writers: Vec<JoinHandle<Result<PathBuf, String>>>,
     /// The session the strip on screen belongs to.
     ///
     /// A device change starts a new worker whose lines begin again at zero, so
@@ -118,15 +119,7 @@ impl App {
             audio,
             strip: Strip::default(),
             ui_scale: shared.ui_scale,
-            ioc: settings.ioc,
-            lines_per_minute: settings.lines_per_minute,
-            auto_start: settings.auto_start,
-            auto_stop: settings.auto_stop,
-            infer_lines_per_minute: settings.infer_lines_per_minute,
-            slant_tracking: settings.slant_tracking,
-            inverted: settings.inverted,
-            narrow_shift: settings.narrow_shift,
-            auto_save: settings.auto_save,
+            settings: settings.clone(),
             notice: None,
             format: None,
             session,
@@ -136,6 +129,7 @@ impl App {
             common,
             platform,
             activity: Activity::Idle,
+            chart_writers: Vec::new(),
         }
     }
 
@@ -151,7 +145,7 @@ impl App {
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
             AudioState::disconnected(worker_settings(&settings)),
-            AppPaths::from_roots(scratch.join("config"), scratch.join("pictures"), scratch.join("state")),
+            AppPaths::from_roots(grayline_shell::paths::Roots::under(&scratch)),
             Config::detached(),
             &settings,
             CommonConfig::detached(),
@@ -161,7 +155,7 @@ impl App {
 
     /// The window title, which carries what the receiver is doing.
     pub fn title(&self) -> String {
-        let name = format!("{} {}", crate::identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION"));
+        let name = crate::identity::IDENTITY.title();
         match self.progress() {
             RxProgress::Idle => name,
             progress => format!("{} \u{2014} {}", name, self.i18n.text(progress.label_key())),
@@ -191,7 +185,7 @@ impl App {
             self.audio.rescan();
             if !self.audio.reopen() {
                 let message = self.i18n.text("error-device-lost");
-                self.notice = Some(format!("{message}: {fault:?}"));
+                self.notice = Some(format!("{message}: {fault}"));
             }
         }
         let session = self.audio.session();
@@ -210,10 +204,11 @@ impl App {
             self.report(&error);
         }
         if let Some(chart) = self.audio.take_chart()
-            && self.auto_save
+            && self.settings.auto_save
         {
-            self.write_chart(&chart);
+            self.write_chart(chart);
         }
+        self.report_written_charts();
 
         let activity = if self.progress().is_active() {
             Activity::Receiving
@@ -231,6 +226,9 @@ impl App {
     /// The worker asks for a frame itself when it has something worth showing,
     /// so this only covers the readouts nothing else would redraw.
     pub fn repaint_after(&self) -> Option<Duration> {
+        if !self.chart_writers.is_empty() {
+            return Some(Duration::from_millis(100));
+        }
         self.audio.is_capturing().then(|| Duration::from_secs(1))
     }
 
@@ -243,27 +241,12 @@ impl App {
             locale: self.i18n.locale(),
             ui_scale: self.ui_scale,
         });
-        let settings = self.settings();
-        if settings == self.saved {
+        self.settings.device = self.audio.device.as_ref().map(|device| device.name().to_owned());
+        if self.settings == self.saved {
             return;
         }
-        self.config.save(&settings);
-        self.saved = settings;
-    }
-
-    fn settings(&self) -> Settings {
-        Settings {
-            device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
-            ioc: self.ioc,
-            lines_per_minute: self.lines_per_minute,
-            auto_start: self.auto_start,
-            auto_stop: self.auto_stop,
-            infer_lines_per_minute: self.infer_lines_per_minute,
-            slant_tracking: self.slant_tracking,
-            inverted: self.inverted,
-            narrow_shift: self.narrow_shift,
-            auto_save: self.auto_save,
-        }
+        self.config.save(&self.settings);
+        self.saved = self.settings.clone();
     }
 
     /// Hands the receive settings to the worker.
@@ -271,7 +254,7 @@ impl App {
     /// Called after anything on the control bar changes, rather than on every
     /// frame, so a setting the operator did not touch is not rewritten.
     pub fn push_settings(&mut self) {
-        self.audio.set_settings(worker_settings(&self.settings()));
+        self.audio.set_settings(worker_settings(&self.settings));
     }
 
     pub fn set_ui_scale(&mut self, scale: f32) {
@@ -358,19 +341,39 @@ impl App {
             height: self.strip.lines(),
             gray: self.strip.gray().to_vec(),
         };
-        self.write_chart(&chart);
+        self.write_chart(chart);
     }
 
-    fn write_chart(&mut self, chart: &Chart) {
+    /// Encodes and writes `chart` without making the interface wait.
+    ///
+    /// A full chart is thousands of lines, and encoding it takes longer than a
+    /// frame has; it would land exactly when the operator is looking at the
+    /// finished picture. The result is reported on the frame after it is done.
+    fn write_chart(&mut self, chart: Chart) {
+        let directory = self.paths.received_dir().to_path_buf();
         // The picture is line-major, which is how it was decoded: the quarter
         // turn belongs to the display, not to the file.
-        match history::save(
-            self.paths.received_dir(),
-            chart.format,
-            chart.width,
-            chart.height,
-            &chart.gray,
-        ) {
+        let write = move || history::save(&directory, chart.format, chart.width, chart.height, &chart.gray);
+        match thread::Builder::new()
+            .name("grayline-wefax-chart".to_owned())
+            .spawn(write)
+        {
+            Ok(writer) => self.chart_writers.push(writer),
+            Err(_) => self.notice = Some(self.i18n.text("error-save-failed")),
+        }
+    }
+
+    /// Reports every chart that has finished being written.
+    fn report_written_charts(&mut self) {
+        let (finished, running): (Vec<_>, Vec<_>) = self.chart_writers.drain(..).partition(JoinHandle::is_finished);
+        self.chart_writers = running;
+        for writer in finished {
+            self.report_chart(writer.join().unwrap_or_else(|_| Err("the writer stopped".to_owned())));
+        }
+    }
+
+    fn report_chart(&mut self, written: Result<PathBuf, String>) {
+        match written {
             Ok(path) => {
                 let message = self.i18n.text("status-saved");
                 self.notice = Some(format!("{message}: {}", path.display()));
@@ -379,6 +382,13 @@ impl App {
                 let message = self.i18n.text("error-save-failed");
                 self.notice = Some(format!("{message}: {error}"));
             }
+        }
+    }
+
+    #[cfg(test)]
+    fn wait_for_chart_writers(&mut self) {
+        for writer in std::mem::take(&mut self.chart_writers) {
+            self.report_chart(writer.join().unwrap_or_else(|_| Err("the writer stopped".to_owned())));
         }
     }
 
@@ -421,6 +431,16 @@ fn worker_settings(settings: &Settings) -> WorkerSettings {
         slant_tracking: settings.slant_tracking,
         inverted: settings.inverted,
         narrow_shift: settings.narrow_shift,
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        // A chart may still be on its way to disk, and the interface going
+        // down is the last chance to wait for it.
+        for writer in self.chart_writers.drain(..) {
+            let _ = writer.join();
+        }
     }
 }
 

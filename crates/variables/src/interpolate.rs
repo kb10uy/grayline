@@ -18,30 +18,18 @@ pub const DEFAULT_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M";
 /// does not render, and the caller knows which names it offered.
 pub fn interpolate(source: &str, variables: &Variables) -> Result<String, VariableError> {
     let mut output = String::with_capacity(source.len());
-    let mut rest = source;
-    while let Some(dollar) = rest.find('$') {
-        output.push_str(&rest[..dollar]);
-        rest = &rest[dollar + 1..];
-        if let Some(after_escape) = rest.strip_prefix('$') {
-            output.push('$');
-            rest = after_escape;
-            continue;
+    for piece in Pieces::new(source) {
+        match piece? {
+            Piece::Text(text) => output.push_str(text),
+            Piece::Expression(expression) => {
+                let reference = Reference::parse(expression)?;
+                let value = variables
+                    .get(reference.name)
+                    .ok_or_else(|| VariableError::Missing(reference.name.to_owned()))?;
+                reference.write(&mut output, value)?;
+            }
         }
-        let Some(expression) = rest.strip_prefix('{') else {
-            output.push('$');
-            continue;
-        };
-        let Some(end) = expression.find('}') else {
-            return Err(VariableError::Unterminated);
-        };
-        let reference = Reference::parse(&expression[..end])?;
-        let value = variables
-            .get(reference.name)
-            .ok_or_else(|| VariableError::Missing(reference.name.to_owned()))?;
-        reference.write(&mut output, value)?;
-        rest = &expression[end + 1..];
     }
-    output.push_str(rest);
     Ok(output)
 }
 
@@ -51,12 +39,14 @@ pub fn interpolate(source: &str, variables: &Variables) -> Result<String, Variab
 /// answers what a piece of text would read, and [`interpolate`] is what
 /// refuses to render text it cannot resolve.
 pub fn references(source: &str) -> References<'_> {
-    References { rest: source }
+    References {
+        pieces: Pieces::new(source),
+    }
 }
 
 /// The names [`references`] walks.
 pub struct References<'a> {
-    rest: &'a str,
+    pieces: Pieces<'a>,
 }
 
 impl<'a> Iterator for References<'a> {
@@ -64,23 +54,63 @@ impl<'a> Iterator for References<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let dollar = self.rest.find('$')?;
-            self.rest = &self.rest[dollar + 1..];
-            if let Some(after_escape) = self.rest.strip_prefix('$') {
-                self.rest = after_escape;
-                continue;
+            match self.pieces.next()? {
+                Ok(Piece::Expression(expression)) => return Some(Reference::split(expression).0),
+                Ok(Piece::Text(_)) => {}
+                Err(_) => return None,
             }
-            let Some(expression) = self.rest.strip_prefix('{') else {
-                continue;
-            };
-            let Some(end) = expression.find('}') else {
-                self.rest = "";
-                return None;
-            };
-            let name = Reference::split(&expression[..end]).0;
-            self.rest = &expression[end + 1..];
-            return Some(name);
         }
+    }
+}
+
+/// One stretch of a source, as the `${...}` grammar divides it.
+enum Piece<'a> {
+    /// Text that stands for itself, a `$$` or a lone `$` already reduced to
+    /// the dollar sign it means.
+    Text(&'a str),
+    /// What sits between `${` and `}`.
+    Expression(&'a str),
+}
+
+/// Walks a source's pieces, ending after the first unterminated expression.
+struct Pieces<'a> {
+    rest: &'a str,
+}
+
+impl<'a> Pieces<'a> {
+    const fn new(source: &'a str) -> Self {
+        Self { rest: source }
+    }
+}
+
+impl<'a> Iterator for Pieces<'a> {
+    type Item = Result<Piece<'a>, VariableError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.rest.is_empty() {
+            return None;
+        }
+        let dollar = self.rest.find('$').unwrap_or(self.rest.len());
+        if dollar > 0 {
+            let (text, rest) = self.rest.split_at(dollar);
+            self.rest = rest;
+            return Some(Ok(Piece::Text(text)));
+        }
+        let (sign, after) = self.rest.split_at(1);
+        if let Some(after_escape) = after.strip_prefix('$') {
+            self.rest = after_escape;
+            return Some(Ok(Piece::Text(sign)));
+        }
+        let Some(expression) = after.strip_prefix('{') else {
+            self.rest = after;
+            return Some(Ok(Piece::Text(sign)));
+        };
+        let Some(end) = expression.find('}') else {
+            self.rest = "";
+            return Some(Err(VariableError::Unterminated));
+        };
+        self.rest = &expression[end + 1..];
+        Some(Ok(Piece::Expression(&expression[..end])))
     }
 }
 
@@ -155,6 +185,7 @@ pub fn valid_variable_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use jiff::civil::date;
+    use rstest::rstest;
 
     use super::*;
 
@@ -218,6 +249,29 @@ mod tests {
             interpolate("${tx.timestamp.utc:}", &variables),
             Err(VariableError::Format { .. })
         ));
+    }
+
+    #[rstest]
+    #[case("plain", "plain")]
+    #[case("a$", "a$")]
+    #[case("$$", "$")]
+    #[case("x$y", "x$y")]
+    #[case("$${a}$", "${a}$")]
+    #[case("[${a}]", "[A]")]
+    fn dollar_signs_that_open_nothing_are_kept(#[case] source: &str, #[case] expected: &str) {
+        let mut variables = Variables::new();
+        variables.insert("a", VariableValue::Text("A".into()));
+        assert_eq!(interpolate(source, &variables).unwrap(), expected);
+    }
+
+    #[test]
+    fn an_unterminated_expression_fails_and_ends_the_walk() {
+        assert!(matches!(
+            interpolate("${a", &Variables::new()),
+            Err(VariableError::Unterminated)
+        ));
+        let names: Vec<_> = references("${a} $${b} ${c").collect();
+        assert_eq!(names, ["a"]);
     }
 
     #[test]

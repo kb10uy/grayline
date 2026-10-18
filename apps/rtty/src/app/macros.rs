@@ -549,7 +549,7 @@ mod tests {
         for shipped in default_macros() {
             let expanded = written(&shipped.text);
             assert_eq!(
-                crate::ui::input::first_unsendable(&expanded),
+                crate::app::text::first_unsendable(&expanded),
                 None,
                 "{} expands to {expanded:?}",
                 shipped.label
@@ -562,7 +562,7 @@ mod tests {
         for shipped in default_templates() {
             let expanded = written(&shipped.text);
             assert_eq!(
-                crate::ui::input::first_unsendable(&expanded),
+                crate::app::text::first_unsendable(&expanded),
                 None,
                 "{} expands to {expanded:?}",
                 shipped.name
@@ -586,7 +586,7 @@ mod tests {
             let expanded = expand(&text, &context(&empty, &no_contact, &no_custom(), &at(9)))
                 .unwrap_or_else(|error| panic!("{name} does not expand: {error}"));
             assert_eq!(
-                crate::ui::input::first_unsendable(&expanded),
+                crate::app::text::first_unsendable(&expanded),
                 None,
                 "{name} expands to {expanded:?}"
             );

@@ -232,9 +232,9 @@ impl Session {
                 RxEvent::SquelchChanged { open, .. } => *squelch_open = *open,
                 _ => {}
             });
-            column.processed += samples.len() as u64;
-            if let Err(source) = outcome {
-                failure = Some(AppError::Decode { sample, source });
+            match outcome {
+                Ok(()) => column.processed += samples.len() as u64,
+                Err(source) => failure = Some(AppError::Decode { sample, source }),
             }
         }
         failure

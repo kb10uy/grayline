@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use hound::{SampleFormat, WavReader};
+use grayline_wav::{MonoReader, WavError as FileError};
 
 use crate::{CaptureReader, CaptureWriter, WavError, synthetic_capture};
 
@@ -39,26 +39,12 @@ impl WavSource {
         minimum_sample_rate_hz: u32,
         thread_name: String,
     ) -> Result<(Self, CaptureReader), WavError> {
-        let reader = WavReader::open(path).map_err(|error| WavError::Input(error.to_string()))?;
-        let spec = reader.spec();
-        if spec.channels == 0 {
-            return Err(WavError::Input("the file has no channels".to_owned()));
-        }
-        if spec.sample_rate < minimum_sample_rate_hz {
-            return Err(WavError::Input(format!(
-                "{} Hz is below the {minimum_sample_rate_hz} Hz the decoder needs",
-                spec.sample_rate
-            )));
-        }
-        if spec.sample_format == SampleFormat::Int && (spec.bits_per_sample == 0 || spec.bits_per_sample > 32) {
-            return Err(WavError::Input(format!(
-                "unsupported PCM depth: {} bits",
-                spec.bits_per_sample
-            )));
-        }
+        let reader =
+            MonoReader::open(path, minimum_sample_rate_hz).map_err(|error| WavError::Input(error.to_string()))?;
+        let sample_rate_hz = reader.sample_rate_hz();
 
         let (writer, capture) =
-            synthetic_capture(spec.sample_rate, capacity).map_err(|error| WavError::Input(error.to_string()))?;
+            synthetic_capture(sample_rate_hz, capacity).map_err(|error| WavError::Input(error.to_string()))?;
         let stop = Arc::new(AtomicBool::new(false));
         let drained = Arc::new(AtomicBool::new(false));
         let join = {
@@ -77,7 +63,7 @@ impl WavSource {
                 stop,
                 drained,
                 join,
-                sample_rate_hz: spec.sample_rate,
+                sample_rate_hz,
             },
             capture,
         ))
@@ -114,45 +100,17 @@ impl core::fmt::Debug for WavSource {
 }
 
 /// Reads the first channel into the queue, then waits for it to empty.
-fn feed(
-    reader: WavReader<impl std::io::Read>,
-    mut writer: CaptureWriter,
-    capacity: usize,
-    stop: &AtomicBool,
-    drained: &AtomicBool,
-) {
-    let spec = reader.spec();
-    let channels = spec.channels as usize;
+fn feed(mut reader: MonoReader, mut writer: CaptureWriter, capacity: usize, stop: &AtomicBool, drained: &AtomicBool) {
     let mut packet = Vec::with_capacity(WRITE_SAMPLES);
-    let mut reader = reader;
-
-    match spec.sample_format {
-        SampleFormat::Int => {
-            let scale = 2_f64.powi(i32::from(spec.bits_per_sample) - 1);
-            let samples = reader
-                .samples::<i32>()
-                .enumerate()
-                .filter_map(|(index, sample)| (index % channels == 0).then_some(sample))
-                .map_while(Result::ok)
-                .map(|sample| (f64::from(sample) / scale) as f32);
-            pour(samples, &mut writer, &mut packet, stop);
-        }
-        SampleFormat::Float => {
-            let samples = reader
-                .samples::<f32>()
-                .enumerate()
-                .filter_map(|(index, sample)| (index % channels == 0).then_some(sample))
-                .map_while(Result::ok)
-                .map(|sample| {
-                    if sample.is_finite() {
-                        sample.clamp(-1.0, 1.0)
-                    } else {
-                        0.0
-                    }
-                });
-            pour(samples, &mut writer, &mut packet, stop);
-        }
-    }
+    // A sample that is not a number is played as silence rather than ending
+    // the recording, and a read that fails ends it where it failed: what came
+    // before is still worth decoding.
+    let samples = reader.samples().map_while(|sample| match sample {
+        Ok(sample) => Some(sample),
+        Err(FileError::NonFinite) => Some(0.0),
+        Err(_) => None,
+    });
+    pour(samples, &mut writer, &mut packet, stop);
 
     // The recording is not finished until the decoder has taken the last of
     // it, so the caller is told only once the queue is empty.

@@ -7,12 +7,12 @@
 use super::*;
 
 impl RxDecoder {
-    pub(super) fn synchronize(&mut self) -> Result<bool, SstvError> {
+    pub(super) fn synchronize(&mut self, input: &SampleBuffer, clock: &mut RasterClock) -> Result<bool, SstvError> {
         let unit = self.decode.raster_unit;
         let observation = observe(
-            self.input.as_ref().expect("input initialized"),
-            self.profile,
-            self.decode.clock.expect("clock acquired"),
+            input,
+            self.raster.profile,
+            *clock,
             unit,
             self.sample_rate_hz,
             self.config.sync_detector_delay,
@@ -28,23 +28,15 @@ impl RxDecoder {
             return self.note_bad_sync();
         }
         let expected_protocol = self
+            .raster
             .profile
             .period_ps
             .checked_mul(unit as u64)
-            .and_then(|value| value.checked_add(self.profile.sync_center_ps))
+            .and_then(|value| value.checked_add(self.raster.profile.sync_center_ps))
             .ok_or(SstvError::TimeOverflow)?;
-        let expected = self
-            .decode
-            .clock
-            .expect("clock acquired")
-            .sample_at(expected_protocol)?;
+        let expected = clock.sample_at(expected_protocol)?;
         let displacement = observation.center_sample as i128 - expected as i128;
-        let max_consistent = self
-            .decode
-            .clock
-            .expect("clock acquired")
-            .samples_for(self.profile.period_ps)?
-            / 4;
+        let max_consistent = clock.samples_for(self.raster.profile.period_ps)? / 4;
         if displacement.unsigned_abs() > u128::from(max_consistent.max(2)) {
             self.phase_displacements.clear();
             return self.note_bad_sync();
@@ -64,17 +56,13 @@ impl RxDecoder {
                 let maximum = *self.phase_displacements.iter().max().expect("non-empty");
                 let correction = self.phase_displacements.iter().sum::<i64>() / PHASE_AGREEMENT as i64;
                 if maximum - minimum <= 2 && correction.unsigned_abs() >= MIN_PHASE_DISPLACEMENT {
-                    self.decode
-                        .clock
-                        .as_mut()
-                        .expect("clock acquired")
-                        .adjust_epoch(correction)?;
+                    clock.adjust_epoch(correction)?;
                     self.last_phase_adjustment = Some(unit);
                     self.phase_displacements.clear();
                     self.queue_event(RxEvent::PhaseAdjusted {
                         unit,
                         displacement_samples: correction,
-                        source_epoch: self.decode.clock.expect("clock acquired").source_epoch(),
+                        source_epoch: clock.source_epoch(),
                     });
                 }
             }
@@ -84,7 +72,7 @@ impl RxDecoder {
     pub(super) fn check_auto_stop(&mut self) -> Result<bool, SstvError> {
         if self.config.auto_stop && self.bad_sync_score >= BAD_SYNC_SCORE_LIMIT {
             let reason = StopReason::SynchronizationLost;
-            self.decode.state = RxState::Stopped {
+            self.decode.state = Progress::Stopped {
                 completed_rows: self.decode.delivered_rows,
                 reason,
             };

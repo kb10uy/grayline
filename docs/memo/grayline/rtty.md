@@ -10,11 +10,13 @@ decisions live that the MMTTY documents deliberately do not make.
 
 One crate, `crates/rtty`, holding the protocol model, the receive path, and
 the transmit path as modules. The model — the ITA2 tables, the baud rate, the
-tone pair, the framing parameters — is about two hundred lines, and its only
-consumers are this crate's own `rx` and `tx`. SSTV's split earns itself
-because four crates consume `grayline-sstv`; a boundary around something
-smaller than a module would have nothing on either side. The day a third
-consumer appears is the day to split.
+tone pair, the framing parameters — is about two hundred lines. Its consumers
+outside this crate — `gl-rtty`, the application, `grayline-keyer-protocol`,
+and `gl-keyer` — take the framer and the transmit configuration together with
+the model, so a boundary around the model alone would still have nothing on
+one side of it. SSTV's split earns itself because its consumers want different
+halves of `grayline-sstv`; the day one of RTTY's wants the model and nothing
+else is the day to split.
 
 Allocation-backed `no_std`, like the other cores, checked by
 `cargo build -p grayline-rtty --no-default-features`.
@@ -30,6 +32,7 @@ rx/
   squelch.rs    signal strength and the squelch
   afc.rs        automatic frequency control over a spectrum slice
   framing.rs    the majority-vote start-stop machine
+  monitor.rs    ChannelLevels, MonitorConfig — the tap a scope drains
   config.rs     RxConfig
   event.rs      RxEvent, RxOutcome
   pipeline.rs   the wiring, and the AFC's FFT cadence
@@ -37,6 +40,7 @@ tx/
   encoder.rs    text to TxCode streams
   framer.rs     codes to keying elements, in the caller's ticks
   modulator.rs  the VCO, the filters, and the gate ramp
+  schedule.rs   TxSchedule, and the Timing shared with the transmitter
   config.rs     TxConfig
 ```
 

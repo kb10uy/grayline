@@ -15,7 +15,7 @@ interfaces are not.
 | --- | --- | --- |
 | [Grayline SSTV](apps/sstv/README.md) | `apps/sstv/` | Released |
 | Grayline WEFAX | `apps/wefax/` | Receive implemented |
-| Grayline RTTY | `apps/rtty/` | Live receive and buffered AFSK transmit implemented |
+| Grayline RTTY | `apps/rtty/` | Live receive and buffered transmit implemented, as AFSK or as FSK through `gl-keyer` |
 | Grayline PSK | — | Planned |
 
 [apps/web-demo/](apps/web-demo/) builds the SSTV receive path for WebAssembly,
@@ -30,6 +30,9 @@ running at <https://rssstv.kb10uy.dev/>.
   directory per mode, named `<mode>-cli`, holding the package
   `grayline-<mode>-cli` and the binary `gl-<mode>`. `tools/qso-cli/`
   provides `gl-qso` for the shared contact directory and ADIF import.
+  `tools/keyer/` is the exception to the naming: it holds `grayline-keyer`
+  and `gl-keyer`, a keyer an operator runs beside `rigctld` to key FSK on a
+  serial port's DTR or RTS line.
 - `assets/` — data shipped outside any one crate, such as the ported MMSSTV
   templates under `assets/templates/`.
 - `docs/memo/` — development documentation, divided by subject and indexed by
@@ -39,14 +42,19 @@ running at <https://rssstv.kb10uy.dev/>.
 - `docs/reference/mmtty/` — the original MMTTY source, a submodule kept as the
   behavioral reference for RTTY.
 
-The shared libraries are `dsp`, `audio`, `rig`, `shell`, `qso`, and
-`variables`. The protocol crates carry their mode's name. `tone-tx` converts
-SSTV timed-tone events to PCM and still depends on `grayline-sstv`. `shell` is what an application is built out of before
-it knows which signal it carries: the window, the platform integration, the
-message lookup, and the log.
-`crates/sstv-rx` still holds the SSTV receive front end whole; the parts of it
-that are not specific to SSTV move down into the core as the second mode needs
-them.
+The shared libraries are `dsp`, `audio`, `rig`, `rig-control`,
+`keyer-protocol`, `shell`, `qso`, and `variables`. The protocol crates carry
+their mode's name. `tone-tx` converts SSTV timed-tone events to PCM and still
+depends on `grayline-sstv`. `shell` is what an application is built out of
+before it knows which signal it carries: the window, the platform integration,
+the message lookup, and the log. `rig-control` is the other half of that:
+keying the rig, the host for the operator's `rigcontrol.lua`, and the band
+plan, kept apart from `shell` so a receive-only application links no Lua
+interpreter. `keyer-protocol` is how an application and `gl-keyer` spell the
+keyer's commands, and a client for them.
+`crates/sstv-rx` holds the SSTV receive front end; the discriminator, tone
+detector, moving average, and level normalizer that WEFAX and RTTY also needed
+have moved down into `dsp`.
 
 ## Building
 

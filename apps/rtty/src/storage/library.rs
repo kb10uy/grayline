@@ -131,11 +131,11 @@ fn field<'a>(entry: &'a Table, key: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn a_missing_file_is_written_with_what_ships() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("macros.toml");
 
         assert_eq!(load_macros(&path), default_macros());
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn the_set_messages_survive_being_written_and_read_back() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("templates.toml");
 
         load_templates(&path);
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn the_file_is_what_the_buttons_are_read_from() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("macros.toml");
         fs::write(
             &path,
@@ -179,7 +179,7 @@ send = true
 
     #[test]
     fn a_file_with_no_list_in_it_is_an_empty_list() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("macros.toml");
         fs::write(&path, "# nothing here\n").unwrap();
 
@@ -188,7 +188,7 @@ send = true
 
     #[test]
     fn a_file_that_cannot_be_read_is_not_written_over() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("templates.toml");
         fs::write(&path, "[[templates]\nname = \"broken\"\n").unwrap();
 
@@ -198,7 +198,7 @@ send = true
 
     #[test]
     fn an_entry_missing_a_half_is_dropped() {
-        let root = TempDir::new();
+        let root = TempDir::new().unwrap();
         let path = root.path().join("templates.toml");
         fs::write(
             &path,

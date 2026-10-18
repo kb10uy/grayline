@@ -1,5 +1,3 @@
-app-title = Grayline SSTV
-
 menu-file = ファイル
 menu-view = 表示
 menu-settings = 設定
@@ -124,6 +122,7 @@ error-transmit-active = 送信中です
 error-no-output-device = 出力デバイスを選択してください
 error-invalid-station-call = 自局コールが不正です: { $error }
 error-rig-unavailable = リグコントロールが使用できません: { $error }
+error-open-folder = フォルダーを開けませんでした
 error-open-manual = マニュアルをブラウザーで開けませんでした
 
 geometry = { $mode } · { $width }×{ $height }

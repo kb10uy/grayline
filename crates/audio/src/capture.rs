@@ -105,16 +105,12 @@ impl Capture {
 
     /// Starts or resumes delivery.
     pub fn resume(&self) -> Result<(), AudioError> {
-        self.stream
-            .play()
-            .map_err(|error| AudioError::Backend(error.to_string()))
+        self.stream.play().map_err(AudioError::backend)
     }
 
     /// Suspends delivery without closing the device.
     pub fn pause(&self) -> Result<(), AudioError> {
-        self.stream
-            .pause()
-            .map_err(|error| AudioError::Backend(error.to_string()))
+        self.stream.pause().map_err(AudioError::backend)
     }
 }
 
@@ -208,12 +204,7 @@ pub fn synthetic_capture(
     sample_rate_hz: u32,
     capacity_samples: usize,
 ) -> Result<(CaptureWriter, CaptureReader), AudioError> {
-    if capacity_samples == 0 {
-        return Err(AudioError::EmptyCapacity);
-    }
-    if sample_rate_hz < crate::MINIMUM_SAMPLE_RATE_HZ {
-        return Err(AudioError::UnsupportedConfiguration(format!("{sample_rate_hz} Hz")));
-    }
+    AudioError::check_queue(sample_rate_hz, capacity_samples)?;
     let (producer, consumer) = ringbuf::HeapRb::<f32>::new(capacity_samples).split();
     let dropped = Arc::new(AtomicU64::new(0));
     Ok((

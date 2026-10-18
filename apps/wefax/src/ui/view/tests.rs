@@ -15,7 +15,7 @@ use crate::{ui::menu, worker::receive::StripUpdate};
 fn render(app: &mut App) -> Harness<'_> {
     let mut harness = Harness::new_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     harness.run();
     harness
@@ -27,9 +27,9 @@ fn render(app: &mut App) -> Harness<'_> {
 fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
-    crate::install_fonts(&harness.ctx);
+    grayline_shell::fonts::install(&harness.ctx);
     harness.run_steps(8);
     harness
 }
@@ -37,7 +37,7 @@ fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
 fn render_sized(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     // Twice: the first frame measures each group, the second lays them out
     // against what it measured.

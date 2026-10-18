@@ -5,8 +5,6 @@
 //! are. Getting that convention wrong flips every character, which is why it
 //! is stated once here and pinned by the tests below.
 
-use crate::RttyError;
-
 /// The letters-case shift code.
 pub const LTRS: u8 = 0b11111;
 /// The figures-case shift code.
@@ -224,12 +222,11 @@ impl Ita2Encoder {
 
     /// Writes the codes one character needs, shift included, and returns how many.
     ///
-    /// Lowercase letters encode as their uppercase codes. An unmappable
-    /// character is an error carrying the character itself; the caller knows
-    /// where in its input it was.
-    pub fn encode(&mut self, character: char, out: &mut [u8; 3]) -> Result<usize, RttyError> {
-        let (code, target) = lookup(character.to_ascii_uppercase(), self.code_set)
-            .ok_or(RttyError::UnmappableCharacter { character, offset: 0 })?;
+    /// Lowercase letters encode as their uppercase codes. A character with no
+    /// code writes nothing and returns `None`, leaving the case where it was;
+    /// the caller knows where in its input the character was.
+    pub fn encode(&mut self, character: char, out: &mut [u8; 3]) -> Option<usize> {
+        let (code, target) = lookup(character.to_ascii_uppercase(), self.code_set)?;
         let mut written = 0;
         if let Some(target) = target
             && self.case != target
@@ -254,7 +251,7 @@ impl Ita2Encoder {
             // receiver stays in step.
             self.case = TxCase::Unknown;
         }
-        Ok(written)
+        Some(written)
     }
 
     /// Forgets the announced case, as the start of a transmission does.
@@ -435,16 +432,10 @@ mod tests {
     }
 
     #[test]
-    fn unmappable_characters_are_an_error() {
+    fn unmappable_characters_encode_to_nothing() {
         let mut encoder = Ita2Encoder::new(CodeSet::SBell, false, false);
         let mut out = [0; 3];
-        assert_eq!(
-            encoder.encode('%', &mut out).unwrap_err(),
-            RttyError::UnmappableCharacter {
-                character: '%',
-                offset: 0
-            }
-        );
+        assert_eq!(encoder.encode('%', &mut out), None);
         assert!(!Ita2Encoder::maps('%'));
     }
 

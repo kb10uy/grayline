@@ -13,7 +13,7 @@ The receive path — `grayline-dsp`, `grayline-sstv-fskid`, `grayline-sstv`, and
 uses neither channels nor randomness. Nothing in it reaches a facility
 `wasm32-unknown-unknown` lacks, so the crate adds no signal processing of its
 own and changes nothing in the core. It is a `wasm-bindgen` surface over
-[`ReceivePipeline`](../../../grayline-sstv-rx/src/pipeline.rs), which is the
+[`ReceivePipeline`](../../../crates/sstv-rx/src/pipeline.rs), which is the
 same wiring `gl-sstv decode` uses.
 
 `grayline-sstv-rx` is not itself `no_std`, and it does not need to be. Its
@@ -33,7 +33,8 @@ One object, fed and polled:
   The copy is one `memcpy` against a Hilbert transform and a filter bank per
   sample, so it is not worth avoiding.
 - `status()` returns a snapshot: mode name, state, completed rows, image size,
-  image revision, AFC offset, fitted raster rate, callsigns, and input level.
+  image revision, AFC offset, fitted raster rate, callsigns, input level, and
+  whether the stream is finished.
   It is a `wasm-bindgen` object and the caller frees it.
 - `image_rgba()` widens the decoder image to RGBA for `ImageData`.
 - `drain_log()` takes the event lines recorded since the last call.

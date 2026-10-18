@@ -13,7 +13,9 @@ use grayline_rtty::{
     rx::{AfcConfig, AtcDesign, ChannelLevels},
 };
 
-use crate::{error::AppError, worker::Waker};
+use grayline_shell::worker::{Snapshot, Waker};
+
+use crate::error::AppError;
 
 mod session;
 mod spectrum;
@@ -111,7 +113,7 @@ pub struct RxSnapshot {
 /// say what the one before said. Comparing this instead of the whole snapshot
 /// is what keeps the interface asleep between the observations worth showing.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct Visible {
+pub struct Visible {
     columns: Vec<VisibleColumn>,
     /// The frame the scope window would draw, which is a new picture every
     /// time whatever it shows.
@@ -162,44 +164,17 @@ fn quantize_signed(value: f32) -> i8 {
     (value.clamp(-1.0, 1.0) * 64.0) as i8
 }
 
-/// Single-slot handoff holding the newest observation.
-#[derive(Debug, Default)]
-pub(super) struct Mailbox {
-    slot: Mutex<Slot>,
-    waker: Waker,
-}
+pub(super) type Mailbox = grayline_shell::worker::Mailbox<RxSnapshot>;
 
-#[derive(Debug, Default)]
-struct Slot {
-    pending: Option<RxSnapshot>,
-    shown: Visible,
-}
+impl Snapshot for RxSnapshot {
+    type Visible = Visible;
 
-impl Mailbox {
-    pub(super) fn new(waker: Waker) -> Self {
-        Self {
-            slot: Mutex::new(Slot::default()),
-            waker,
-        }
+    fn visible(&self) -> Visible {
+        Visible::of(self)
     }
 
-    /// Replaces the pending snapshot, keeping payloads not yet collected.
-    pub(super) fn publish(&self, mut snapshot: RxSnapshot) {
-        let mut slot = self.slot.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(previous) = slot.pending.take() {
-            merge(&mut snapshot, previous);
-        }
-        let visible = Visible::of(&snapshot);
-        slot.pending = Some(snapshot);
-        if visible != slot.shown {
-            slot.shown = visible;
-            drop(slot);
-            self.waker.wake();
-        }
-    }
-
-    fn take(&self) -> Option<RxSnapshot> {
-        self.slot.lock().unwrap_or_else(PoisonError::into_inner).pending.take()
+    fn absorb(&mut self, previous: Self) {
+        merge(self, previous);
     }
 }
 

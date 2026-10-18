@@ -33,10 +33,10 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
             let id = Id::new(["station-callsign", "station-name", "station-qth", "station-grid"][index]);
             crate::ui::input::sanitize(ui.ctx(), id);
             let target = match index {
-                0 => &mut app.station.callsign,
-                1 => &mut app.station.name,
-                2 => &mut app.station.qth,
-                _ => &mut app.station.grid,
+                0 => &mut app.settings.station.callsign,
+                1 => &mut app.settings.station.name,
+                2 => &mut app.settings.station.qth,
+                _ => &mut app.settings.station.grid,
             };
             ui.horizontal(|ui| {
                 field_label(ui, label);
@@ -143,7 +143,7 @@ fn custom_fields(ui: &mut Ui, app: &mut App) -> (bool, Option<usize>) {
 /// above: this is about the station on the air right now, which is what that
 /// panel is for, while Settings holds what is set once and then left alone.
 pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
-    if !app.contact_dialog_open {
+    if !app.directory.dialog_open {
         return;
     }
 
@@ -154,7 +154,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let add = app.i18n.text("contact-add");
     let refresh = app.i18n.text("contact-refresh");
     let close = app.i18n.text("station-close");
-    let callsign = app.contact_snapshot.callsign.clone();
+    let callsign = app.directory.snapshot.callsign.clone();
     let state = contact_state(app);
     // Resolved before the rows are borrowed for editing, because a label comes
     // from the catalogue and the catalogue lives on the same interface. A key
@@ -162,7 +162,8 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     // name: the field list is the operator's to write, and a key they invented
     // is one no catalogue was ever going to know.
     let labels: Vec<String> = app
-        .contact_draft
+        .directory
+        .draft
         .iter()
         .map(|row| {
             app.i18n
@@ -194,7 +195,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
 
         egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
             let mut headed = false;
-            for (index, row) in app.contact_draft.iter_mut().enumerate() {
+            for (index, row) in app.directory.draft.iter_mut().enumerate() {
                 // No keyboard filter on any of these, unlike every other field
                 // whose contents can reach the air. The store is the family's
                 // rather than this application's: a name in kanji is a good
@@ -256,7 +257,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         app.add_contact_field();
     }
     if let Some(index) = removed {
-        app.contact_draft.remove(index);
+        app.directory.draft.remove(index);
         changed = true;
     }
     let closing = done || response.should_close();
@@ -270,24 +271,24 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         app.refresh_contact();
     }
     if closing || refreshing {
-        app.contact_dialog_open = false;
+        app.directory.dialog_open = false;
     }
 }
 
 fn contact_state(app: &App) -> Option<String> {
-    if let Some(error) = &app.contact_snapshot.error {
+    if let Some(error) = &app.directory.snapshot.error {
         return Some(app.i18n.text_with(
             "contact-state-failed",
             &[("detail", grayline_shell::i18n::owned(error.to_string()))],
         ));
     }
-    match app.contact_snapshot.state {
+    match app.directory.snapshot.state {
         ContactState::Looking => Some(app.i18n.text("contact-state-looking")),
         ContactState::Unknown => Some(app.i18n.text_with(
             "contact-state-unknown",
             &[(
                 "callsign",
-                grayline_shell::i18n::owned(app.contact_snapshot.callsign.clone()),
+                grayline_shell::i18n::owned(app.directory.snapshot.callsign.clone()),
             )],
         )),
         ContactState::Idle | ContactState::Known | ContactState::Failed => None,

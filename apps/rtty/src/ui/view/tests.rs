@@ -15,7 +15,7 @@ use crate::{
 fn render(app: &mut App) -> Harness<'_> {
     let mut harness = Harness::new_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     harness.run();
     harness
@@ -24,7 +24,7 @@ fn render(app: &mut App) -> Harness<'_> {
 fn render_sized(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     harness.run();
     harness
@@ -369,8 +369,10 @@ fn the_stack_lines_its_messages_up_on_one_left_edge(#[case] locale: Locale) {
 fn sending(app: &mut App) {
     let text = "CQ CQ DE JL1HIS";
     let schedule = grayline_rtty::TxSchedule::new(text, 48_000, &app.tx_config()).unwrap();
-    app.transmit
-        .begin(crate::app::transmit::Sending::new(text.to_owned(), schedule));
+    app.transmit.begin(
+        crate::app::transmit::Sending::new(text.to_owned(), schedule),
+        crate::worker::transmit::Output::scripted(crate::worker::transmit::TxPhase::Producing),
+    );
     app.transmit.queue("SECOND MESSAGE".to_owned());
 }
 
@@ -409,7 +411,7 @@ fn the_station_window_opens_from_the_menu(#[case] locale: Locale) {
 fn the_settings_menu_names_the_station_window() {
     let app = App::headless();
     let model = menu::model(&app);
-    let items = menu::flatten(&model);
+    let items = grayline_shell::menu::flatten(&model);
     assert!(
         items.iter().any(|item| matches!(
             item,
@@ -428,7 +430,7 @@ fn the_settings_menu_names_the_station_window() {
 fn the_extra_fields_are_edited_in_the_station_window(#[case] locale: Locale) {
     let mut app = App::headless();
     app.select_locale(locale);
-    app.custom_variables = std::collections::BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = std::collections::BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
     let i18n = I18n::new(locale, &crate::locales::CATALOG);
 
     menu::apply(&mut app, menu::Action::ShowStation);
@@ -475,7 +477,7 @@ fn the_contact_window_shows_the_fields_the_settings_ask_for(#[case] locale: Loca
 #[test]
 fn a_field_no_catalogue_knows_stands_under_its_own_name() {
     let mut app = App::headless();
-    app.contact_settings.fields = vec!["club".to_owned()];
+    app.settings.contact.fields = vec!["club".to_owned()];
     app.contact.callsign = "JA1ABC".to_owned();
     app.open_contact();
 
@@ -488,7 +490,7 @@ fn a_field_no_catalogue_knows_stands_under_its_own_name() {
 fn the_settings_menu_carries_the_directory() {
     let app = App::headless();
     let model = menu::model(&app);
-    let items = menu::flatten(&model);
+    let items = grayline_shell::menu::flatten(&model);
     assert!(
         items.iter().any(|item| matches!(
             item,

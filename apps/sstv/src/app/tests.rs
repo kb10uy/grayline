@@ -2,23 +2,38 @@
 
 use std::{
     cell::RefCell,
+    fs,
     path::Path,
     rc::Rc,
     time::{Duration, Instant},
 };
 
+use grayline_qso::{ContactPaths, ContactSnapshot, ContactState};
+use grayline_shell::paths::Roots;
 use grayline_sstv::image::Rgb8;
 use rstest::rstest;
+use tempfile::TempDir;
 
 use super::*;
-use crate::test_util::refused_port;
 use crate::{
-    test_util::TempDir,
+    test_util::refused_port,
     worker::{
-        contact::{ContactPaths, ContactState},
         receive::{Frame, HistoryCandidate, RxSnapshot},
+        transmit::TxPhase,
     },
 };
+
+fn sending(phase: TxPhase) -> Outgoing {
+    let mut outgoing = Outgoing::new(1.0);
+    outgoing.begin_for_test(Kind::Picture, phase);
+    outgoing
+}
+
+fn ended(ending: Ending) -> Outgoing {
+    let mut outgoing = sending(TxPhase::Producing);
+    outgoing.end(&ending, None);
+    outgoing
+}
 
 fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     let config = Config::load(paths.config_file());
@@ -27,7 +42,7 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     // file, and a run that could not reach it would not be restoring them.
     let common = CommonConfig::load(paths.config_dir().join(grayline_shell::common::COMMON_FILE));
     let mut app = App::from_parts(
-        AudioState::disconnected(),
+        AudioState::disconnected(rx_settings(&Settings::default())),
         paths,
         Stored { config, common },
         settings,
@@ -35,17 +50,13 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
         Waker::default(),
         Box::new(grayline_shell::platform::QuietPlatform),
     );
-    app.saved = app.settings();
+    app.sync_settings();
+    app.saved = app.settings.clone();
     app
 }
 
 fn library(root: &TempDir) -> AppPaths {
-    let paths = AppPaths::from_roots(
-        root.path().join("config"),
-        root.path().join("data"),
-        root.path().join("pictures"),
-        root.path().join("state"),
-    );
+    let paths = AppPaths::from_roots(Roots::under(root.path()));
     paths.initialize().unwrap();
     fs::write(paths.templates_dir().join("alpha.kdl"), "").unwrap();
     fs::write(paths.templates_dir().join("beta.kdl"), "").unwrap();
@@ -101,7 +112,7 @@ fn numbered(numbers: &[&str]) -> RxSnapshot {
 #[case(true, 1)]
 #[case(false, 0)]
 fn automatic_history_follows_its_setting(#[case] enabled: bool, #[case] expected_files: usize) {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     let received = paths.received_dir().to_owned();
     let settings = Settings {
@@ -133,7 +144,7 @@ fn automatic_history_follows_its_setting(#[case] enabled: bool, #[case] expected
 #[case(true)]
 #[case(false)]
 fn a_kept_reception_becomes_the_received_image(#[case] saving: bool) {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let settings = Settings {
         auto_history: saving,
         ..Settings::default()
@@ -170,7 +181,10 @@ fn a_reception_without_a_candidate_leaves_the_received_image_alone() {
     app.audio.set_snapshot(decoding(10, 100));
     app.poll_workers();
 
-    assert_eq!(*app.composition.received_image, test_pattern_image(app.rx_mode));
+    assert_eq!(
+        *app.composition.received_image,
+        test_pattern_image(app.settings.rx_mode)
+    );
 }
 
 #[test]
@@ -190,7 +204,7 @@ fn a_decoded_identifier_fills_the_qso_contact_field() {
 fn settled(app: &App) -> ContactSnapshot {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let snapshot = app.contact.latest();
+        let snapshot = app.directory.worker().latest();
         if snapshot.state != ContactState::Looking || Instant::now() > deadline {
             return snapshot;
         }
@@ -209,7 +223,7 @@ fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
     app.finish_qso_edit();
 
     assert_eq!(
-        app.contact.latest().state,
+        app.directory.worker().latest().state,
         ContactState::Unknown,
         "a second request would have put the worker back to looking"
     );
@@ -250,8 +264,8 @@ fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
-    assert_eq!(app.contact_paths.store, None);
-    assert_eq!(app.contact_paths.credentials, None);
+    assert_eq!(app.directory.paths().store, None);
+    assert_eq!(app.directory.paths().credentials, None);
 }
 
 /// The menu offers to write a credentials file, and a test that applies every
@@ -268,21 +282,16 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
     app.write_contact_credentials();
 
     assert!(app.notice.is_none());
-    assert!(app.library.error.is_none());
+    assert!(app.error.is_none());
 }
 
 #[test]
 fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let credentials = root.path().join("credentials.toml");
     let mut app = App::from_parts(
-        AudioState::disconnected(),
-        AppPaths::from_roots(
-            root.path().join("config"),
-            root.path().join("data"),
-            root.path().join("pictures"),
-            root.path().join("state"),
-        ),
+        AudioState::disconnected(rx_settings(&Settings::default())),
+        AppPaths::from_roots(Roots::under(root.path())),
         Stored {
             config: Config::detached(),
             common: CommonConfig::detached(),
@@ -312,7 +321,7 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
     app.qso.call = typed.to_owned();
     app.finish_qso_edit();
 
-    assert_eq!(app.contact.latest().state, ContactState::Idle);
+    assert_eq!(app.directory.worker().latest().state, ContactState::Idle);
 }
 
 /// The worker republishes every identifier it has decoded, so the same
@@ -361,18 +370,18 @@ fn an_identifier_after_a_restart_is_adopted_again() {
 #[test]
 fn sync_start_scope_follows_automatic_mode_detection() {
     let mut app = App::headless();
-    app.auto_mode = true;
+    app.settings.auto_mode = true;
     app.poll_workers();
-    assert_eq!(app.audio.sync_start(), SyncStart::Any);
+    assert_eq!(app.audio.rx_settings().sync_start, SyncStart::Any);
 
-    app.auto_mode = false;
+    app.settings.auto_mode = false;
     app.select_rx_mode(Mode::Scottie1);
     app.poll_workers();
-    assert_eq!(app.audio.sync_start(), SyncStart::Only(Mode::Scottie1));
+    assert_eq!(app.audio.rx_settings().sync_start, SyncStart::Only(Mode::Scottie1));
 
     app.select_rx_mode(Mode::Pd120);
     app.poll_workers();
-    assert_eq!(app.audio.sync_start(), SyncStart::Only(Mode::Pd120));
+    assert_eq!(app.audio.rx_settings().sync_start, SyncStart::Only(Mode::Pd120));
 }
 
 /// The FSKID alphabet includes the space, and an identifier that is only
@@ -393,32 +402,45 @@ fn a_rig_worker_exists_exactly_while_rig_control_is_switched_on() {
     let mut app = App::headless();
     assert!(app.rig_worker.is_none());
 
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.poll_rig();
     assert!(app.rig_worker.is_some());
 
-    app.rig.enabled = false;
+    app.settings.rig.enabled = false;
     app.poll_rig();
     assert!(app.rig_worker.is_none());
     assert_eq!(app.rig_snapshot.state, RigState::Disconnected);
 }
 
-/// The lead-in is time anything sent into the rig is lost, so a keyed
-/// transmission has to wait out the rig before any audio leaves.
-#[rstest]
-#[case::nothing_was_keyed(false, RigState::Receiving, true)]
-#[case::still_switching_over(true, RigState::Receiving, false)]
-#[case::keyed_and_settled(true, RigState::Transmitting, true)]
-fn audio_waits_until_the_rig_says_it_is_transmitting(
-    #[case] keyed: bool,
-    #[case] state: RigState,
-    #[case] expected: bool,
-) {
+#[test]
+fn switching_rig_control_off_mid_transmission_gives_the_keying_back() {
     let mut app = App::headless();
-    app.rig_keyed = keyed;
-    app.rig_snapshot.state = state;
+    app.settings.rig.enabled = true;
+    app.poll_rig();
+    app.outgoing = sending(TxPhase::Producing);
+    app.outgoing.key_for_test();
 
-    assert_eq!(app.rig_ready_to_send(), expected);
+    app.settings.rig.enabled = false;
+    app.poll_rig();
+
+    assert!(app.outgoing.is_active());
+    assert!(!app.outgoing.is_keyed());
+}
+
+#[test]
+fn a_failed_transmission_reports_why_and_gives_the_rig_back() {
+    let mut app = App::headless();
+    app.outgoing = sending(TxPhase::Producing);
+    app.outgoing.key_for_test();
+    app.poll_workers();
+    assert!(app.audio.is_muted_for_transmit());
+
+    app.end_transmission(Ending::Failed("broken".to_owned()));
+    app.poll_workers();
+
+    assert_eq!(app.tx_error.as_deref(), Some("broken"));
+    assert!(!app.outgoing.is_keyed());
+    assert!(!app.audio.is_muted_for_transmit());
 }
 
 /// Transmitting into a rig that was asked to key and did not is a
@@ -436,7 +458,7 @@ fn rig_control_that_is_not_ready_stops_a_transmission(
     #[case] blocked: bool,
 ) {
     let mut app = App::headless();
-    app.rig.enabled = enabled;
+    app.settings.rig.enabled = enabled;
     app.rig_snapshot.state = state;
 
     assert_eq!(app.rig_problem().is_some(), blocked);
@@ -445,7 +467,7 @@ fn rig_control_that_is_not_ready_stops_a_transmission(
 #[test]
 fn a_rig_failure_is_reported_in_the_rig_s_own_words() {
     let mut app = App::headless();
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Failed;
     app.rig_snapshot.error = Some(refused_port());
 
@@ -455,7 +477,7 @@ fn a_rig_failure_is_reported_in_the_rig_s_own_words() {
 }
 
 fn tuned_to(app: &mut App, frequency_hz: u64) {
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Receiving;
     app.rig_snapshot.reading = Some(Reading {
         frequency_hz,
@@ -541,7 +563,7 @@ fn the_manual_opens_at_this_application_s_own_address() {
     app.open_manual();
 
     assert_eq!(browser.0.take(), vec![crate::identity::MANUAL_URL.to_owned()]);
-    assert_eq!(app.library.error, None);
+    assert_eq!(app.error, None);
 }
 
 #[test]
@@ -577,18 +599,15 @@ fn an_unchanged_activity_is_not_reported_again() {
 }
 
 #[rstest]
-#[case(TxPhase::Priming, Activity::Transmitting)]
-#[case(TxPhase::Producing, Activity::Transmitting)]
-#[case(TxPhase::Draining, Activity::Transmitting)]
-#[case(TxPhase::Complete, Activity::Receiving)]
-#[case(TxPhase::Cancelled, Activity::Receiving)]
-fn a_transmission_outranks_a_reception(#[case] phase: TxPhase, #[case] expected: Activity) {
+#[case(sending(TxPhase::Priming), Activity::Transmitting)]
+#[case(sending(TxPhase::Producing), Activity::Transmitting)]
+#[case(sending(TxPhase::Draining), Activity::Transmitting)]
+#[case(ended(Ending::Complete), Activity::Receiving)]
+#[case(ended(Ending::Cancelled), Activity::Receiving)]
+fn a_transmission_outranks_a_reception(#[case] outgoing: Outgoing, #[case] expected: Activity) {
     let mut app = App::headless();
     app.audio.set_snapshot(decoding(40, 100));
-    app.tx_snapshot = TxSnapshot {
-        phase,
-        ..TxSnapshot::default()
-    };
+    app.outgoing = outgoing;
 
     app.poll_workers();
 
@@ -596,18 +615,15 @@ fn a_transmission_outranks_a_reception(#[case] phase: TxPhase, #[case] expected:
 }
 
 #[rstest]
-#[case(TxPhase::Priming, true)]
-#[case(TxPhase::Producing, true)]
-#[case(TxPhase::Draining, true)]
-#[case(TxPhase::Complete, false)]
-#[case(TxPhase::Cancelled, false)]
-#[case(TxPhase::Failed, false)]
-fn reception_is_muted_for_as_long_as_a_transmission_runs(#[case] phase: TxPhase, #[case] expected: bool) {
+#[case(sending(TxPhase::Priming), true)]
+#[case(sending(TxPhase::Producing), true)]
+#[case(sending(TxPhase::Draining), true)]
+#[case(ended(Ending::Complete), false)]
+#[case(ended(Ending::Cancelled), false)]
+#[case(ended(Ending::Failed("broken".to_owned())), false)]
+fn reception_is_muted_for_as_long_as_a_transmission_runs(#[case] outgoing: Outgoing, #[case] expected: bool) {
     let mut app = App::headless();
-    app.tx_snapshot = TxSnapshot {
-        phase,
-        ..TxSnapshot::default()
-    };
+    app.outgoing = outgoing;
 
     app.poll_workers();
 
@@ -665,7 +681,7 @@ fn a_tune_tone_needs_only_an_output_device() {
 #[test]
 fn a_tone_and_a_picture_refuse_each_other() {
     let mut app = App::headless();
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing = sending(TxPhase::Producing);
 
     assert_eq!(app.tune_problem(), Some(app.i18n.text("error-transmit-active")));
 
@@ -678,13 +694,21 @@ fn a_tone_and_a_picture_refuse_each_other() {
 #[test]
 fn a_tune_tone_stops_itself_once_its_time_is_up() {
     let mut app = App::headless();
-    app.tune_for_test();
-    app.tune_until = Some(Instant::now() - Duration::from_millis(1));
+    app.outgoing.begin_for_test(
+        Kind::Tune {
+            until: Instant::now() - Duration::from_millis(1),
+        },
+        TxPhase::Producing,
+    );
+    app.outgoing.key_for_test();
 
-    app.poll_transmit();
+    app.poll_workers();
 
     assert!(!app.is_tuning());
-    assert_eq!(app.tx_snapshot.phase, TxPhase::Complete);
+    assert!(!app.outgoing.is_keyed());
+    assert!(!app.audio.is_muted_for_transmit());
+    assert!(app.outgoing.is_complete());
+    assert_eq!(app.tx_progress(), TxProgress::Complete);
 }
 
 #[test]
@@ -695,7 +719,8 @@ fn stopping_a_tune_tone_ends_the_transmission() {
     app.stop_tune();
 
     assert!(!app.is_tuning());
-    assert_eq!(app.tx_snapshot.phase, TxPhase::Cancelled);
+    assert!(!app.outgoing.is_active());
+    assert!(!app.outgoing.is_complete());
 }
 
 #[test]
@@ -725,7 +750,7 @@ fn waiting_receiver_keeps_the_retained_frame_fraction() {
 fn selecting_a_mode_replaces_the_raster() {
     let mut app = App::headless();
     app.select_rx_mode(Mode::Robot36);
-    assert_eq!(app.rx_mode, Mode::Robot36);
+    assert_eq!(app.settings.rx_mode, Mode::Robot36);
     assert_eq!(app.rx_raster.size().width(), Mode::Robot36.spec().width() as usize);
     assert_eq!(app.rx_raster.size().height(), Mode::Robot36.spec().height() as usize);
 }
@@ -737,9 +762,9 @@ fn selecting_a_mode_replaces_the_raster() {
 fn dsp_toggles_flip_one_flag(#[case] dsp: Dsp, #[case] expected: bool) {
     let mut app = App::headless();
     app.toggle_dsp(dsp);
-    assert_eq!(app.dsp.get(dsp), expected);
+    assert_eq!(app.settings.dsp.get(dsp), expected);
     if dsp == Dsp::Slant {
-        assert_eq!(app.audio.live_slant(), expected);
+        assert_eq!(app.audio.rx_settings().live_slant, expected);
     }
 }
 
@@ -769,7 +794,7 @@ fn an_unusable_custom_variable_name_is_kept_out_of_the_composition() {
     app.commit_custom_variables();
 
     assert_eq!(
-        app.custom_variables,
+        app.settings.custom_variables,
         BTreeMap::from([("club".to_owned(), "JARL".to_owned())])
     );
     assert_eq!(app.variables_draft.len(), 2);
@@ -778,40 +803,40 @@ fn an_unusable_custom_variable_name_is_kept_out_of_the_composition() {
 #[test]
 fn slant_is_enabled_by_default_in_the_ui_and_worker_settings() {
     let app = App::headless();
-    assert!(app.dsp.live_slant);
-    assert!(app.audio.live_slant());
+    assert!(app.settings.dsp.live_slant);
+    assert!(app.audio.rx_settings().live_slant);
 }
 
 #[test]
 fn the_vis_restart_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
-    assert!(app.vis_restart);
-    assert!(app.audio.vis_restart());
+    assert!(app.settings.vis_restart);
+    assert!(app.audio.rx_settings().vis_restart);
 
     app.set_vis_restart(false);
 
-    assert!(!app.audio.vis_restart());
+    assert!(!app.audio.rx_settings().vis_restart);
 }
 
 #[test]
 fn the_vis_strict_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
-    assert!(!app.vis_strict);
-    assert!(!app.audio.vis_strict());
+    assert!(!app.settings.vis_strict);
+    assert!(!app.audio.rx_settings().vis_strict);
 
     app.set_vis_strict(true);
 
-    assert!(app.audio.vis_strict());
+    assert!(app.audio.rx_settings().vis_strict);
 }
 
 #[test]
 fn the_identifier_setting_decides_only_whether_the_callsign_is_sent() {
     let mut app = App::headless();
     app.station.callsign = "!".to_owned();
-    assert!(app.send_fskid);
+    assert!(app.settings.send_fskid);
     assert!(matches!(app.station_id(), Some(Err(_))));
 
-    app.send_fskid = false;
+    app.settings.send_fskid = false;
 
     assert!(app.station_id().is_none());
     let problem = app.transmit_problem().expect("an unusable callsign");
@@ -832,7 +857,8 @@ fn station_details_are_kept_and_normalized() {
     app.normalize_station();
 
     assert_eq!(app.station.callsign, "JA1ABC");
-    let settings = app.settings();
+    app.sync_settings();
+    let settings = app.settings.clone();
     assert_eq!(settings.station_callsign, "JA1ABC");
     assert_eq!(settings.station_qth, "Chiyoda, Tokyo");
     assert_eq!(settings.station_grid, "PM95uq");
@@ -861,7 +887,10 @@ fn custom_variables_are_kept_exactly_as_they_were_entered() {
 
     app.commit_custom_variables();
 
-    assert_eq!(app.custom_variables.get("club").map(String::as_str), Some("  JARL  "));
+    assert_eq!(
+        app.settings.custom_variables.get("club").map(String::as_str),
+        Some("  JARL  ")
+    );
 }
 
 #[test]
@@ -900,7 +929,8 @@ fn a_serial_that_is_not_a_number_is_left_alone() {
 fn the_serial_number_is_reset_and_kept() {
     let mut app = App::headless();
     app.qso.number = "042".to_owned();
-    assert_eq!(app.settings().qso_number, "042");
+    app.sync_settings();
+    assert_eq!(app.settings.qso_number, "042");
 
     app.reset_number();
     assert_eq!(app.qso.number, FIRST_QSO_NUMBER);
@@ -915,7 +945,7 @@ fn the_serial_number_is_reset_and_kept() {
 #[case("123456789", None)]
 fn the_contest_number_is_sent_as_the_record_can_hold_it(#[case] typed: &str, #[case] expected: Option<&str>) {
     let mut app = App::headless();
-    app.contest_mode = true;
+    app.settings.contest_mode = true;
     app.qso.number = typed.to_owned();
 
     let number = app.contest_number();
@@ -928,7 +958,7 @@ fn no_contest_number_is_sent_outside_contest_mode() {
     let mut app = App::headless();
     app.qso.number = "001".to_owned();
 
-    assert!(!app.contest_mode);
+    assert!(!app.settings.contest_mode);
     assert_eq!(app.contest_number(), None);
 }
 
@@ -980,7 +1010,7 @@ fn locale_switching_replaces_the_bundle() {
 
 #[test]
 fn changed_settings_are_written_and_restored_on_the_next_start() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
 
     let mut app = disconnected(paths.clone(), &Settings::default());
@@ -988,9 +1018,9 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
     app.select_locale(Locale::Ja);
     app.select_rx_mode(Mode::Robot36);
     app.toggle_dsp(Dsp::Lms);
-    app.auto_mode = false;
-    app.auto_history = false;
-    app.history_format = crate::storage::history::HistoryFormat::Jpeg;
+    app.settings.auto_mode = false;
+    app.settings.auto_history = false;
+    app.settings.history_format = crate::storage::history::HistoryFormat::Jpeg;
     app.select_tx_mode(Mode::Martin1);
     app.station.callsign = "JA1ABC".to_owned();
     app.library.template = Some(1);
@@ -1004,12 +1034,15 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
     next.restore_selection(&restored);
 
     assert_eq!(next.i18n.locale(), Locale::Ja);
-    assert_eq!(next.rx_mode, Mode::Robot36);
-    assert_eq!(next.tx_mode, Mode::Martin1);
-    assert!(next.dsp.lms_filter);
-    assert!(!next.auto_mode);
-    assert!(!next.auto_history);
-    assert_eq!(next.history_format, crate::storage::history::HistoryFormat::Jpeg);
+    assert_eq!(next.settings.rx_mode, Mode::Robot36);
+    assert_eq!(next.settings.tx_mode, Mode::Martin1);
+    assert!(next.settings.dsp.lms_filter);
+    assert!(!next.settings.auto_mode);
+    assert!(!next.settings.auto_history);
+    assert_eq!(
+        next.settings.history_format,
+        crate::storage::history::HistoryFormat::Jpeg
+    );
     assert_eq!(next.station.callsign, "JA1ABC");
     assert_eq!(next.library.templates[next.library.template.unwrap()].name, "beta.kdl");
     assert_eq!(next.library.stocks[next.library.stock.unwrap()].name, "second.png");
@@ -1017,7 +1050,7 @@ fn changed_settings_are_written_and_restored_on_the_next_start() {
 
 #[test]
 fn a_stored_selection_that_disappeared_falls_back_to_the_first_entry() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     let settings = Settings {
         template: Some("gone.kdl".to_owned()),
@@ -1033,12 +1066,13 @@ fn a_stored_selection_that_disappeared_falls_back_to_the_first_entry() {
 
 #[test]
 fn transient_state_is_not_written_to_the_configuration_file() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
 
     let mut app = disconnected(paths.clone(), &Settings::default());
     app.refresh_library();
-    app.saved = app.settings();
+    app.sync_settings();
+    app.saved = app.settings.clone();
     app.tab = Tab::Transmit;
     app.qso.call = "JA1XYZ".to_owned();
     app.poll_workers();
@@ -1049,12 +1083,13 @@ fn transient_state_is_not_written_to_the_configuration_file() {
 
 #[test]
 fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
 
     let mut app = disconnected(paths.clone(), &Settings::default());
     app.refresh_library();
-    app.saved = app.settings();
+    app.sync_settings();
+    app.saved = app.settings.clone();
     app.select_locale(Locale::Ja);
     app.persist();
     let written = fs::metadata(paths.config_file()).unwrap().modified().unwrap();
@@ -1067,13 +1102,8 @@ fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
 
 #[test]
 fn library_refresh_lists_matching_files_and_preserves_selection() {
-    let root = TempDir::new();
-    let paths = AppPaths::from_roots(
-        root.path().join("config"),
-        root.path().join("data"),
-        root.path().join("pictures"),
-        root.path().join("state"),
-    );
+    let root = TempDir::new().unwrap();
+    let paths = AppPaths::from_roots(Roots::under(root.path()));
     paths.initialize().unwrap();
     fs::write(paths.templates_dir().join("beta.kdl"), "").unwrap();
     fs::write(paths.templates_dir().join("alpha.KDL"), "").unwrap();
@@ -1101,7 +1131,7 @@ fn library_refresh_lists_matching_files_and_preserves_selection() {
 
     app.library.template = Some(1);
     fs::write(paths.templates_dir().join("aardvark.kdl"), "").unwrap();
-    app.refresh_templates();
+    app.start_library_scan();
     app.wait_for_library_scan();
 
     assert_eq!(
@@ -1151,7 +1181,7 @@ fn center(frame: &RgbImage) -> Rgb8 {
 
 #[test]
 fn a_composed_image_becomes_the_transmit_image() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     fs::write(
         paths.templates_dir().join("alpha.kdl"),
@@ -1172,14 +1202,20 @@ size width=(fw)100 height=(fh)100 fit="stretch"
 
     composed(&mut app);
 
-    assert_eq!(app.tx_raster.size().width(), app.tx_mode.spec().width() as usize);
-    assert_eq!(app.tx_raster.size().height(), app.tx_mode.spec().height() as usize);
+    assert_eq!(
+        app.tx_raster.size().width(),
+        app.settings.tx_mode.spec().width() as usize
+    );
+    assert_eq!(
+        app.tx_raster.size().height(),
+        app.settings.tx_mode.spec().height() as usize
+    );
     assert!(app.transmit_problem().is_none() || app.audio.output_device.is_none());
 }
 
 #[test]
 fn a_kept_reception_reaches_the_transmit_image() {
-    let root = TempDir::new();
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     fs::write(
         paths.templates_dir().join("alpha.kdl"),
@@ -1218,9 +1254,12 @@ size width=(fw)100 height=(fh)100 fit="stretch"
     assert_eq!(frame.pixels().first(), Some(&Rgb8::new(200, 10, 20)));
 }
 
-#[test]
-fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
-    let root = TempDir::new();
+#[rstest]
+#[case::stopped(None)]
+#[case::complete(Some(Ending::Complete))]
+#[case::failed(Some(Ending::Failed("broken".to_owned())))]
+fn a_selection_during_a_transmission_takes_effect_when_it_ends(#[case] ending: Option<Ending>) {
+    let root = TempDir::new().unwrap();
     let paths = library(&root);
     image::RgbImage::from_pixel(8, 6, image::Rgb([200, 30, 30]))
         .save(paths.stocks_dir().join("first.png"))
@@ -1234,14 +1273,17 @@ fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
     let first = composed(&mut app);
     assert!(center(&first).r > center(&first).g);
 
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing = sending(TxPhase::Producing);
     app.library.stock = Some(1);
     app.stock_changed();
 
     app.poll_workers();
     assert_eq!(app.composition.frame.as_deref(), Some(first.as_ref()));
 
-    app.stop_transmit();
+    match ending {
+        Some(ending) => app.end_transmission(ending),
+        None => app.stop_transmit(),
+    }
 
     let second = composed(&mut app);
     assert!(center(&second).g > center(&second).r);
@@ -1263,7 +1305,7 @@ fn a_running_tone_schedules_frames() {
 #[test]
 fn the_shortest_interval_wins() {
     let mut app = App::headless();
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     assert_eq!(app.repaint_after(), Some(WATCH_INTERVAL));
 
     app.tune_for_test();
@@ -1275,9 +1317,9 @@ fn a_written_file_reports_as_a_notice_rather_than_a_failure() {
     let mut app = App::headless();
     app.report_written(Ok(std::path::PathBuf::from("rig.lua")));
     assert!(app.notice.is_some());
-    assert!(app.library.error.is_none());
+    assert!(app.error.is_none());
 
     app.report_written(Err(std::io::Error::other("disk full")));
     assert!(app.notice.is_none());
-    assert_eq!(app.library.error.as_deref(), Some("disk full"));
+    assert_eq!(app.error.as_deref(), Some("disk full"));
 }
