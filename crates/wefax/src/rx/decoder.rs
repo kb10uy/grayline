@@ -2,7 +2,7 @@ use alloc::collections::VecDeque;
 
 use crate::{
     error::WefaxError,
-    format::{Format, Ioc, WefaxBand},
+    format::{Format, Ioc},
     image::GrayRaster,
     rx::{
         apt::AptEvent,
@@ -199,11 +199,6 @@ impl WefaxDecoder {
             reason,
         };
         self.events.push_back(RxEvent::Stopped { reason });
-    }
-
-    /// Changes the shift the gray scale is read against.
-    pub const fn set_band(&mut self, band: WefaxBand) {
-        self.config.band = band;
     }
 
     /// Sets whether black and white are the other way round.
@@ -674,7 +669,7 @@ impl SampleWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::format::{LinesPerMinute, PHASING_WHITE_FRACTION};
+    use crate::format::{LinesPerMinute, PHASING_WHITE_FRACTION, WefaxBand};
     use alloc::{vec, vec::Vec};
     use rstest::rstest;
 

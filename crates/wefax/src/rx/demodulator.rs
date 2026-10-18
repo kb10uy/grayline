@@ -109,11 +109,6 @@ impl Demodulator {
         self.band
     }
 
-    /// Changes the shift the gray scale is read against.
-    pub const fn set_band(&mut self, band: WefaxBand) {
-        self.band = band;
-    }
-
     /// Returns how strongly each framing tone is currently present.
     pub fn apt_strengths(&self) -> AptStrengths {
         self.apt.strengths()
