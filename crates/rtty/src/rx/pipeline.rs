@@ -121,11 +121,15 @@ impl ReceivePipeline {
     }
 
     /// Demodulates and decodes one packet of normalized mono PCM.
+    ///
+    /// A packet holding a sample that is not finite is refused whole, before
+    /// any stage has seen it or any event was reported, so the receiver is
+    /// left as if it had never arrived.
     pub fn process(&mut self, samples: &[f32], mut on_event: impl FnMut(&RxEvent)) -> Result<(), RttyError> {
-        for (index, &sample) in samples.iter().enumerate() {
-            if !sample.is_finite() {
-                return Err(RttyError::NonFiniteSample { index });
-            }
+        if let Some(index) = samples.iter().position(|sample| !sample.is_finite()) {
+            return Err(RttyError::NonFiniteSample { index });
+        }
+        for &sample in samples {
             let input = f64::from(sample);
             self.run_afc(input, &mut on_event)?;
             let output = self.front_end.process(input);
@@ -297,6 +301,8 @@ mod tests {
     use alloc::vec::Vec;
     use core::f64::consts::TAU;
 
+    use rstest::rstest;
+
     use super::*;
     use crate::params::ToneSet;
 
@@ -314,6 +320,33 @@ mod tests {
             .process(&tone(frequency_hz, RATE as usize / 4), |_| {})
             .unwrap();
         pipeline
+    }
+
+    #[rstest]
+    #[case(0)]
+    #[case(500)]
+    #[case(999)]
+    fn a_refused_packet_leaves_the_receiver_as_it_was(#[case] bad: usize) {
+        let samples = tone(ToneSet::AFSK_170.mark_hz, 4_000);
+        let mut packet = samples[1_000..2_000].to_vec();
+        packet[bad] = f32::NAN;
+        let mut tested = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
+        let mut control = ReceivePipeline::new(RATE, RxConfig::default()).unwrap();
+        tested.process(&samples[..1_000], |_| {}).unwrap();
+        control.process(&samples[..1_000], |_| {}).unwrap();
+
+        let mut refused = Vec::new();
+        assert!(tested.process(&packet, |event| refused.push(*event)).is_err());
+        assert!(refused.is_empty());
+
+        let mut resumed = Vec::new();
+        let mut expected = Vec::new();
+        tested.process(&samples[1_000..], |event| resumed.push(*event)).unwrap();
+        control
+            .process(&samples[1_000..], |event| expected.push(*event))
+            .unwrap();
+        assert_eq!(resumed, expected);
+        assert_eq!(tested.channels(), control.channels());
     }
 
     #[test]
