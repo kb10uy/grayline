@@ -9,7 +9,7 @@ use std::{
 use grayline_audio::CaptureReader;
 use grayline_wefax::{Format, RxConfig, WefaxBand, rx::RxState};
 
-use grayline_shell::worker::Waker;
+use grayline_shell::worker::{Snapshot, Waker};
 
 use crate::error::AppError;
 
@@ -145,7 +145,7 @@ pub struct RxSnapshot {
 /// say what the one before said. Comparing this instead of the whole snapshot
 /// is what keeps the interface asleep between the observations worth showing.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct Visible {
+pub struct Visible {
     progress: RxProgress,
     format: Option<Format>,
     has_strip: bool,
@@ -175,44 +175,17 @@ fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 64.0) as u8
 }
 
-/// Single-slot handoff holding the newest observation.
-#[derive(Debug, Default)]
-pub(super) struct Mailbox {
-    slot: Mutex<Slot>,
-    waker: Waker,
-}
+pub(super) type Mailbox = grayline_shell::worker::Mailbox<RxSnapshot>;
 
-#[derive(Debug, Default)]
-struct Slot {
-    pending: Option<RxSnapshot>,
-    shown: Visible,
-}
+impl Snapshot for RxSnapshot {
+    type Visible = Visible;
 
-impl Mailbox {
-    pub(super) fn new(waker: Waker) -> Self {
-        Self {
-            slot: Mutex::new(Slot::default()),
-            waker,
-        }
+    fn visible(&self) -> Visible {
+        Visible::of(self)
     }
 
-    /// Replaces the pending snapshot, keeping payloads not yet collected.
-    pub(super) fn publish(&self, mut snapshot: RxSnapshot) {
-        let mut slot = self.slot.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(previous) = slot.pending.take() {
-            merge(&mut snapshot, previous);
-        }
-        let visible = Visible::of(&snapshot);
-        slot.pending = Some(snapshot);
-        if visible != slot.shown {
-            slot.shown = visible;
-            drop(slot);
-            self.waker.wake();
-        }
-    }
-
-    fn take(&self) -> Option<RxSnapshot> {
-        self.slot.lock().unwrap_or_else(PoisonError::into_inner).pending.take()
+    fn absorb(&mut self, previous: Self) {
+        merge(self, previous);
     }
 }
 

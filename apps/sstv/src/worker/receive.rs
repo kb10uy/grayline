@@ -13,7 +13,7 @@ use grayline_sstv::{
 };
 use grayline_sstv_rx::SyncStart;
 
-use grayline_shell::worker::Waker;
+use grayline_shell::worker::{Snapshot, Waker};
 
 use crate::{error::AppError, worker::receive::session::run};
 
@@ -124,7 +124,7 @@ pub struct RxSnapshot {
 /// showing, so the decoded fraction is quantized to the steps the scan
 /// boundary can be seen to move in rather than compared exactly.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct Visible {
+pub struct Visible {
     mode: Option<Mode>,
     progress: RxProgress,
     has_frame: bool,
@@ -156,60 +156,25 @@ fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 128.0) as u8
 }
 
-/// Single-slot handoff holding the newest observation.
-///
-/// The interface only ever uses the newest snapshot, so the worker overwrites
-/// the slot instead of queueing. This bounds the handoff by construction: an
-/// interface that stops polling cannot make the worker accumulate frames.
-#[derive(Debug, Default)]
-pub(super) struct Mailbox {
-    slot: Mutex<Slot>,
-    waker: Waker,
-}
+pub(super) type Mailbox = grayline_shell::worker::Mailbox<RxSnapshot>;
 
-#[derive(Debug, Default)]
-struct Slot {
-    pending: Option<RxSnapshot>,
-    shown: Visible,
-}
+impl Snapshot for RxSnapshot {
+    type Visible = Visible;
 
-impl Mailbox {
-    pub(super) fn new(waker: Waker) -> Self {
-        Self {
-            slot: Mutex::new(Slot::default()),
-            waker,
-        }
+    fn visible(&self) -> Visible {
+        Visible::of(self)
     }
 
-    /// Replaces the pending snapshot, keeping payloads not yet collected.
-    ///
-    /// The interface is asked for a frame only when the result would look
-    /// different from the one it was last given, so an idle receiver leaves it
-    /// alone entirely.
-    pub(super) fn publish(&self, mut snapshot: RxSnapshot) {
-        let mut slot = self.slot.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(previous) = slot.pending.take() {
-            if snapshot.frame.is_none() {
-                snapshot.frame = previous.frame;
-            }
-            if snapshot.error.is_none() {
-                snapshot.error = previous.error;
-            }
-            if snapshot.history.is_none() {
-                snapshot.history = previous.history;
-            }
+    fn absorb(&mut self, previous: Self) {
+        if self.frame.is_none() {
+            self.frame = previous.frame;
         }
-        let visible = Visible::of(&snapshot);
-        slot.pending = Some(snapshot);
-        if visible != slot.shown {
-            slot.shown = visible;
-            drop(slot);
-            self.waker.wake();
+        if self.error.is_none() {
+            self.error = previous.error;
         }
-    }
-
-    fn take(&self) -> Option<RxSnapshot> {
-        self.slot.lock().unwrap_or_else(PoisonError::into_inner).pending.take()
+        if self.history.is_none() {
+            self.history = previous.history;
+        }
     }
 }
 
