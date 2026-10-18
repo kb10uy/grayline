@@ -630,7 +630,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn config_path(dir: &TempDir) -> PathBuf {
-        dir.path().join(crate::storage::paths::CONFIG_FILE)
+        dir.path().join(grayline_shell::paths::CONFIG_FILE)
     }
 
     fn populated() -> Settings {

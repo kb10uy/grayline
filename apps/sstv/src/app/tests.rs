@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use grayline_shell::paths::Roots;
 use grayline_sstv::image::Rgb8;
 use rstest::rstest;
 use tempfile::TempDir;
@@ -41,12 +42,7 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
 }
 
 fn library(root: &TempDir) -> AppPaths {
-    let paths = AppPaths::from_roots(
-        root.path().join("config"),
-        root.path().join("data"),
-        root.path().join("pictures"),
-        root.path().join("state"),
-    );
+    let paths = AppPaths::from_roots(Roots::under(root.path()));
     paths.initialize().unwrap();
     fs::write(paths.templates_dir().join("alpha.kdl"), "").unwrap();
     fs::write(paths.templates_dir().join("beta.kdl"), "").unwrap();
@@ -278,12 +274,7 @@ fn the_credentials_file_is_written_where_the_paths_name_it() {
     let credentials = root.path().join("credentials.toml");
     let mut app = App::from_parts(
         AudioState::disconnected(),
-        AppPaths::from_roots(
-            root.path().join("config"),
-            root.path().join("data"),
-            root.path().join("pictures"),
-            root.path().join("state"),
-        ),
+        AppPaths::from_roots(Roots::under(root.path())),
         Stored {
             config: Config::detached(),
             common: CommonConfig::detached(),
@@ -1069,12 +1060,7 @@ fn an_unchanged_frame_does_not_rewrite_the_configuration_file() {
 #[test]
 fn library_refresh_lists_matching_files_and_preserves_selection() {
     let root = TempDir::new().unwrap();
-    let paths = AppPaths::from_roots(
-        root.path().join("config"),
-        root.path().join("data"),
-        root.path().join("pictures"),
-        root.path().join("state"),
-    );
+    let paths = AppPaths::from_roots(Roots::under(root.path()));
     paths.initialize().unwrap();
     fs::write(paths.templates_dir().join("beta.kdl"), "").unwrap();
     fs::write(paths.templates_dir().join("alpha.KDL"), "").unwrap();

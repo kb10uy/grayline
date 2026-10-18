@@ -27,6 +27,8 @@ pub mod i18n;
 pub mod log;
 /// Shared menu models and platform renderers.
 pub mod menu;
+/// Where an application keeps its files.
+pub mod paths;
 /// Everything that only makes sense on one operating system.
 pub mod platform;
 /// The window an application runs in, and the order its frames run in.

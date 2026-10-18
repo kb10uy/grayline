@@ -271,7 +271,7 @@ fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
     let settings = Settings::default();
     let mut app = App::from_parts(
         AudioState::disconnected(worker_settings(&settings)),
-        AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
+        AppPaths::from_roots(grayline_shell::paths::Roots::under(root.path())),
         Stored {
             config: Config::detached(),
             common: CommonConfig::load(shared.clone()),
@@ -877,7 +877,7 @@ fn the_credentials_file_is_written_where_the_paths_name_it() {
     let settings = Settings::default();
     let mut app = App::from_parts(
         AudioState::disconnected(worker_settings(&settings)),
-        AppPaths::from_roots(root.path().join("config"), root.path().join("state")),
+        AppPaths::from_roots(grayline_shell::paths::Roots::under(root.path())),
         Stored {
             config: Config::detached(),
             common: CommonConfig::detached(),

@@ -1,21 +1,11 @@
 use std::{
-    fs::{self, OpenOptions},
     io,
     path::{Path, PathBuf},
 };
 
-use directories::{BaseDirs, UserDirs};
+use grayline_shell::paths::{self, Roots};
 
-use grayline_shell::platform::FAMILY_DIRECTORY;
-
-use crate::identity::{APP_DIRECTORY, PICTURES_DIRECTORY};
-
-/// The settings file, named here because a test writes one directly.
-pub const CONFIG_FILE: &str = "config.toml";
-
-const LOG_FILE: &str = "grayline-wefax.log";
-
-const DEFAULT_CONFIG: &str = "";
+use crate::identity::IDENTITY;
 
 /// One of the directories the application keeps for the operator.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,48 +34,19 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn discover() -> io::Result<Self> {
-        let base_dirs = BaseDirs::new()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not determine the user directories"))?;
-        let pictures_dir = UserDirs::new()
-            .and_then(|directories| directories.picture_dir().map(Path::to_path_buf))
-            .unwrap_or_else(|| base_dirs.home_dir().join("Pictures"));
-
-        // The log belongs to the machine it was written on rather than to the
-        // account, for the reason recorded beside the SSTV application's own
-        // copy of this: on Windows `data_dir` is the roaming profile.
-        let state_dir = base_dirs.state_dir().unwrap_or_else(|| base_dirs.data_local_dir());
-
-        Ok(Self::from_roots(
-            base_dirs.config_dir().join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
-            pictures_dir.join(PICTURES_DIRECTORY),
-            state_dir.join(FAMILY_DIRECTORY).join(APP_DIRECTORY),
-        ))
+        Roots::discover(&IDENTITY).map(Self::from_roots)
     }
 
-    pub(crate) fn from_roots(config_dir: PathBuf, pictures_dir: PathBuf, state_dir: PathBuf) -> Self {
+    pub(crate) fn from_roots(roots: Roots) -> Self {
         Self {
-            config_file: config_dir.join(CONFIG_FILE),
-            received_dir: pictures_dir.join("Received"),
-            log_file: state_dir.join("logs").join(LOG_FILE),
+            config_file: roots.config_file(),
+            received_dir: roots.pictures_dir.join("Received"),
+            log_file: roots.log_file(&IDENTITY),
         }
     }
 
     pub fn initialize(&self) -> io::Result<()> {
-        let config_dir = self.config_file.parent().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "the configuration file has no parent directory",
-            )
-        })?;
-        let log_dir = self
-            .log_file
-            .parent()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the log file has no parent directory"))?;
-
-        for directory in [config_dir, log_dir, &self.received_dir] {
-            fs::create_dir_all(directory)?;
-        }
-        create_default_config(&self.config_file)
+        paths::initialize(&self.config_file, &self.log_file, &[&self.received_dir])
     }
 
     pub fn config_file(&self) -> &Path {
@@ -117,67 +78,22 @@ impl AppPaths {
     }
 }
 
-fn create_default_config(path: &Path) -> io::Result<()> {
-    match OpenOptions::new().write(true).create_new(true).open(path) {
-        Ok(mut file) => io::Write::write_all(&mut file, DEFAULT_CONFIG.as_bytes()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            if path.is_file() {
-                Ok(())
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!("configuration path is not a file: {}", path.display()),
-                ))
-            }
-        }
-        Err(error) => Err(error),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
 
+    use super::*;
+
     #[test]
-    fn initialize_creates_application_directories_and_default_config() {
+    fn initialize_creates_every_directory_the_application_keeps() {
         let root = TempDir::new().unwrap();
-        let paths = AppPaths::from_roots(
-            root.path().join("config"),
-            root.path().join("pictures"),
-            root.path().join("state"),
-        );
+        let paths = AppPaths::from_roots(Roots::under(root.path()));
 
         paths.initialize().unwrap();
 
-        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), DEFAULT_CONFIG);
-        assert!(paths.received_dir.is_dir());
-        assert!(paths.log_file.parent().unwrap().is_dir());
-    }
-
-    #[test]
-    fn the_log_is_kept_apart_from_the_roaming_data_directory() {
-        let paths = AppPaths::from_roots(
-            PathBuf::from("config"),
-            PathBuf::from("pictures"),
-            PathBuf::from("state"),
-        );
-        assert!(paths.log_file.starts_with("state"));
-    }
-
-    #[test]
-    fn initialize_does_not_replace_existing_config() {
-        let root = TempDir::new().unwrap();
-        let paths = AppPaths::from_roots(
-            root.path().join("config"),
-            root.path().join("pictures"),
-            root.path().join("state"),
-        );
-        fs::create_dir_all(paths.config_file.parent().unwrap()).unwrap();
-        fs::write(&paths.config_file, "language = \"ja\"\n").unwrap();
-
-        paths.initialize().unwrap();
-
-        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), "language = \"ja\"\n");
+        assert!(paths.config_file.is_file());
+        for folder in Folder::ALL {
+            assert!(paths.folder(folder).is_dir(), "{folder:?}");
+        }
     }
 }

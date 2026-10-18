@@ -151,7 +151,7 @@ impl App {
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
             AudioState::disconnected(worker_settings(&settings)),
-            AppPaths::from_roots(scratch.join("config"), scratch.join("pictures"), scratch.join("state")),
+            AppPaths::from_roots(grayline_shell::paths::Roots::under(&scratch)),
             Config::detached(),
             &settings,
             CommonConfig::detached(),

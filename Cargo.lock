@@ -2180,7 +2180,6 @@ dependencies = [
 name = "grayline-rtty-app"
 version = "0.2.0-beta.1"
 dependencies = [
- "directories",
  "eframe",
  "egui",
  "egui_kittest",
@@ -2248,7 +2247,6 @@ dependencies = [
 name = "grayline-sstv-app"
 version = "0.4.5-beta.1"
 dependencies = [
- "directories",
  "eframe",
  "egui",
  "egui_extras",
@@ -2371,7 +2369,6 @@ dependencies = [
 name = "grayline-wefax-app"
 version = "0.1.4"
 dependencies = [
- "directories",
  "eframe",
  "egui",
  "egui_kittest",

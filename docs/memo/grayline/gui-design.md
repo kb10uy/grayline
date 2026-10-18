@@ -108,7 +108,9 @@ under the state directory — `XDG_STATE_HOME` on Linux and the local half of
 the data directory elsewhere — rather than alongside the configuration, which
 on Windows is the roaming profile and would synchronize a log describing
 hardware the other machine does not have. It is started again once it passes a
-megabyte, keeping one turnover.
+megabyte, keeping one turnover. `grayline-shell::paths::Roots` finds the
+configuration, data, pictures, and state directories for every application,
+and each application adds only the directories of its own beneath them.
 
 Sleep is held off while a picture is moving. The application reports an
 `Activity` of `Receiving` while a raster is being acquired or decoded, and
