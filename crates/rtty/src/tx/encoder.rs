@@ -53,10 +53,9 @@ pub(crate) fn encode_each(text: &str, config: &TxConfig, mut emit: impl FnMut(&[
 
 fn push(encoder: &mut Ita2Encoder, character: char, offset: usize, codes: &mut Vec<TxCode>) -> Result<(), RttyError> {
     let mut out = [0; 3];
-    let count = encoder.encode(character, &mut out).map_err(|error| match error {
-        RttyError::UnmappableCharacter { character, .. } => RttyError::UnmappableCharacter { character, offset },
-        other => other,
-    })?;
+    let count = encoder
+        .encode(character, &mut out)
+        .ok_or(RttyError::UnmappableCharacter { character, offset })?;
     codes.extend(out[..count].iter().map(|&code| TxCode::Character(code)));
     Ok(())
 }
