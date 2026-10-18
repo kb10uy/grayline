@@ -370,7 +370,7 @@ impl App {
             // stream that stopped for a moment should not need a click.
             if !self.audio.reopen() {
                 let message = self.i18n.text("error-device-lost");
-                self.notice = Some(format!("{message}: {fault:?}"));
+                self.notice = Some(format!("{message}: {fault}"));
             }
         }
         let session = self.audio.session();

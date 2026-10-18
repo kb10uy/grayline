@@ -191,7 +191,7 @@ impl App {
             self.audio.rescan();
             if !self.audio.reopen() {
                 let message = self.i18n.text("error-device-lost");
-                self.notice = Some(format!("{message}: {fault:?}"));
+                self.notice = Some(format!("{message}: {fault}"));
             }
         }
         let session = self.audio.session();
