@@ -26,7 +26,7 @@ pub(super) fn library(ui: &mut Ui, app: &mut App) {
                 false,
             ) {
                 Some(ListAction::Reveal) => app.reveal(Folder::Templates),
-                Some(ListAction::Refresh) => app.refresh_templates(),
+                Some(ListAction::Refresh) => app.start_library_scan(),
                 None => {}
             }
             if app.library.template != previous_template {
@@ -37,7 +37,7 @@ pub(super) fn library(ui: &mut Ui, app: &mut App) {
             let previous_stock = app.library.stock;
             match entry_list(ui, &labels, size, &app.library.stocks, &mut app.library.stock, true) {
                 Some(ListAction::Reveal) => app.reveal(Folder::Stocks),
-                Some(ListAction::Refresh) => app.refresh_stocks(),
+                Some(ListAction::Refresh) => app.start_library_scan(),
                 None => {}
             }
             if app.library.stock != previous_stock {

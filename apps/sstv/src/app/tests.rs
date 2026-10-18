@@ -1102,7 +1102,7 @@ fn library_refresh_lists_matching_files_and_preserves_selection() {
 
     app.library.template = Some(1);
     fs::write(paths.templates_dir().join("aardvark.kdl"), "").unwrap();
-    app.refresh_templates();
+    app.start_library_scan();
     app.wait_for_library_scan();
 
     assert_eq!(

@@ -955,15 +955,14 @@ impl App {
         }
     }
 
+    /// Reads the library on this thread, for startup and for a scan that
+    /// could not be given a thread of its own.
     fn refresh_library(&mut self) {
-        let mut errors = Vec::new();
-        if let Err(error) = self.load_templates() {
-            errors.push(error.to_string());
-        }
-        if let Err(error) = self.load_stocks() {
-            errors.push(error.to_string());
-        }
-        self.library.error = (!errors.is_empty()).then(|| errors.join("; "));
+        let scan = LibraryScan {
+            templates: template_entries(self.paths.templates_dir()),
+            stocks: stock_entries(self.paths.stocks_dir()),
+        };
+        self.adopt_library_scan(scan);
     }
 
     /// Reads the library again without making the interface wait for it.
@@ -971,7 +970,7 @@ impl App {
     /// A stock folder is read file by file for each image's geometry, which on
     /// a networked folder takes longer than a frame has. The scan runs on a
     /// thread of its own and is adopted on the frame its result arrives.
-    fn start_library_scan(&mut self) {
+    pub fn start_library_scan(&mut self) {
         let (sender, receiver) = mpsc::channel();
         let templates_dir = self.paths.templates_dir().to_path_buf();
         let stocks_dir = self.paths.stocks_dir().to_path_buf();
@@ -985,13 +984,7 @@ impl App {
             });
         match spawned {
             Ok(_) => self.library_scan = Some(receiver),
-            Err(_) => {
-                let scan = LibraryScan {
-                    templates: template_entries(self.paths.templates_dir()),
-                    stocks: stock_entries(self.paths.stocks_dir()),
-                };
-                self.adopt_library_scan(scan);
-            }
+            Err(_) => self.refresh_library(),
         }
     }
 
@@ -1063,26 +1056,6 @@ impl App {
         {
             self.adopt_library_scan(scan);
         }
-    }
-
-    pub fn refresh_templates(&mut self) {
-        self.start_library_scan();
-    }
-
-    pub fn refresh_stocks(&mut self) {
-        self.start_library_scan();
-    }
-
-    fn load_templates(&mut self) -> io::Result<()> {
-        let entries = template_entries(self.paths.templates_dir())?;
-        replace_entries(&mut self.library.templates, &mut self.library.template, entries);
-        Ok(())
-    }
-
-    fn load_stocks(&mut self) -> io::Result<()> {
-        let entries = stock_entries(self.paths.stocks_dir())?;
-        replace_entries(&mut self.library.stocks, &mut self.library.stock, entries);
-        Ok(())
     }
 
     /// How long the interface may sit still before it has to draw again.
