@@ -20,33 +20,35 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
     let error_color = colors::ERROR;
 
     ui.horizontal(|ui| {
-        if snapshot.dropped_samples > 0 {
-            let dropped = app.i18n.text_with(
-                "status-dropped",
-                &[("samples", number(snapshot.dropped_samples as u32))],
-            );
-            ui.label(RichText::new(dropped).size(LABEL).color(error_color));
-        }
-        let reported = [app.audio.error.as_ref(), snapshot.error.as_ref()]
-            .into_iter()
-            .flatten()
-            .map(AppError::to_string)
-            .chain(app.rig_snapshot.error.as_ref().map(RigControlError::to_string));
-        for error in reported.chain(
-            [
-                app.tx_error.as_deref(),
-                app.library.error.as_deref(),
-                app.config_error(),
-            ]
-            .into_iter()
-            .flatten()
-            .map(str::to_owned),
-        ) {
-            ui.label(RichText::new(error).size(LABEL).color(error_color));
-        }
-        if let Some(notice) = app.notice.as_deref() {
-            ui.label(RichText::new(notice.to_owned()).size(LABEL));
-        }
+        ui.scope(|ui| {
+            if snapshot.dropped_samples > 0 {
+                let dropped = app.i18n.text_with(
+                    "status-dropped",
+                    &[("samples", number(snapshot.dropped_samples as u32))],
+                );
+                ui.label(RichText::new(dropped).size(LABEL).color(error_color));
+            }
+            let reported = [app.audio.error.as_ref(), snapshot.error.as_ref()]
+                .into_iter()
+                .flatten()
+                .map(AppError::to_string)
+                .chain(app.rig_snapshot.error.as_ref().map(RigControlError::to_string));
+            for error in reported.chain(
+                [
+                    app.tx_error.as_deref(),
+                    app.library.error.as_deref(),
+                    app.config_error(),
+                ]
+                .into_iter()
+                .flatten()
+                .map(str::to_owned),
+            ) {
+                ui.label(RichText::new(error).size(LABEL).color(error_color));
+            }
+            if let Some(notice) = app.notice.as_deref() {
+                ui.label(RichText::new(notice.to_owned()).size(LABEL));
+            }
+        });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if !snapshot.callsigns.is_empty() {
                 ui.label(RichText::new(snapshot.callsigns.join(" ")).size(LABEL));
