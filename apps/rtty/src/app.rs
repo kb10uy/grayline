@@ -1145,10 +1145,7 @@ impl App {
                 // that is not running fails every message the same way, and
                 // the text is still what the operator wrote.
                 TxPhase::Failed => {
-                    let played = self.tx.played_samples();
-                    self.tx.stop();
-                    let unsent = self.transmit.abandon(played);
-                    self.return_to_draft(unsent);
+                    self.abort_transmission();
                     if let Some(error) = snapshot.error {
                         self.report(&error);
                     }
@@ -1160,8 +1157,7 @@ impl App {
                 // switching over is lost.
                 _ if !self.tx.is_started() && snapshot.phase != TxPhase::Priming && self.rig_ready_to_send() => {
                     if let Err(error) = self.tx.start_playback() {
-                        self.tx.stop();
-                        self.transmit.finish();
+                        self.abort_transmission();
                         self.report(&error);
                     }
                 }
