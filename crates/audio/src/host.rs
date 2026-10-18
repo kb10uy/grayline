@@ -71,6 +71,29 @@ impl AudioHost {
         self.output_devices().ok()?.into_iter().find(|device| device.id == id)
     }
 
+    /// Chooses the capture device a session starts on, out of `devices`.
+    ///
+    /// The one named `preferred` when the host still offers it; otherwise the
+    /// host's default, and failing that the first. The name is matched rather
+    /// than an identifier because the host assigns identifiers per run, and a
+    /// device that disappeared since the last session falls back rather than
+    /// leaving the operator with nothing.
+    pub fn preferred_input(&self, devices: &[InputDevice], preferred: Option<&str>) -> Option<InputDevice> {
+        preferred
+            .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
+            .or_else(|| self.default_input_device().filter(|device| devices.contains(device)))
+            .or_else(|| devices.first().cloned())
+    }
+
+    /// Chooses the playback device a session starts on, as
+    /// [`preferred_input`](Self::preferred_input) chooses the capture one.
+    pub fn preferred_output(&self, devices: &[OutputDevice], preferred: Option<&str>) -> Option<OutputDevice> {
+        preferred
+            .and_then(|name| devices.iter().find(|device| device.name() == name).cloned())
+            .or_else(|| self.default_output_device().filter(|device| devices.contains(device)))
+            .or_else(|| devices.first().cloned())
+    }
+
     /// Opens `device` for capture and starts delivery.
     ///
     /// `capacity_samples` bounds the queue between the audio callback and the
