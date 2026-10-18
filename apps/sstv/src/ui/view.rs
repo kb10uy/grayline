@@ -2,6 +2,7 @@ use egui::{Align, Color32, ComboBox, Id, Layout, Panel, ProgressBar, RichText, U
 use egui_extras::{Column, TableBuilder};
 
 use grayline_audio::FaultKind;
+use grayline_qso::ContactState;
 use grayline_sstv_template::valid_variable_name;
 
 use grayline_shell::i18n::{arg, number, owned};
@@ -14,7 +15,6 @@ use crate::{
     storage::paths::Folder,
     ui::{canvas, colors, menu},
     worker::{
-        contact::ContactState,
         receive::RxProgress,
         transmit::{TUNE_FREQUENCY_HZ, TxGain, TxPhase, TxProgress},
     },

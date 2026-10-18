@@ -73,20 +73,24 @@ fn the_variable_dialog_renders_a_row_for_every_name() {
 fn the_contact_dialog_renders_every_kind_of_row() {
     let mut app = App::headless();
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
-    app.contact_snapshot.fields = std::collections::BTreeMap::from([
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.fields = std::collections::BTreeMap::from([
         ("name".to_owned(), "Taro".to_owned()),
         ("qth".to_owned(), "Tokyo".to_owned()),
         ("rig".to_owned(), "IC-705".to_owned()),
     ]);
     app.open_contact();
     assert_eq!(
-        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        app.directory
+            .draft
+            .iter()
+            .map(|row| row.key.as_str())
+            .collect::<Vec<_>>(),
         ["name", "qth", "grid", "rig"],
         "the fields asked for lead, and what the station also has follows"
     );
-    assert!(app.contact_draft.iter().take(3).all(|row| row.offered));
-    assert!(!app.contact_draft[3].offered);
+    assert!(app.directory.draft.iter().take(3).all(|row| row.offered));
+    assert!(!app.directory.draft[3].offered);
     let title = app.i18n.text("contact-title");
 
     let harness = render(&mut app);
@@ -99,12 +103,16 @@ fn the_dialog_offers_the_fields_the_settings_asked_for() {
     let mut app = App::headless();
     app.settings.contact.fields = vec!["!ja".to_owned()];
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
 
     app.open_contact();
 
     assert_eq!(
-        app.contact_draft.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
+        app.directory
+            .draft
+            .iter()
+            .map(|row| row.key.as_str())
+            .collect::<Vec<_>>(),
         ["name", "name_latin", "qth", "qth_latin", "grid", "jcc"]
     );
     let jcc = app.i18n.text("contact-jcc");
@@ -116,7 +124,7 @@ fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
     let mut app = App::headless();
     app.settings.contact.fields = vec!["oblast".to_owned()];
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
 
     app.open_contact();
 
@@ -130,7 +138,7 @@ fn a_field_this_build_has_no_label_for_stands_under_its_own_name() {
 fn labels_are_inert_inside_a_dialog_as_well_as_behind_it() {
     let mut app = App::headless();
     app.qso.call = "JA1ABC".to_owned();
-    app.contact_snapshot.callsign = "JA1ABC".to_owned();
+    app.directory.snapshot.callsign = "JA1ABC".to_owned();
     app.open_contact();
 
     let harness = render(&mut app);

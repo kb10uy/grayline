@@ -6,6 +6,7 @@ use std::{
     time::Instant,
 };
 
+use grayline_qso::{ContactRow, ContactSnapshot, ContactState};
 use grayline_rtty::{ToneSet, rx::ChannelLevels};
 use grayline_shell::{
     common::{COMMON_FILE, DEFAULT_UI_SCALE},
@@ -14,10 +15,7 @@ use grayline_shell::{
 use rstest::rstest;
 
 use super::*;
-use crate::{
-    test_util::{FakeKeyer, refused_port},
-    worker::contact::ContactState,
-};
+use crate::test_util::{FakeKeyer, refused_port};
 
 #[derive(Default)]
 struct RecordingPlatform {
@@ -772,7 +770,7 @@ fn filed(app: &App) -> ContactSnapshot {
 fn waited(app: &App, done: impl Fn(&ContactSnapshot) -> bool) -> ContactSnapshot {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let snapshot = app.contact_directory.latest();
+        let snapshot = app.directory.worker().latest();
         if done(&snapshot) || Instant::now() > deadline {
             return snapshot;
         }
@@ -784,11 +782,11 @@ fn waited(app: &App, done: impl Fn(&ContactSnapshot) -> bool) -> ContactSnapshot
 fn file(app: &mut App, fields: &[(&str, &str)]) {
     app.open_contact();
     for (key, value) in fields {
-        if let Some(row) = app.contact_draft.iter_mut().find(|row| row.key == *key) {
+        if let Some(row) = app.directory.draft.iter_mut().find(|row| row.key == *key) {
             row.value = (*value).to_owned();
             continue;
         }
-        app.contact_draft.push(ContactRow {
+        app.directory.draft.push(ContactRow {
             key: (*key).to_owned(),
             value: (*value).to_owned(),
             offered: false,
@@ -810,7 +808,7 @@ fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
     app.finish_contact_edit();
 
     assert_eq!(
-        app.contact_directory.latest().state,
+        app.directory.worker().latest().state,
         ContactState::Unknown,
         "a second request would have put the worker back to looking"
     );
@@ -849,7 +847,7 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
     app.contact.callsign = typed.to_owned();
     app.finish_contact_edit();
 
-    assert_eq!(app.contact_directory.latest().state, ContactState::Idle);
+    assert_eq!(app.directory.worker().latest().state, ContactState::Idle);
 }
 
 /// A headless interface must reach neither the operator's own store nor the
@@ -859,8 +857,8 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
-    assert_eq!(app.contact_paths.store, None);
-    assert_eq!(app.contact_paths.credentials, None);
+    assert_eq!(app.directory.paths().store, None);
+    assert_eq!(app.directory.paths().credentials, None);
 }
 
 /// The menu offers to write a credentials file, and a test that applies every
@@ -939,7 +937,7 @@ fn a_name_this_mode_could_not_send_is_left_where_it_was_filed() {
 
     assert!(app.contact.name.is_empty(), "{}", app.contact.name);
     assert_eq!(
-        app.contact_snapshot.fields.get("name").map(String::as_str),
+        app.directory.snapshot.fields.get("name").map(String::as_str),
         Some("太郎")
     );
 }
@@ -968,7 +966,7 @@ fn a_field_the_operator_emptied_is_dropped() {
     file(&mut app, &[("grid", "PM95UQ")]);
 
     app.open_contact();
-    for row in &mut app.contact_draft {
+    for row in &mut app.directory.draft {
         if row.key == "grid" {
             row.value.clear();
         }
@@ -977,5 +975,5 @@ fn a_field_the_operator_emptied_is_dropped() {
     waited(&app, |snapshot| !snapshot.fields.contains_key("grid"));
     app.poll_contact();
 
-    assert_eq!(app.contact_snapshot.fields.get("grid"), None);
+    assert_eq!(app.directory.snapshot.fields.get("grid"), None);
 }

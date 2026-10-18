@@ -6,6 +6,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_rig_control::{Keying, RigControlError, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
 use grayline_shell::{
@@ -31,7 +32,6 @@ use crate::{
     ui::{scope::Scope, scrollback::Scrollback},
     worker::{
         audio::AudioState,
-        contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
         receive::{ColumnSnapshot, DecodePath, WorkerSettings},
         transmit::{TxPhase, TxState, TxWorker},
@@ -68,20 +68,6 @@ struct Stored {
     library: Library,
 }
 
-/// One row of the window showing what is filed under the contact.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ContactRow {
-    pub key: String,
-    pub value: String,
-    /// Whether the settings asked for this key, and so whether it is shown
-    /// with a label rather than with its name laid open for editing.
-    ///
-    /// A row is offered whether or not the station has a value for it, which
-    /// is what makes the window say what this operator files rather than only
-    /// what this contact happens to have.
-    pub offered: bool,
-}
-
 /// Everything the application is, other than the pixels on screen.
 pub struct App {
     pub i18n: I18n,
@@ -105,14 +91,8 @@ pub struct App {
     /// The set messages listed beside the buttons, in the order they are
     /// offered.
     pub templates: Vec<Template>,
-    /// The thread that reads and writes the contact directory.
-    pub contact_directory: ContactWorker,
-    /// What it last found, read once per frame.
-    pub contact_snapshot: ContactSnapshot,
-    /// Whether the window showing what is filed under the contact is open.
-    pub contact_dialog_open: bool,
-    /// The rows that window is editing.
-    pub contact_draft: Vec<ContactRow>,
+    /// The contact directory, what it last answered, and the dialog editing it.
+    pub directory: ContactEditor,
     /// Whether the window naming this station is open.
     pub station_dialog_open: bool,
     /// The rows the window is editing.
@@ -122,15 +102,6 @@ pub struct App {
     /// field: the rows are taken up once they are usable, and an unusable one
     /// stays on screen to be corrected rather than disappearing.
     pub variables_draft: Vec<(String, String)>,
-
-    /// The files the directory is opened over, named rather than discovered
-    /// so that a test never reaches the operator's own store or key.
-    contact_paths: ContactPaths,
-    /// Kept so the directory can be opened again when the lookup is switched.
-    contact_waker: Waker,
-    /// The callsign last asked about, so that leaving the field without
-    /// changing it asks nobody a second time.
-    contact_requested: String,
 
     /// The window the band and the two channels are drawn in.
     ///
@@ -240,15 +211,14 @@ impl App {
             contact: Contact::default(),
             macros: library.macros,
             templates: library.templates,
-            contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
-            contact_snapshot: ContactSnapshot::default(),
-            contact_dialog_open: false,
-            contact_draft: Vec::new(),
+            directory: ContactEditor::new(
+                &settings.contact,
+                contact_paths,
+                "grayline-rtty-contact".to_owned(),
+                move || waker.wake(),
+            ),
             station_dialog_open: false,
             variables_draft: Vec::new(),
-            contact_paths,
-            contact_waker: waker,
-            contact_requested: String::new(),
             scope,
             notice: None,
             session,
@@ -584,7 +554,7 @@ impl App {
             &MacroContext {
                 station: &self.settings.station,
                 contact: &self.contact,
-                directory: &self.contact_snapshot.fields,
+                directory: &self.directory.snapshot.fields,
                 custom: &self.settings.custom_variables,
                 now: &now,
             },
@@ -695,131 +665,40 @@ impl App {
     /// again and asked about again.
     pub fn clear_contact(&mut self) {
         self.contact.clear();
-        self.contact_requested.clear();
+        self.directory.forget_request();
     }
 
-    /// Asks the directory about the callsign in the contact panel.
-    ///
-    /// Text that is not a callsign asks nobody: a half-typed field and a word
-    /// picked out of a garbled line both arrive here, and neither is a station
-    /// worth putting a question to somebody's logger about.
     fn look_up_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.contact.callsign) else {
-            self.contact_requested.clear();
-            return;
-        };
-        if callsign == self.contact_requested {
-            return;
-        }
-        self.contact_requested = callsign.clone();
-        self.contact_directory.look_up(&callsign);
+        self.directory.look_up(&self.contact.callsign);
     }
 
-    /// Asks the logger about the callsign again, whatever the store holds.
     pub fn refresh_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.contact.callsign) else {
-            return;
-        };
-        self.contact_requested = callsign.clone();
-        self.contact_directory.refresh(&callsign);
+        self.directory.refresh(&self.contact.callsign);
     }
 
-    /// Whether asking the logger is something this station can do at all.
-    ///
-    /// A control that would do nothing is not offered: with the lookup off, or
-    /// with no instance and no key configured, there is nobody to ask again.
     pub fn can_refresh_contact(&self) -> bool {
-        self.settings.contact.lookup && grayline_qso::normalize_callsign(&self.contact.callsign).is_some()
+        ContactEditor::can_refresh(&self.settings.contact, &self.contact.callsign)
     }
 
-    /// Opens the window on what is filed under the callsign being worked.
-    ///
-    /// The fields the settings ask for lead, in the order they were written,
-    /// whether or not this station has any of them: a station in Japan wants
-    /// somewhere to put a JCC code and a station anywhere else does not, and
-    /// which of those an operator is was never something to decide here.
-    /// Anything else already filed follows, under its own name.
     pub fn open_contact(&mut self) {
-        let known = &self.contact_snapshot.fields;
-        let offered = grayline_qso::expand_fields(self.settings.contact.fields.iter().map(String::as_str));
-        let mut draft: Vec<ContactRow> = offered
-            .iter()
-            .map(|key| ContactRow {
-                value: known.get(key).cloned().unwrap_or_default(),
-                key: key.clone(),
-                offered: true,
-            })
-            .collect();
-        draft.extend(
-            known
-                .iter()
-                .filter(|(key, _)| !offered.contains(key))
-                .map(|(key, value)| ContactRow {
-                    key: key.clone(),
-                    value: value.clone(),
-                    offered: false,
-                }),
-        );
-        self.contact_draft = draft;
-        self.contact_dialog_open = true;
+        self.directory.open(&self.settings.contact.fields);
     }
 
     pub fn add_contact_field(&mut self) {
-        self.contact_draft.push(ContactRow::default());
+        self.directory.add_field();
     }
 
-    /// Files the edited rows under the callsign being worked.
-    ///
-    /// A row the operator emptied is dropped rather than left alone: clearing
-    /// a value is how a wrong one is taken back, and a write that only ever
-    /// added would hand it straight back on the next lookup. A row whose name
-    /// no `${...}` expression could hold is kept in the window to be corrected
-    /// and left out of the store, the way an operator's own fields are.
     pub fn commit_contact(&mut self) {
-        let Some(callsign) = grayline_qso::normalize_callsign(&self.contact.callsign) else {
-            return;
-        };
-        let Some(mut record) = grayline_qso::Record::new(&callsign) else {
-            return;
-        };
-        let mut dropped = Vec::new();
-        for row in &self.contact_draft {
-            if !grayline_qso::valid_key(&row.key) {
-                continue;
-            }
-            if record.set(&row.key, &row.value) {
-                continue;
-            }
-            if self.contact_snapshot.fields.contains_key(&row.key) {
-                dropped.push(row.key.clone());
-            }
-        }
-        if record.iter().eq(self
-            .contact_snapshot
-            .fields
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())))
-            && dropped.is_empty()
-        {
-            return;
-        }
-        self.contact_directory.save(record, dropped);
+        self.directory.commit(&self.contact.callsign);
     }
 
-    /// Turns asking the operator's own logger on or off.
-    ///
-    /// The worker is opened again rather than told: what it holds is a
-    /// directory composed over a logger or over nothing, and which of those it
-    /// is was decided when it was built.
+    /// Turns asking the operator's own logger on or off, and asks again.
     pub fn set_contact_lookup(&mut self, lookup: bool) {
         if self.settings.contact.lookup == lookup {
             return;
         }
         self.settings.contact.lookup = lookup;
-        self.contact_directory =
-            contact::spawn(&self.settings.contact, &self.contact_paths, self.contact_waker.clone());
-        self.contact_snapshot = ContactSnapshot::default();
-        self.contact_requested.clear();
+        self.directory.reopen(&self.settings.contact);
         self.look_up_contact();
     }
 
@@ -828,7 +707,7 @@ impl App {
     /// Refuses to write over one that is already there: the file only exists
     /// because someone put a key in it.
     pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.contact_paths.credentials.clone() else {
+        let Some(path) = self.directory.paths().credentials.clone() else {
             return;
         };
         if !path.exists()
@@ -854,10 +733,7 @@ impl App {
     }
 
     fn poll_contact(&mut self) {
-        let latest = self.contact_directory.latest();
-        let changed = latest.fields != self.contact_snapshot.fields;
-        self.contact_snapshot = latest;
-        if changed {
+        if self.directory.poll() {
             self.adopt_contact_fields();
         }
     }
@@ -871,7 +747,7 @@ impl App {
     /// is being worked by the time it arrives.
     fn adopt_contact_fields(&mut self) {
         if grayline_qso::normalize_callsign(&self.contact.callsign).as_deref()
-            != Some(self.contact_snapshot.callsign.as_str())
+            != Some(self.directory.snapshot.callsign.as_str())
         {
             return;
         }
@@ -897,7 +773,7 @@ impl App {
     /// then hold the send button down.
     fn sendable_field(&self, keys: [&str; 2]) -> Option<String> {
         keys.into_iter()
-            .filter_map(|key| self.contact_snapshot.fields.get(key))
+            .filter_map(|key| self.directory.snapshot.fields.get(key))
             .map(|value| text::normalize(value.trim()))
             .find(|value| !value.is_empty() && text::first_unsendable(value).is_none())
     }

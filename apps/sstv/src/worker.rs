@@ -6,6 +6,5 @@
 
 pub mod audio;
 pub mod compose;
-pub mod contact;
 pub mod receive;
 pub mod transmit;

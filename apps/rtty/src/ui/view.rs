@@ -9,6 +9,7 @@
 
 use egui::{Align, Color32, ComboBox, Id, Layout, Panel, RichText, TextStyle, Ui};
 
+use grayline_qso::ContactState;
 use grayline_rtty::code::Case;
 
 use crate::{
@@ -17,10 +18,7 @@ use crate::{
         menu::{self, Action, Menu},
         scope, scrollback,
     },
-    worker::{
-        contact::ContactState,
-        receive::{ColumnSnapshot, DecodePath},
-    },
+    worker::receive::{ColumnSnapshot, DecodePath},
 };
 
 mod dialogs;

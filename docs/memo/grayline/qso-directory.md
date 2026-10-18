@@ -428,8 +428,11 @@ write that only ever added would hand it straight back on the next lookup.
 ## In the RTTY application
 
 RTTY uses the same `grayline-qso::ContactWorker` and `ContactSettings` as
-SSTV. The dialog and the defaults remain application-owned, including the
-field list a first run offers.
+SSTV, and the same `ContactEditor` around them: the lookup that does not ask
+twice, the dialog's rows, what a commit files and drops, and reopening the
+worker when the lookup is switched. Each application hands it the callsign
+field it has. The dialog's widgets and the defaults remain application-owned,
+including the field list a first run offers.
 What differs downstream of the answer follows from ITA2 having no kanji.
 
 **The default field list is `["!core", "!latin"]` rather than `["!core"]`.**

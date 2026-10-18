@@ -4,7 +4,6 @@
 //! and publishes a snapshot the interface reads once per frame.
 
 pub mod audio;
-pub mod contact;
 pub mod keyer;
 pub mod receive;
 pub mod transmit;

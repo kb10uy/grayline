@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use grayline_qso::{ContactPaths, ContactSnapshot, ContactState};
 use grayline_shell::paths::Roots;
 use grayline_sstv::image::Rgb8;
 use rstest::rstest;
@@ -16,10 +17,7 @@ use tempfile::TempDir;
 use super::*;
 use crate::{
     test_util::refused_port,
-    worker::{
-        contact::{ContactPaths, ContactState},
-        receive::{Frame, HistoryCandidate, RxSnapshot},
-    },
+    worker::receive::{Frame, HistoryCandidate, RxSnapshot},
 };
 
 fn disconnected(paths: AppPaths, settings: &Settings) -> App {
@@ -191,7 +189,7 @@ fn a_decoded_identifier_fills_the_qso_contact_field() {
 fn settled(app: &App) -> ContactSnapshot {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let snapshot = app.contact.latest();
+        let snapshot = app.directory.worker().latest();
         if snapshot.state != ContactState::Looking || Instant::now() > deadline {
             return snapshot;
         }
@@ -210,7 +208,7 @@ fn leaving_the_callsign_field_unchanged_does_not_ask_a_second_time() {
     app.finish_qso_edit();
 
     assert_eq!(
-        app.contact.latest().state,
+        app.directory.worker().latest().state,
         ContactState::Unknown,
         "a second request would have put the worker back to looking"
     );
@@ -251,8 +249,8 @@ fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
-    assert_eq!(app.contact_paths.store, None);
-    assert_eq!(app.contact_paths.credentials, None);
+    assert_eq!(app.directory.paths().store, None);
+    assert_eq!(app.directory.paths().credentials, None);
 }
 
 /// The menu offers to write a credentials file, and a test that applies every
@@ -308,7 +306,7 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
     app.qso.call = typed.to_owned();
     app.finish_qso_edit();
 
-    assert_eq!(app.contact.latest().state, ContactState::Idle);
+    assert_eq!(app.directory.worker().latest().state, ContactState::Idle);
 }
 
 /// The worker republishes every identifier it has decoded, so the same
