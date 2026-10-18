@@ -15,13 +15,11 @@ use std::{
 
 use grayline_audio::{Playback, PlaybackWriter};
 use grayline_rtty::{Transmitter, TxCode, TxConfig};
+use grayline_shell::worker::update;
 
 use crate::{
     error::AppError,
-    worker::{
-        keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
-        update,
-    },
+    worker::keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
 };
 
 const PCM_BLOCK_SIZE: usize = 1_024;

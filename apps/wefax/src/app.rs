@@ -11,6 +11,7 @@ use grayline_shell::{
     i18n::{I18n, Locale},
     log,
     platform::{Activity, Platform},
+    worker::Waker,
 };
 use grayline_wefax::{Format, Ioc, LinesPerMinute};
 
@@ -24,7 +25,6 @@ use crate::{
     },
     ui::strip::Strip,
     worker::{
-        Waker,
         audio::AudioState,
         receive::{Chart, RxProgress, WorkerSettings},
     },

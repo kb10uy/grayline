@@ -13,7 +13,9 @@ use grayline_rtty::{
     rx::{AfcConfig, AtcDesign, ChannelLevels},
 };
 
-use crate::{error::AppError, worker::Waker};
+use grayline_shell::worker::Waker;
+
+use crate::error::AppError;
 
 mod session;
 mod spectrum;

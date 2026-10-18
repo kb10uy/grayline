@@ -24,6 +24,8 @@ pub mod log;
 pub mod menu;
 /// Everything that only makes sense on one operating system.
 pub mod platform;
+/// What a worker thread shares with the interface it publishes to.
+pub mod worker;
 
 /// What one application calls itself.
 ///

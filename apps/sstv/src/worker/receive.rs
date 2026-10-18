@@ -13,12 +13,11 @@ use grayline_sstv::{
 };
 use grayline_sstv_rx::SyncStart;
 
+use grayline_shell::worker::Waker;
+
 use crate::{
     error::AppError,
-    worker::{
-        Waker,
-        receive::session::{SharedOptions, run},
-    },
+    worker::receive::session::{SharedOptions, run},
 };
 
 mod session;

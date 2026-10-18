@@ -27,6 +27,7 @@ use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
     i18n::{I18n, Locale, owned},
     platform::{self, Activity, Platform},
+    worker::Waker,
 };
 
 use crate::{
@@ -37,7 +38,6 @@ use crate::{
     },
     ui::raster::{Raster, test_pattern_image},
     worker::{
-        Waker,
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
         contact::{self, ContactPaths, ContactSnapshot, ContactWorker},

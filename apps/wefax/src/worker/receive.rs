@@ -9,7 +9,9 @@ use std::{
 use grayline_audio::CaptureReader;
 use grayline_wefax::{Format, Ioc, LinesPerMinute, WefaxBand, rx::RxState};
 
-use crate::{error::AppError, worker::Waker};
+use grayline_shell::worker::Waker;
+
+use crate::error::AppError;
 
 mod session;
 

@@ -1,6 +1,8 @@
 pub use grayline_qso::{ContactPaths, ContactSnapshot, ContactState, ContactWorker};
 
-use crate::{storage::config::ContactSettings, worker::Waker};
+use grayline_shell::worker::Waker;
+
+use crate::storage::config::ContactSettings;
 
 pub fn spawn(settings: &ContactSettings, paths: &ContactPaths, waker: Waker) -> ContactWorker {
     ContactWorker::spawn(

@@ -2,12 +2,11 @@ use std::path::Path;
 
 use grayline_audio::{AudioHost, Capture, InputDevice, StreamFault, WavSource};
 
+use grayline_shell::worker::Waker;
+
 use crate::{
     error::AppError,
-    worker::{
-        Waker,
-        receive::{Chart, RxSnapshot, RxWorker, StripUpdate, WorkerSettings},
-    },
+    worker::receive::{Chart, RxSnapshot, RxWorker, StripUpdate, WorkerSettings},
 };
 
 /// One second of queue at the preferred capture rate.

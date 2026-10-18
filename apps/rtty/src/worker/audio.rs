@@ -4,12 +4,11 @@ use grayline_audio::{
     AudioHost, Capture, CaptureReader, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault, WavSource,
 };
 
+use grayline_shell::worker::Waker;
+
 use crate::{
     error::AppError,
-    worker::{
-        Waker,
-        receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
-    },
+    worker::receive::{RxSnapshot, RxWorker, ScopeFrame, WorkerSettings},
 };
 
 /// One second of queue at the preferred capture rate.

@@ -1,10 +1,11 @@
 use grayline_audio::{AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault};
 use grayline_sstv_rx::SyncStart;
 
+use grayline_shell::worker::Waker;
+
 use crate::{
     error::AppError,
     worker::{
-        Waker,
         receive::{HistoryCandidate, RxSnapshot, RxWorker},
         transmit::{TxSnapshot, TxWorker},
     },

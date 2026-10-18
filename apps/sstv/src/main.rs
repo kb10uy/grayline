@@ -196,7 +196,7 @@ impl Interface {
         platform::prepare_window(cc);
         instance.publish_window(cc);
 
-        let app = App::new(paths, worker::Waker::new(cc.egui_ctx.clone()));
+        let app = App::new(paths, grayline_shell::worker::Waker::new(cc.egui_ctx.clone()));
         cc.egui_ctx.set_zoom_factor(app.ui_scale);
         let model = menu::model(&app);
         let menu = match menu::MenuHost::install(cc, &model) {

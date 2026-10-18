@@ -186,7 +186,7 @@ impl Interface {
         platform::prepare_window(cc);
         instance.publish_window(cc);
 
-        let mut app = App::new(paths, worker::Waker::new(cc.egui_ctx.clone()));
+        let mut app = App::new(paths, grayline_shell::worker::Waker::new(cc.egui_ctx.clone()));
         if let Some(path) = recording {
             app.open_wav(&path);
         }

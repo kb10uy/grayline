@@ -13,6 +13,7 @@ use grayline_shell::{
     i18n::{I18n, Locale, owned},
     log,
     platform::{Activity, Platform},
+    worker::Waker,
 };
 
 use crate::{
@@ -29,7 +30,6 @@ use crate::{
     },
     ui::{scope::Scope, scrollback::Scrollback},
     worker::{
-        Waker,
         audio::AudioState,
         contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
         keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
