@@ -29,6 +29,7 @@ impl Raster {
     }
 
     /// Returns the half-open sample range averaged for one transmitted pixel.
+    #[inline(always)]
     pub(super) fn pixel_window(
         &self,
         clock: RasterClock,
@@ -64,6 +65,7 @@ impl Raster {
         Ok((first, last.max(first.saturating_add(1))))
     }
 
+    #[inline(always)]
     pub(super) fn frequency_to_level(&self, frequency_hz: f64) -> u8 {
         let hz = if frequency_hz > 0.0 {
             (frequency_hz + 0.5) as u32
@@ -171,6 +173,7 @@ impl Scan<'_> {
         Ok(rows)
     }
 
+    #[inline(always)]
     fn mean_frequency(&self, range: (u64, u64)) -> Result<f64, SstvError> {
         let (first, end) = range;
         match self.input.frequency_sum(first, end) {
@@ -191,6 +194,7 @@ impl Scan<'_> {
         }
     }
 
+    #[inline(always)]
     fn level_at(&self, unit: usize, segment: PixelSegment, x: usize) -> Result<u8, SstvError> {
         let window = self.raster.pixel_window(self.clock, unit, segment, x)?;
         // Averaging most of the transmitted pixel interval suppresses random

@@ -65,6 +65,7 @@ impl<T: Copy> SampleRing<T> {
     /// Returns the values covering `[first, end)`, oldest first, as the at
     /// most two runs the ring holds them in, or `None` unless all of them are
     /// retained.
+    #[inline(always)]
     pub fn runs(&self, first: u64, end: u64) -> Option<[&[T]; 2]> {
         if first < self.first || end < first || end > self.end() {
             return None;
@@ -113,6 +114,7 @@ impl<T: Copy> SampleRing<T> {
 
 /// Returns the first whole sample at or after `position`, saturating at zero
 /// and at `u64::MAX`.
+#[inline(always)]
 pub fn ceil_sample(position: f64) -> u64 {
     let whole = position as u64;
     whole.saturating_add(u64::from((whole as f64) < position))
@@ -125,6 +127,7 @@ pub fn ceil_sample(position: f64) -> u64 {
 /// keeps out samples that belong to a neighbour after sub-sample rounding or
 /// while the discriminator settles. A pixel too short to keep a guarded sample
 /// falls back to the one sample nearest its centre.
+#[inline(always)]
 pub fn guarded_window(left: f64, right: f64) -> (u64, u64) {
     let guard = (right - left) * PIXEL_GUARD;
     let first = ceil_sample(left + guard);
