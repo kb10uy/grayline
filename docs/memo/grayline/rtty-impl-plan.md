@@ -251,6 +251,17 @@ the stream and stop the carrier where the operator pressed rather than at the
 end of what had already been generated. It also means the schedule is built
 against the rate the device actually opened at.
 
+The message on the air and its output are one value, `app::transmit::OnAir`,
+held by `Transmit` beside the draft and the queue, so a message cannot be on
+the air without the stream or keyer carrying it, and dropping one drops the
+other. Its output, `worker::transmit::Output`, is read once per frame into an
+`OutputSnapshot` (phase, played position, whether it has drained or underrun,
+and the keyer's lateness), and everything the frame asks of the output is
+answered from that copy rather than from another lock on the keyer's snapshot.
+`OnAir::advance` decides what the frame does: start the output, report an
+underrun, finish, or fail. Every failure goes back through the operator's own
+stop, which gives the unsent text and the queue back to the draft.
+
 The interface departs from the plan's list in four places, each because
 something the plan did not name turned out to be load-bearing.
 

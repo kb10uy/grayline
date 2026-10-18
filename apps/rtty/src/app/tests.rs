@@ -15,7 +15,10 @@ use grayline_shell::{
 use rstest::rstest;
 
 use super::*;
-use crate::test_util::{FakeKeyer, refused_port};
+use crate::{
+    test_util::{FakeKeyer, refused_port},
+    worker::transmit::{OutputSnapshot, TxPhase},
+};
 
 #[derive(Default)]
 struct RecordingPlatform {
@@ -348,7 +351,7 @@ fn a_message_keyed_as_fsk_goes_to_the_keyer_and_is_echoed() {
 
     assert!(app.notice.is_none(), "{:?}", app.notice);
     assert!(app.columns[0].text().contains("RYRY"), "{:?}", app.columns[0].text());
-    assert!(!app.tx.is_running());
+    assert!(app.transmit.on_air().is_none());
     let received = fake.received();
     assert!(
         received.iter().any(|line| line.starts_with("+\\rtty_send ")),
@@ -431,6 +434,113 @@ fn a_queued_message_keeps_the_rig_keyed() {
 
     app.rig_keyed = false;
     assert!(!app.should_unkey(), "the rig was never keyed");
+}
+
+fn on_air(app: &mut App, text: &str, phase: TxPhase) {
+    let schedule = grayline_rtty::TxSchedule::new(text, KEYER_TICKS_PER_SECOND, &app.tx_config()).unwrap();
+    app.transmit
+        .begin(Sending::new(text.to_owned(), schedule), Output::scripted(phase));
+}
+
+fn script(app: &mut App, snapshot: OutputSnapshot) {
+    app.transmit
+        .on_air_mut()
+        .expect("a message on the air")
+        .script_for_test(snapshot);
+}
+
+#[test]
+fn a_keyed_rig_is_waited_for_before_the_output_starts() {
+    use grayline_rig_control::RigState;
+
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.rig_snapshot.state = RigState::Receiving;
+    on_air(&mut app, "RY", TxPhase::Producing);
+
+    app.poll_transmit();
+    assert!(!app.transmit.on_air().unwrap().output().is_started());
+
+    app.rig_snapshot.state = RigState::Transmitting;
+    app.poll_transmit();
+    assert!(app.transmit.on_air().unwrap().output().is_started());
+}
+
+#[test]
+fn a_finished_message_starts_the_next_and_the_rig_is_unkeyed_after_the_last() {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.rig_snapshot.state = grayline_rig_control::RigState::Transmitting;
+    on_air(&mut app, "FIRST", TxPhase::Producing);
+    app.transmit.queue("SECOND".to_owned());
+    app.poll_transmit();
+    script(
+        &mut app,
+        OutputSnapshot {
+            phase: TxPhase::Draining,
+            played: u64::MAX,
+            drained: true,
+            ..OutputSnapshot::default()
+        },
+    );
+
+    app.poll_transmit();
+
+    assert!(app.columns[0].text().contains("FIRST"), "{:?}", app.columns[0].text());
+    assert_eq!(app.transmit.draft, "SECOND", "the second could not be opened");
+    app.poll_workers();
+    assert!(!app.rig_keyed);
+}
+
+#[rstest]
+#[case::failed(
+    OutputSnapshot { phase: TxPhase::Failed, error: Some(AppError::NoOutputDevice), ..OutputSnapshot::default() },
+    None,
+)]
+#[case::rig_refused(OutputSnapshot { phase: TxPhase::Producing, ..OutputSnapshot::default() }, Some(refused_port()))]
+fn a_failure_gives_the_unsent_text_and_the_queue_back_and_unkeys(
+    #[case] snapshot: OutputSnapshot,
+    #[case] rig_error: Option<grayline_rig_control::RigControlError>,
+) {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    app.rig_snapshot.error = rig_error;
+    on_air(&mut app, "FIRST", TxPhase::Producing);
+    app.transmit.queue("SECOND".to_owned());
+    app.transmit.draft = "TYPING".to_owned();
+    script(&mut app, snapshot);
+
+    app.poll_transmit();
+
+    assert!(!app.transmit.is_busy());
+    assert_eq!(app.transmit.draft, "FIRST\nSECOND\nTYPING");
+    assert!(app.notice.is_some());
+    app.poll_workers();
+    assert!(!app.rig_keyed);
+}
+
+#[test]
+fn stopping_mid_message_gives_back_only_what_had_not_been_played() {
+    let mut app = App::headless();
+    app.rig_keyed = true;
+    on_air(&mut app, "RYRY", TxPhase::Producing);
+    let second = grayline_rtty::TxSchedule::new("RYRY", KEYER_TICKS_PER_SECOND, &app.tx_config())
+        .unwrap()
+        .character_ends()[1];
+    script(
+        &mut app,
+        OutputSnapshot {
+            phase: TxPhase::Producing,
+            played: second,
+            ..OutputSnapshot::default()
+        },
+    );
+
+    app.abort_transmission();
+
+    assert_eq!(app.transmit.draft, "RY");
+    app.poll_workers();
+    assert!(!app.rig_keyed);
 }
 
 #[test]

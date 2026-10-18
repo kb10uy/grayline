@@ -369,8 +369,10 @@ fn the_stack_lines_its_messages_up_on_one_left_edge(#[case] locale: Locale) {
 fn sending(app: &mut App) {
     let text = "CQ CQ DE JL1HIS";
     let schedule = grayline_rtty::TxSchedule::new(text, 48_000, &app.tx_config()).unwrap();
-    app.transmit
-        .begin(crate::app::transmit::Sending::new(text.to_owned(), schedule));
+    app.transmit.begin(
+        crate::app::transmit::Sending::new(text.to_owned(), schedule),
+        crate::worker::transmit::Output::scripted(crate::worker::transmit::TxPhase::Producing),
+    );
     app.transmit.queue("SECOND MESSAGE".to_owned());
 }
 

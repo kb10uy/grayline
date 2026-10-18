@@ -20,7 +20,7 @@ use grayline_shell::{
 use crate::{
     app::{
         macros::{Contact, Macro, MacroContext, Template, expand, valid_variable_name},
-        transmit::{Sending, Transmit},
+        transmit::{Ending, Sending, Transmit},
     },
     error::AppError,
     locales::CATALOG,
@@ -34,7 +34,7 @@ use crate::{
         audio::AudioState,
         keyer::{KEYER_TICKS_PER_SECOND, KeyerWorker},
         receive::{ColumnSnapshot, DecodePath, WorkerSettings},
-        transmit::{TxPhase, TxState, TxWorker},
+        transmit::{Output, TxWorker},
     },
 };
 
@@ -122,8 +122,6 @@ pub struct App {
     common: CommonConfig,
     platform: Box<dyn Platform>,
     activity: Activity,
-    /// The playback stream and worker the message on the air is running on.
-    tx: TxState,
     /// The thread that keys the rig, once the file has asked for one.
     rig_worker: Option<RigWorker>,
     /// What rig control last published, read once per frame.
@@ -135,9 +133,6 @@ pub struct App {
     /// them would drop the carrier in the middle of what the other station is
     /// reading as one transmission.
     rig_keyed: bool,
-    /// Whether the message on the air has reported an underrun, so one gap
-    /// in the audio is one notice rather than one per frame.
-    underran: bool,
     /// The session the text on screen belongs to.
     ///
     /// A device change starts a new worker whose decoders begin again, so the
@@ -228,11 +223,9 @@ impl App {
             common,
             platform,
             activity: Activity::Idle,
-            tx: TxState::default(),
             rig_worker: None,
             rig_snapshot: RigSnapshot::default(),
             rig_keyed: false,
-            underran: false,
         }
     }
 
@@ -376,7 +369,7 @@ impl App {
     /// transmission is the exception: nothing wakes the interface as the
     /// underline advances, so it is drawn at a rate the eye reads as motion.
     pub fn repaint_after(&self) -> Option<Duration> {
-        if self.tx.is_running() {
+        if self.transmit.on_air().is_some() {
             return Some(Duration::from_millis(50));
         }
         self.audio.is_capturing().then(|| Duration::from_secs(1))
@@ -830,9 +823,7 @@ impl App {
         if !self.transmit.is_busy() {
             return;
         }
-        let played = self.tx.played_samples();
-        self.tx.stop();
-        let unsent = self.transmit.abandon(played);
+        let unsent = self.transmit.abandon();
         self.return_to_draft(unsent);
     }
 
@@ -853,20 +844,19 @@ impl App {
 
     /// Whether a message is being keyed right now.
     pub fn is_transmitting(&self) -> bool {
-        self.tx.latest().is_some_and(|snapshot| snapshot.phase.is_active())
+        self.transmit
+            .on_air()
+            .is_some_and(|on_air| on_air.output().snapshot().phase.is_active())
     }
 
     /// How long the message on the air has left, if one is on the air.
     pub fn transmission_remaining(&self) -> Option<Duration> {
-        let sending = self.transmit.sending()?;
-        let rate = self.tx.sample_rate_hz()?;
-        let remaining = sending.remaining_samples(self.tx.played_samples());
-        Some(Duration::from_secs_f64(remaining as f64 / f64::from(rate)))
+        Some(self.transmit.on_air()?.remaining())
     }
 
     /// How much of the message on the air has left for the rig.
     pub fn sent_progress(&self) -> Option<transmit::SentProgress> {
-        Some(self.transmit.sending()?.progress(self.tx.played_samples()))
+        Some(self.transmit.on_air()?.progress())
     }
 
     /// Starts rig control if the file asked for it, and reads what it says.
@@ -919,7 +909,7 @@ impl App {
     /// two would drop it in the middle of what the other station reads as one
     /// transmission.
     pub(crate) fn should_unkey(&self) -> bool {
-        self.rig_keyed && !self.tx.is_running() && !self.transmit.is_busy()
+        self.rig_keyed && !self.transmit.is_busy()
     }
 
     /// Reports why the rig could not be handed a transmission, if it could not.
@@ -940,80 +930,51 @@ impl App {
         )
     }
 
-    /// Echoes whatever of the message on the air has been heard since the
-    /// last frame.
-    fn echo_played(&mut self) {
-        let played = self.tx.played_samples();
-        if let Some(sending) = self.transmit.sending_mut()
-            && let Some(echo) = sending.take_echo(played)
-        {
-            self.echo_sent(&echo);
-        }
-    }
-
     fn poll_transmit(&mut self) {
-        // A rig that refused one of the operator's commands has not been
-        // keyed, so the message it was keyed for cannot go out. The unsent
-        // text goes back to the draft rather than being dropped, as it does
-        // when the operator stops a transmission themselves.
-        if self.tx.is_running()
-            && self.rig_keyed
-            && let Some(error) = self.rig_snapshot.error.clone()
-        {
-            self.abort_transmission();
-            self.notice = Some(error.to_string());
-            return;
-        }
-        if self.tx.is_running() {
-            self.echo_played();
-            let snapshot = self.tx.latest().unwrap_or_default();
-            match snapshot.phase {
+        let ready = self.rig_ready_to_send();
+        let rig_error = self.rig_snapshot.error.as_ref().filter(|_| self.rig_keyed);
+        if let Some(on_air) = self.transmit.on_air_mut() {
+            let advance = on_air.advance(ready, rig_error);
+            if let Some(echo) = advance.echo {
+                self.echo_sent(&echo);
+            }
+            if advance.underran {
+                self.notice = Some(self.i18n.text("error-underrun"));
+            }
+            match advance.ending {
+                None => {}
+                // The unsent text goes back to the draft rather than being
+                // dropped, as it does when the operator stops a transmission
+                // themselves.
+                Some(Ending::RigRefused(error)) => {
+                    self.abort_transmission();
+                    self.notice = Some(error.to_string());
+                    return;
+                }
                 // What had not gone out goes back to the draft, the queue
                 // behind it included, as it does when the rig fails: a keyer
                 // that is not running fails every message the same way, and
                 // the text is still what the operator wrote.
-                TxPhase::Failed => {
+                Some(Ending::Failed(error)) => {
                     self.abort_transmission();
-                    if let Some(error) = snapshot.error {
+                    if let Some(error) = error {
                         self.report(&error);
                     }
                     return;
                 }
-                // The device is told to start once the queue has something in
-                // it, so the lead-in is not the thing that underruns. A keyed
-                // rig is waited for first: audio sent while it is still
-                // switching over is lost.
-                _ if !self.tx.is_started() && snapshot.phase != TxPhase::Priming && self.rig_ready_to_send() => {
-                    if let Err(error) = self.tx.start_playback() {
-                        self.abort_transmission();
-                        self.report(&error);
+                Some(Ending::Finished { late }) => {
+                    // Logged rather than shown: it is what says whether a
+                    // serial adapter is fit to key with, which is a question
+                    // asked once while setting a station up rather than on
+                    // every message.
+                    if let Some(late) = late {
+                        log::note(&format!("FSK keyer: worst transition {} µs late", late.as_micros()));
                     }
+                    self.transmit.finish();
                 }
-                _ => {}
-            }
-            // A queue that ran dry put a gap in the middle of a character,
-            // which the station being sent to reads as noise. Nothing can be
-            // done about it now, but the operator should know the message
-            // that went out was not the message on screen.
-            if self.tx.has_underrun() && !self.underran {
-                self.underran = true;
-                self.notice = Some(self.i18n.text("error-underrun"));
-            }
-            if self.tx.is_started() && self.tx.is_drained() {
-                self.echo_played();
-                // Logged rather than shown: it is what says whether a serial
-                // adapter is fit to key with, which is a question asked once
-                // while setting a station up rather than on every message.
-                if let Some(late) = self.tx.keyer_late() {
-                    log::note(&format!("FSK keyer: worst transition {} µs late", late.as_micros()));
-                }
-                self.tx.stop();
-                self.transmit.finish();
             }
         }
-        if !self.tx.is_running()
-            && let Some(text) = self.transmit.take_next()
-        {
+        if let Some(text) = self.transmit.take_next() {
             self.start_transmission(text);
         }
     }
@@ -1035,9 +996,8 @@ impl App {
             worker.transmit(self.keying());
             self.rig_keyed = true;
         }
-        self.underran = false;
         match self.open_transmission(&text) {
-            Ok(schedule) => self.transmit.begin(Sending::new(text, schedule)),
+            Ok((schedule, output)) => self.transmit.begin(Sending::new(text, schedule), output),
             Err(error) => {
                 self.report(&error);
                 // The message had already left the queue, so it is given back
@@ -1055,19 +1015,20 @@ impl App {
     /// The keyer counts in microseconds of its own timeline, so a message it
     /// keys is scheduled at that rate, as one played is scheduled at the
     /// device's.
-    fn open_transmission(&mut self, text: &str) -> Result<TxSchedule, AppError> {
+    fn open_transmission(&self, text: &str) -> Result<(TxSchedule, Output), AppError> {
         let config = self.tx_config();
         let codes = encode_text(text, &config)?;
         if self.settings.keyer.enabled {
             let schedule = TxSchedule::new(text, KEYER_TICKS_PER_SECOND, &config)?;
-            self.tx
-                .begin_keyer(KeyerWorker::spawn(self.settings.keyer.address.clone(), codes, config));
-            return Ok(schedule);
+            let worker = KeyerWorker::spawn(self.settings.keyer.address.clone(), codes, config);
+            return Ok((schedule, Output::keyer(worker)));
         }
         let (playback, writer) = self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES)?;
         let schedule = TxSchedule::new(text, playback.sample_rate_hz(), &config)?;
-        self.tx.begin_audio(playback, TxWorker::spawn(writer, codes, config));
-        Ok(schedule)
+        Ok((
+            schedule,
+            Output::audio(playback, TxWorker::spawn(writer, codes, config)),
+        ))
     }
 
     fn echo_sent(&mut self, text: &str) {
