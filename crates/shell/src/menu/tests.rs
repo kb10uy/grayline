@@ -1,6 +1,7 @@
 use egui_kittest::{Harness, kittest::Queryable};
 
-use super::{Item, Menu, bar, flatten};
+use super::{Item, Menu, bar, device_items, flatten, language_submenu, zoom_items};
+use crate::i18n::{Catalog, I18n, Locale};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum Action {
@@ -105,4 +106,53 @@ fn an_in_window_check_returns_an_action_without_changing_the_model() {
     drop(harness);
     assert_eq!(selected, Some(Action::Toggle));
     assert!(matches!(menus[0].items[0], Item::Check { checked: true, .. }));
+}
+
+const CATALOG: Catalog = Catalog {
+    en: "menu-zoom-in = Zoom in
+menu-zoom-out = Zoom out
+menu-zoom-reset = Reset ({ $percent }%)
+menu-language = Language
+",
+    ja: "menu-zoom-in = 拡大
+menu-zoom-out = 縮小
+menu-zoom-reset = リセット ({ $percent }%)
+menu-language = 言語
+",
+};
+
+#[test]
+fn the_zoom_reset_names_the_scale_in_use() {
+    let items = zoom_items(
+        &I18n::new(Locale::En, &CATALOG),
+        1.25,
+        Action::Open,
+        Action::Toggle,
+        Action::Quit,
+    );
+    assert!(matches!(&items[2], Item::Command { label, action: Action::Quit } if label == "Reset (125%)"));
+}
+
+#[test]
+fn the_language_in_use_is_the_one_checked() {
+    let Item::Submenu { items, .. } = language_submenu(&I18n::new(Locale::Ja, &CATALOG), |_| Action::Toggle) else {
+        panic!("the languages are a submenu");
+    };
+    let checked: Vec<bool> = items
+        .iter()
+        .map(|item| matches!(item, Item::Check { checked: true, .. }))
+        .collect();
+    assert_eq!(checked, Locale::ALL.map(|locale| locale == Locale::Ja));
+}
+
+#[test]
+fn the_selected_device_is_checked_and_no_devices_say_so() {
+    let items = device_items(["A", "B"], Some("B"), "none".to_owned(), |_| Action::Open);
+    assert!(matches!(
+        &items[..],
+        [Item::Check { checked: false, .. }, Item::Check { checked: true, .. }]
+    ));
+
+    let empty = device_items([], None, "none".to_owned(), |_| Action::Open);
+    assert_eq!(empty, [Item::Pending("none".to_owned())]);
 }

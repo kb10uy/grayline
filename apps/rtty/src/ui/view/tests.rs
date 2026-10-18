@@ -409,7 +409,7 @@ fn the_station_window_opens_from_the_menu(#[case] locale: Locale) {
 fn the_settings_menu_names_the_station_window() {
     let app = App::headless();
     let model = menu::model(&app);
-    let items = menu::flatten(&model);
+    let items = grayline_shell::menu::flatten(&model);
     assert!(
         items.iter().any(|item| matches!(
             item,
@@ -488,7 +488,7 @@ fn a_field_no_catalogue_knows_stands_under_its_own_name() {
 fn the_settings_menu_carries_the_directory() {
     let app = App::headless();
     let model = menu::model(&app);
-    let items = menu::flatten(&model);
+    let items = grayline_shell::menu::flatten(&model);
     assert!(
         items.iter().any(|item| matches!(
             item,

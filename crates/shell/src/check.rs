@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fs, path::Path};
 use crate::{
     Identity,
     i18n::{Catalog, Locale},
-    platform,
+    menu, platform,
 };
 
 /// Returns every message key `catalog` defines in `locale`.
@@ -45,18 +45,20 @@ pub fn requested_keys(directory: &Path) -> BTreeSet<String> {
     keys
 }
 
-/// Panics unless every key the sources under `directory` ask for is defined.
+/// Panics unless every key the sources under `directory` ask for is defined,
+/// along with the keys the shared menus ask for on the application's behalf.
 ///
 /// `minimum` guards the scanner itself: finding fewer call sites than that
 /// means it stopped recognizing them, not that the application stopped
 /// asking.
 pub fn assert_requested_keys_defined(catalog: &Catalog, directory: &Path, minimum: usize) {
     let defined = message_keys(catalog, Locale::default());
-    let requested = requested_keys(directory);
+    let mut requested = requested_keys(directory);
     assert!(
         requested.len() > minimum,
         "the call sites should have been found: {requested:?}"
     );
+    requested.extend(menu::KEYS.map(str::to_owned));
     let missing = requested.difference(&defined).collect::<Vec<_>>();
     assert!(missing.is_empty(), "keys asked for but not defined: {missing:?}");
 }
