@@ -22,6 +22,6 @@ mod framing;
 mod state;
 
 pub use client::{DEFAULT_ADDRESS, KeyerClient, Status};
-pub use codes::{MAXIMUM_CODES_PER_LINE, decode_codes, encode_codes};
-pub use framing::{decode_open, encode_open};
+pub use codes::{MAXIMUM_CODES_PER_LINE, decode_codes};
+pub use framing::decode_open;
 pub use state::StreamState;

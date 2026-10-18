@@ -16,7 +16,7 @@ mod wav;
 
 pub use capture::{Capture, CaptureReader, CaptureWriter, Reading, synthetic_capture};
 pub use device::{InputDevice, OutputDevice};
-pub use error::{AudioError, FaultKind, FaultSlot, StreamFault, WavError};
+pub use error::{AudioError, FaultKind, StreamFault, WavError};
 pub use host::AudioHost;
 pub use playback::{Playback, PlaybackReader, PlaybackWriter, synthetic_playback};
 pub use wav::WavSource;

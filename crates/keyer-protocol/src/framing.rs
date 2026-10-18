@@ -8,7 +8,7 @@ use grayline_rtty::{
 /// Only what decides timing is written. Tones, level, and reverse are the
 /// audio transmitter's: a keyed line has two states and the rig decides what
 /// they sound like.
-pub fn encode_open(config: &TxConfig) -> String {
+pub(crate) fn encode_open(config: &TxConfig) -> String {
     let stop = match config.framing.stop {
         StopElement::One => "1",
         StopElement::OneAndAHalf => "1.5",

@@ -64,8 +64,7 @@ impl CommonSettings {
 }
 
 /// Where the shared file sits, if the user directories can be found at all.
-#[must_use]
-pub fn default_common_path() -> Option<PathBuf> {
+fn default_common_path() -> Option<PathBuf> {
     Some(BaseDirs::new()?.config_dir().join(FAMILY_DIRECTORY).join(COMMON_FILE))
 }
 

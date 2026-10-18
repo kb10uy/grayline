@@ -10,9 +10,10 @@ use cpal::{
 use ringbuf::{HeapRb, traits::Split};
 
 use crate::{
-    AudioError, Capture, CaptureReader, FaultKind, FaultSlot, InputDevice, MINIMUM_SAMPLE_RATE_HZ, OutputDevice,
-    Playback, PlaybackWriter, StreamFault, capture,
+    AudioError, Capture, CaptureReader, FaultKind, InputDevice, MINIMUM_SAMPLE_RATE_HZ, OutputDevice, Playback,
+    PlaybackWriter, StreamFault, capture,
     device::{describe, named, preferred_output_buffer_size, preferred_output_rate, preferred_rate},
+    error::FaultSlot,
     playback,
 };
 

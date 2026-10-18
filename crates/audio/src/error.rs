@@ -66,7 +66,7 @@ pub struct StreamFault {
 /// until it is taken: a stream that fails usually fails repeatedly, and the
 /// first is the one that says why.
 #[derive(Clone, Debug, Default)]
-pub struct FaultSlot(Arc<Mutex<Option<StreamFault>>>);
+pub(crate) struct FaultSlot(Arc<Mutex<Option<StreamFault>>>);
 
 impl FaultSlot {
     pub(crate) fn report(&self, fault: StreamFault) {
@@ -78,7 +78,7 @@ impl FaultSlot {
     }
 
     /// Takes the pending report, if a stream left one.
-    pub fn take(&self) -> Option<StreamFault> {
+    pub(crate) fn take(&self) -> Option<StreamFault> {
         match self.0.lock() {
             Ok(mut slot) => slot.take(),
             Err(poisoned) => poisoned.into_inner().take(),
