@@ -1063,6 +1063,17 @@ impl App {
         )
     }
 
+    /// Echoes whatever of the message on the air has been heard since the
+    /// last frame.
+    fn echo_played(&mut self) {
+        let played = self.tx.played_samples();
+        if let Some(sending) = self.transmit.sending_mut()
+            && let Some(echo) = sending.take_echo(played)
+        {
+            self.echo_sent(&echo);
+        }
+    }
+
     fn poll_transmit(&mut self) {
         // A rig that refused one of the operator's commands has not been
         // keyed, so the message it was keyed for cannot go out. The unsent
@@ -1077,12 +1088,7 @@ impl App {
             return;
         }
         if self.tx.is_running() {
-            let played = self.tx.played_samples();
-            if let Some(sending) = self.transmit.sending_mut()
-                && let Some(echo) = sending.take_echo(played)
-            {
-                self.echo_sent(&echo);
-            }
+            self.echo_played();
             let snapshot = self.tx.latest().unwrap_or_default();
             match snapshot.phase {
                 // What had not gone out goes back to the draft, the queue
@@ -1117,12 +1123,7 @@ impl App {
                 self.notice = Some(self.i18n.text("error-underrun"));
             }
             if self.tx.is_started() && self.tx.is_drained() {
-                let played = self.tx.played_samples();
-                if let Some(sending) = self.transmit.sending_mut()
-                    && let Some(echo) = sending.take_echo(played)
-                {
-                    self.echo_sent(&echo);
-                }
+                self.echo_played();
                 // Logged rather than shown: it is what says whether a serial
                 // adapter is fit to key with, which is a question asked once
                 // while setting a station up rather than on every message.
