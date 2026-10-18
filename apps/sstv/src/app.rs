@@ -41,7 +41,7 @@ use crate::{
         audio::{AudioState, TxState},
         compose::{ComposeRequest, Composer},
         contact::{self, ContactPaths, ContactSnapshot, ContactWorker},
-        receive::{Frame, RxProgress},
+        receive::{Frame, RxProgress, RxSettings},
         transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
     },
 };
@@ -385,9 +385,7 @@ impl App {
         let audio = AudioState::new(
             settings.input_device.as_deref(),
             settings.output_device.as_deref(),
-            settings.dsp.live_slant,
-            settings.vis_restart,
-            settings.vis_strict,
+            rx_settings(&settings),
             waker.clone(),
         );
         let mut app = Self::from_parts(
@@ -428,7 +426,7 @@ impl App {
     pub(crate) fn headless_on(platform: Box<dyn Platform>) -> Self {
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
-            AudioState::disconnected(),
+            AudioState::disconnected(rx_settings(&Settings::default())),
             AppPaths::from_roots(grayline_shell::paths::Roots::under(scratch)),
             Stored {
                 config: Config::detached(),
@@ -650,7 +648,7 @@ impl App {
     /// the change applies to the reception in progress.
     pub fn set_vis_restart(&mut self, enabled: bool) {
         self.settings.vis_restart = enabled;
-        self.audio.set_vis_restart(enabled);
+        self.push_rx_settings();
     }
 
     /// Chooses whether a VIS detection requires the leader tone as well.
@@ -659,7 +657,12 @@ impl App {
     /// the change applies to the signal search in progress.
     pub fn set_vis_strict(&mut self, enabled: bool) {
         self.settings.vis_strict = enabled;
-        self.audio.set_vis_strict(enabled);
+        self.push_rx_settings();
+    }
+
+    /// Hands the receive worker what the settings now say about reception.
+    fn push_rx_settings(&mut self) {
+        self.audio.set_rx_settings(rx_settings(&self.settings));
     }
 
     /// Abandons the reception in progress and starts the search over.
@@ -676,7 +679,7 @@ impl App {
     pub fn toggle_dsp(&mut self, dsp: Dsp) {
         self.settings.dsp.toggle(dsp);
         if dsp == Dsp::Slant {
-            self.audio.set_live_slant(self.settings.dsp.live_slant);
+            self.push_rx_settings();
         }
     }
 
@@ -1140,9 +1143,7 @@ impl App {
         }
         self.adopt_decoded_callsign();
         self.adopt_decoded_number();
-        self.audio.set_sync_start(self.sync_start());
-        self.audio.set_vis_restart(self.settings.vis_restart);
-        self.audio.set_vis_strict(self.settings.vis_strict);
+        self.push_rx_settings();
         self.tx_gain.set_travel(self.settings.tx_volume);
         if self.settings.auto_mode
             && let Some(mode) = self.audio.snapshot().mode
@@ -1319,22 +1320,6 @@ impl App {
     /// anything sent into it is simply lost.
     const fn rig_ready_to_send(&self) -> bool {
         !self.rig_keyed || matches!(self.rig_snapshot.state, RigState::Transmitting)
-    }
-
-    /// Chooses which modes a reception may start in without a VIS header.
-    ///
-    /// A transmission joined after its header, or that never sent one, can only
-    /// be identified by the spacing of its sync pulses, and a period can be
-    /// matched by more than one mode. So the operator's own choice decides how
-    /// far the inference may reach: with automatic detection on, any supported
-    /// mode may be inferred, and with it off only the selected mode is
-    /// considered, which confirms rather than overrides that choice.
-    const fn sync_start(&self) -> SyncStart {
-        if self.settings.auto_mode {
-            SyncStart::Any
-        } else {
-            SyncStart::Only(self.settings.rx_mode)
-        }
     }
 
     /// Puts a newly decoded station identifier in the QSO contact field.
@@ -1867,6 +1852,28 @@ impl App {
 
     pub fn output_sample_rate_hz(&self) -> Option<u32> {
         self.tx.sample_rate_hz()
+    }
+}
+
+/// What `settings` say about reception, in the form the receive worker reads.
+///
+/// Which modes a reception may start in without a VIS header follows the mode
+/// selection. A transmission joined after its header, or that never sent one,
+/// can only be identified by the spacing of its sync pulses, and a period can
+/// be matched by more than one mode. So the operator's own choice decides how
+/// far the inference may reach: with automatic detection on, any supported
+/// mode may be inferred, and with it off only the selected mode is
+/// considered, which confirms rather than overrides that choice.
+fn rx_settings(settings: &Settings) -> RxSettings {
+    RxSettings {
+        live_slant: settings.dsp.live_slant,
+        vis_restart: settings.vis_restart,
+        vis_strict: settings.vis_strict,
+        sync_start: if settings.auto_mode {
+            SyncStart::Any
+        } else {
+            SyncStart::Only(settings.rx_mode)
+        },
     }
 }
 

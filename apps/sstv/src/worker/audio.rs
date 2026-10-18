@@ -1,12 +1,11 @@
 use grayline_audio::{AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault};
-use grayline_sstv_rx::SyncStart;
 
 use grayline_shell::worker::Waker;
 
 use crate::{
     error::AppError,
     worker::{
-        receive::{HistoryCandidate, RxSnapshot, RxWorker},
+        receive::{HistoryCandidate, RxSettings, RxSnapshot, RxWorker},
         transmit::{TxSnapshot, TxWorker},
     },
 };
@@ -35,10 +34,9 @@ pub struct AudioState {
     /// previous one grown or shrunk.
     session: u64,
     muted_for_transmit: bool,
-    live_slant: bool,
-    vis_restart: bool,
-    vis_strict: bool,
-    sync_start: SyncStart,
+    /// What the operator chose about reception, kept so a device opened later
+    /// starts the same way.
+    rx_settings: RxSettings,
     /// Handed to every worker opened here, so a decoded row reaches the canvas
     /// without the interface having to redraw on the chance that one has.
     waker: Waker,
@@ -52,14 +50,7 @@ impl AudioState {
     /// The name is matched rather than an identifier because the host assigns
     /// identifiers per run; a device that disappeared since the last session
     /// falls back to the host default.
-    pub fn new(
-        preferred: Option<&str>,
-        preferred_output: Option<&str>,
-        live_slant: bool,
-        vis_restart: bool,
-        vis_strict: bool,
-        waker: Waker,
-    ) -> Self {
+    pub fn new(preferred: Option<&str>, preferred_output: Option<&str>, rx_settings: RxSettings, waker: Waker) -> Self {
         let host = AudioHost::new();
         let (devices, input_error) = match host.input_devices() {
             Ok(devices) => (devices, None),
@@ -93,10 +84,7 @@ impl AudioState {
             snapshot: RxSnapshot::default(),
             session: 0,
             muted_for_transmit: false,
-            live_slant,
-            vis_restart,
-            vis_strict,
-            sync_start: SyncStart::default(),
+            rx_settings,
             waker,
             #[cfg(test)]
             resets: 0,
@@ -112,7 +100,7 @@ impl AudioState {
     /// Tests drive the interface without enumerating or opening devices, so
     /// they stay deterministic and do not depend on the machine's hardware.
     #[cfg(test)]
-    pub fn disconnected() -> Self {
+    pub fn disconnected(rx_settings: RxSettings) -> Self {
         Self {
             host: AudioHost::new(),
             devices: Vec::new(),
@@ -125,10 +113,7 @@ impl AudioState {
             snapshot: RxSnapshot::default(),
             session: 0,
             muted_for_transmit: false,
-            live_slant: true,
-            vis_restart: true,
-            vis_strict: false,
-            sync_start: SyncStart::default(),
+            rx_settings,
             waker: Waker::default(),
             #[cfg(test)]
             resets: 0,
@@ -168,14 +153,7 @@ impl AudioState {
         self.session += 1;
         match self.host.open_capture(device, QUEUE_CAPACITY_SAMPLES) {
             Ok((capture, reader)) => {
-                let worker = RxWorker::spawn(
-                    reader,
-                    self.live_slant,
-                    self.vis_restart,
-                    self.vis_strict,
-                    self.sync_start,
-                    self.waker.clone(),
-                );
+                let worker = RxWorker::spawn(reader, self.rx_settings, self.waker.clone());
                 worker.set_muted_for_transmit(self.muted_for_transmit);
                 self.worker = Some(worker);
                 self.capture = Some(capture);
@@ -249,65 +227,21 @@ impl AudioState {
         self.resets
     }
 
-    pub fn set_live_slant(&mut self, enabled: bool) {
-        self.live_slant = enabled;
-        if let Some(worker) = self.worker.as_ref() {
-            worker.set_live_slant(enabled);
-        }
-    }
-
-    pub fn set_vis_restart(&mut self, enabled: bool) {
-        if self.vis_restart == enabled {
+    /// Hands the worker what the operator chose about reception, and keeps it
+    /// for the next device.
+    pub fn set_rx_settings(&mut self, settings: RxSettings) {
+        if self.rx_settings == settings {
             return;
         }
-        self.vis_restart = enabled;
+        self.rx_settings = settings;
         if let Some(worker) = self.worker.as_ref() {
-            worker.set_vis_restart(enabled);
-        }
-    }
-
-    pub fn set_vis_strict(&mut self, enabled: bool) {
-        if self.vis_strict == enabled {
-            return;
-        }
-        self.vis_strict = enabled;
-        if let Some(worker) = self.worker.as_ref() {
-            worker.set_vis_strict(enabled);
-        }
-    }
-
-    /// Chooses whether a reception may start without a VIS header.
-    ///
-    /// Kept here as well as pushed to the worker, because a device opened
-    /// later spawns a worker that has to start with the same scope.
-    pub fn set_sync_start(&mut self, scope: SyncStart) {
-        if self.sync_start == scope {
-            return;
-        }
-        self.sync_start = scope;
-        if let Some(worker) = self.worker.as_ref() {
-            worker.set_sync_start(scope);
+            worker.set_settings(settings);
         }
     }
 
     #[cfg(test)]
-    pub const fn sync_start(&self) -> SyncStart {
-        self.sync_start
-    }
-
-    #[cfg(test)]
-    pub const fn live_slant(&self) -> bool {
-        self.live_slant
-    }
-
-    #[cfg(test)]
-    pub const fn vis_restart(&self) -> bool {
-        self.vis_restart
-    }
-
-    #[cfg(test)]
-    pub const fn vis_strict(&self) -> bool {
-        self.vis_strict
+    pub const fn rx_settings(&self) -> RxSettings {
+        self.rx_settings
     }
 
     /// Returns the physical capture rate, if a device is open.

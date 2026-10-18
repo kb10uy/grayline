@@ -29,7 +29,7 @@ fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     // file, and a run that could not reach it would not be restoring them.
     let common = CommonConfig::load(paths.config_dir().join(grayline_shell::common::COMMON_FILE));
     let mut app = App::from_parts(
-        AudioState::disconnected(),
+        AudioState::disconnected(rx_settings(&Settings::default())),
         paths,
         Stored { config, common },
         settings,
@@ -277,7 +277,7 @@ fn the_credentials_file_is_written_where_the_paths_name_it() {
     let root = TempDir::new().unwrap();
     let credentials = root.path().join("credentials.toml");
     let mut app = App::from_parts(
-        AudioState::disconnected(),
+        AudioState::disconnected(rx_settings(&Settings::default())),
         AppPaths::from_roots(Roots::under(root.path())),
         Stored {
             config: Config::detached(),
@@ -359,16 +359,16 @@ fn sync_start_scope_follows_automatic_mode_detection() {
     let mut app = App::headless();
     app.settings.auto_mode = true;
     app.poll_workers();
-    assert_eq!(app.audio.sync_start(), SyncStart::Any);
+    assert_eq!(app.audio.rx_settings().sync_start, SyncStart::Any);
 
     app.settings.auto_mode = false;
     app.select_rx_mode(Mode::Scottie1);
     app.poll_workers();
-    assert_eq!(app.audio.sync_start(), SyncStart::Only(Mode::Scottie1));
+    assert_eq!(app.audio.rx_settings().sync_start, SyncStart::Only(Mode::Scottie1));
 
     app.select_rx_mode(Mode::Pd120);
     app.poll_workers();
-    assert_eq!(app.audio.sync_start(), SyncStart::Only(Mode::Pd120));
+    assert_eq!(app.audio.rx_settings().sync_start, SyncStart::Only(Mode::Pd120));
 }
 
 /// The FSKID alphabet includes the space, and an identifier that is only
@@ -735,7 +735,7 @@ fn dsp_toggles_flip_one_flag(#[case] dsp: Dsp, #[case] expected: bool) {
     app.toggle_dsp(dsp);
     assert_eq!(app.settings.dsp.get(dsp), expected);
     if dsp == Dsp::Slant {
-        assert_eq!(app.audio.live_slant(), expected);
+        assert_eq!(app.audio.rx_settings().live_slant, expected);
     }
 }
 
@@ -775,29 +775,29 @@ fn an_unusable_custom_variable_name_is_kept_out_of_the_composition() {
 fn slant_is_enabled_by_default_in_the_ui_and_worker_settings() {
     let app = App::headless();
     assert!(app.settings.dsp.live_slant);
-    assert!(app.audio.live_slant());
+    assert!(app.audio.rx_settings().live_slant);
 }
 
 #[test]
 fn the_vis_restart_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
     assert!(app.settings.vis_restart);
-    assert!(app.audio.vis_restart());
+    assert!(app.audio.rx_settings().vis_restart);
 
     app.set_vis_restart(false);
 
-    assert!(!app.audio.vis_restart());
+    assert!(!app.audio.rx_settings().vis_restart);
 }
 
 #[test]
 fn the_vis_strict_setting_reaches_the_receive_worker() {
     let mut app = App::headless();
     assert!(!app.settings.vis_strict);
-    assert!(!app.audio.vis_strict());
+    assert!(!app.audio.rx_settings().vis_strict);
 
     app.set_vis_strict(true);
 
-    assert!(app.audio.vis_strict());
+    assert!(app.audio.rx_settings().vis_strict);
 }
 
 #[test]

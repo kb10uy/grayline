@@ -15,10 +15,7 @@ use grayline_sstv_rx::SyncStart;
 
 use grayline_shell::worker::Waker;
 
-use crate::{
-    error::AppError,
-    worker::receive::session::{SharedOptions, run},
-};
+use crate::{error::AppError, worker::receive::session::run};
 
 mod session;
 
@@ -216,65 +213,65 @@ impl Mailbox {
     }
 }
 
+/// What the operator chose about reception.
+///
+/// Read whole by the worker on every block of audio, and kept by
+/// [`AudioState`](crate::worker::audio::AudioState) as well so a device opened
+/// later starts the same way.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RxSettings {
+    /// Whether the raster clock is refitted from the picture as it arrives.
+    pub live_slant: bool,
+    /// Whether a VIS header may start a reception over.
+    pub vis_restart: bool,
+    /// Whether a VIS detection requires the header's leader tone as well.
+    pub vis_strict: bool,
+    /// Which modes a reception may start in without a VIS header.
+    pub sync_start: SyncStart,
+}
+
+/// The knobs the interface turns while a reception runs.
+pub(super) struct Controls {
+    settings: Mutex<RxSettings>,
+    /// Set by the interface to abandon the reception in progress.
+    pub(super) reset: AtomicBool,
+    /// Set while the station transmits, so nothing it hears is decoded.
+    pub(super) muted: AtomicBool,
+}
+
+impl Controls {
+    pub(super) fn settings(&self) -> RxSettings {
+        *self.settings.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 /// Handle to a running receive worker.
 ///
 /// Dropping the handle stops the worker and waits for it to finish, so the
 /// capture queue is never left with a live consumer.
 pub struct RxWorker {
     stop: Arc<AtomicBool>,
-    muted_for_transmit: Arc<AtomicBool>,
-    reset: Arc<AtomicBool>,
+    controls: Arc<Controls>,
     join: Option<JoinHandle<()>>,
     mailbox: Arc<Mailbox>,
-    live_slant: Arc<AtomicBool>,
-    vis_restart: Arc<AtomicBool>,
-    vis_strict: Arc<AtomicBool>,
-    sync_start: Arc<Mutex<SyncStart>>,
 }
 
 impl RxWorker {
-    pub fn spawn(
-        reader: CaptureReader,
-        live_slant: bool,
-        vis_restart: bool,
-        vis_strict: bool,
-        sync_start: SyncStart,
-        waker: Waker,
-    ) -> Self {
+    pub fn spawn(reader: CaptureReader, settings: RxSettings, waker: Waker) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
-        let muted_for_transmit = Arc::new(AtomicBool::new(false));
-        let reset = Arc::new(AtomicBool::new(false));
-        let live_slant = Arc::new(AtomicBool::new(live_slant));
-        let vis_restart = Arc::new(AtomicBool::new(vis_restart));
-        let vis_strict = Arc::new(AtomicBool::new(vis_strict));
-        let sync_start = Arc::new(Mutex::new(sync_start));
+        let controls = Arc::new(Controls {
+            settings: Mutex::new(settings),
+            reset: AtomicBool::new(false),
+            muted: AtomicBool::new(false),
+        });
         let mailbox = Arc::new(Mailbox::new(waker));
         let join = {
             let stop = Arc::clone(&stop);
-            let muted_for_transmit = Arc::clone(&muted_for_transmit);
-            let reset = Arc::clone(&reset);
-            let live_slant = Arc::clone(&live_slant);
-            let vis_restart = Arc::clone(&vis_restart);
-            let vis_strict = Arc::clone(&vis_strict);
-            let sync_start = Arc::clone(&sync_start);
+            let controls = Arc::clone(&controls);
             let mailbox = Arc::clone(&mailbox);
             thread::Builder::new()
                 .name("grayline-sstv-receive".to_owned())
-                .spawn(move || {
-                    run(
-                        reader,
-                        &mailbox,
-                        &stop,
-                        &muted_for_transmit,
-                        SharedOptions {
-                            reset: &reset,
-                            live_slant: &live_slant,
-                            vis_restart: &vis_restart,
-                            vis_strict: &vis_strict,
-                            sync_start: &sync_start,
-                        },
-                    );
-                })
+                .spawn(move || run(reader, &mailbox, &stop, &controls))
                 .ok()
         };
         if join.is_none() {
@@ -285,14 +282,9 @@ impl RxWorker {
         }
         Self {
             stop,
-            muted_for_transmit,
-            reset,
+            controls,
             join,
             mailbox,
-            live_slant,
-            vis_restart,
-            vis_strict,
-            sync_start,
         }
     }
 
@@ -302,7 +294,7 @@ impl RxWorker {
     /// samples that arrive while the station transmits can never become a
     /// reception.
     pub fn set_muted_for_transmit(&self, muted: bool) {
-        self.muted_for_transmit.store(muted, Ordering::Relaxed);
+        self.controls.muted.store(muted, Ordering::Relaxed);
     }
 
     /// Closes out whatever is being received and searches again.
@@ -317,23 +309,12 @@ impl RxWorker {
     /// belongs to the worker thread. It is acted on with the next block of
     /// audio, and one is arriving continuously while a device is open.
     pub fn request_reset(&self) {
-        self.reset.store(true, Ordering::Relaxed);
+        self.controls.reset.store(true, Ordering::Relaxed);
     }
 
-    pub fn set_live_slant(&self, enabled: bool) {
-        self.live_slant.store(enabled, Ordering::Relaxed);
-    }
-
-    pub fn set_vis_restart(&self, enabled: bool) {
-        self.vis_restart.store(enabled, Ordering::Relaxed);
-    }
-
-    pub fn set_vis_strict(&self, enabled: bool) {
-        self.vis_strict.store(enabled, Ordering::Relaxed);
-    }
-
-    pub fn set_sync_start(&self, scope: SyncStart) {
-        *self.sync_start.lock().unwrap_or_else(PoisonError::into_inner) = scope;
+    /// Hands the worker what the operator chose, for the next block of audio.
+    pub fn set_settings(&self, settings: RxSettings) {
+        *self.controls.settings.lock().unwrap_or_else(PoisonError::into_inner) = settings;
     }
 
     /// Returns the newest state, or `None` when nothing changed since the last
@@ -580,6 +561,15 @@ mod pipeline_tests {
         total as f64 / (expected.size().pixel_count() * 3) as f64
     }
 
+    fn test_settings(sync_start: SyncStart) -> RxSettings {
+        RxSettings {
+            live_slant: true,
+            vis_restart: true,
+            vis_strict: false,
+            sync_start,
+        }
+    }
+
     /// Drives the real worker through the capture queue and returns its last
     /// image, so the test covers the same code path a live device does.
     fn receive(pcm: &[f32], trailing_silence: usize) -> (RxSnapshot, Option<Frame>) {
@@ -588,7 +578,7 @@ mod pipeline_tests {
 
     fn receive_with(pcm: &[f32], trailing_silence: usize, sync_start: SyncStart) -> (RxSnapshot, Option<Frame>) {
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(reader, true, true, false, sync_start, Waker::default());
+        let worker = RxWorker::spawn(reader, test_settings(sync_start), Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
         let silence = vec![0.0_f32; trailing_silence];
@@ -648,7 +638,7 @@ mod pipeline_tests {
         let pcm = transmission(mode, expected.clone(), 0.0);
         let silence = vec![0.0_f32; RATE as usize * 3];
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(reader, true, true, false, SyncStart::Disabled, Waker::default());
+        let worker = RxWorker::spawn(reader, test_settings(SyncStart::Disabled), Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
 
@@ -676,7 +666,7 @@ mod pipeline_tests {
         let mode = Mode::Robot36;
         let pcm = transmission(mode, source_image(mode), 0.0);
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(reader, true, true, false, SyncStart::Disabled, Waker::default());
+        let worker = RxWorker::spawn(reader, test_settings(SyncStart::Disabled), Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
 
@@ -749,7 +739,7 @@ mod pipeline_tests {
         let expected = source_image(mode);
         let pcm = transmission(mode, expected.clone(), 0.0);
         let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
-        let worker = RxWorker::spawn(reader, true, true, false, SyncStart::Disabled, Waker::default());
+        let worker = RxWorker::spawn(reader, test_settings(SyncStart::Disabled), Waker::default());
         let mut snapshot = RxSnapshot::default();
         let mut frame = None;
 
