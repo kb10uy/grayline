@@ -60,7 +60,7 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     // Labels are inert except in the text pane, which turns selection back on
     // for itself: a received callsign is there to be copied, while a heading
     // that took the text cursor would only swallow the press.
-    ui.style_mut().interaction.selectable_labels = false;
+    grayline_shell::inert_labels(ui);
 
     let mut activated = None;
     if in_window_menu {
