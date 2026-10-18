@@ -189,9 +189,9 @@ pub struct App {
     /// them would drop the carrier in the middle of what the other station is
     /// reading as one transmission.
     rig_keyed: bool,
-    /// The session an underrun was last reported for, so one gap in the
-    /// audio is one notice rather than one per frame.
-    underran: Option<u64>,
+    /// Whether the message on the air has reported an underrun, so one gap
+    /// in the audio is one notice rather than one per frame.
+    underran: bool,
     /// The session the text on screen belongs to.
     ///
     /// A device change starts a new worker whose decoders begin again, so the
@@ -301,7 +301,7 @@ impl App {
             rig_worker: None,
             rig_snapshot: RigSnapshot::default(),
             rig_keyed: false,
-            underran: None,
+            underran: false,
         }
     }
 
@@ -1167,8 +1167,8 @@ impl App {
             // which the station being sent to reads as noise. Nothing can be
             // done about it now, but the operator should know the message
             // that went out was not the message on screen.
-            if self.tx.has_underrun() && self.underran != Some(self.session) {
-                self.underran = Some(self.session);
+            if self.tx.has_underrun() && !self.underran {
+                self.underran = true;
                 self.notice = Some(self.i18n.text("error-underrun"));
             }
             if self.tx.is_started() && self.tx.is_drained() {
@@ -1212,6 +1212,7 @@ impl App {
             worker.transmit(self.keying());
             self.rig_keyed = true;
         }
+        self.underran = false;
         match self.open_transmission(&text) {
             Ok(schedule) => self.transmit.begin(Sending::new(text, schedule)),
             Err(error) => {
