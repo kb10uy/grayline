@@ -63,17 +63,17 @@ pub fn model(app: &App) -> Vec<Menu> {
                 Item::Separator,
                 Item::Check {
                     label: text("action-infer-lpm"),
-                    checked: app.infer_lines_per_minute,
+                    checked: app.settings.infer_lines_per_minute,
                     action: Action::ToggleInferLinesPerMinute,
                 },
                 Item::Check {
                     label: text("action-narrow-shift"),
-                    checked: app.narrow_shift,
+                    checked: app.settings.narrow_shift,
                     action: Action::ToggleNarrowShift,
                 },
                 Item::Check {
                     label: text("action-auto-save"),
-                    checked: app.auto_save,
+                    checked: app.settings.auto_save,
                     action: Action::ToggleAutoSave,
                 },
                 Item::Separator,
@@ -121,14 +121,14 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),
         Action::ToggleInferLinesPerMinute => {
-            app.infer_lines_per_minute = !app.infer_lines_per_minute;
+            app.settings.infer_lines_per_minute = !app.settings.infer_lines_per_minute;
             app.push_settings();
         }
         Action::ToggleNarrowShift => {
-            app.narrow_shift = !app.narrow_shift;
+            app.settings.narrow_shift = !app.settings.narrow_shift;
             app.push_settings();
         }
-        Action::ToggleAutoSave => app.auto_save = !app.auto_save,
+        Action::ToggleAutoSave => app.settings.auto_save = !app.settings.auto_save,
         Action::SaveChart => app.save_chart(),
         Action::OpenManual => app.open_manual(),
         Action::ZoomIn => app.zoom_by(shared_menu::ZOOM_STEP),

@@ -83,9 +83,9 @@ fn the_zoom_stays_inside_what_the_settings_allow() {
 #[test]
 fn the_geometry_reaches_the_worker_settings() {
     let mut app = App::headless();
-    app.ioc = Ioc::Ioc288;
-    app.lines_per_minute = LinesPerMinute::L240;
-    app.inverted = true;
+    app.settings.ioc = Ioc::Ioc288;
+    app.settings.lines_per_minute = LinesPerMinute::L240;
+    app.settings.inverted = true;
     app.push_settings();
 
     let settings = app.audio.settings();
@@ -186,7 +186,7 @@ fn persisting_an_unchanged_application_writes_nothing() {
     app.persist();
     assert_eq!(app.saved, before);
 
-    app.inverted = !app.inverted;
+    app.settings.inverted = !app.settings.inverted;
     app.persist();
     assert_ne!(app.saved, before);
 }
@@ -225,7 +225,7 @@ fn a_recording_is_decoded_into_the_strip() {
 
     let ctx = egui::Context::default();
     let mut app = App::headless();
-    app.auto_save = false;
+    app.settings.auto_save = false;
     app.open_wav(&path);
     assert!(app.audio.is_capturing(), "{:?}", app.notice);
 

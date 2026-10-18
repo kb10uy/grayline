@@ -13,7 +13,7 @@ use grayline_shell::{
     platform::{Activity, Platform},
     worker::Waker,
 };
-use grayline_wefax::{Format, Ioc, LinesPerMinute};
+use grayline_wefax::Format;
 
 use crate::{
     error::AppError,
@@ -51,16 +51,11 @@ pub struct App {
     pub strip: Strip,
     pub ui_scale: f32,
 
-    /// The geometry a reception starts on, and falls back to.
-    pub ioc: Ioc,
-    pub lines_per_minute: LinesPerMinute,
-    pub auto_start: bool,
-    pub auto_stop: bool,
-    pub infer_lines_per_minute: bool,
-    pub slant_tracking: bool,
-    pub inverted: bool,
-    pub narrow_shift: bool,
-    pub auto_save: bool,
+    /// What the operator chose, as it is saved.
+    ///
+    /// The control bar and the menus edit this directly; the receive worker
+    /// is handed it through [`push_settings`](Self::push_settings).
+    pub settings: Settings,
 
     /// The last thing worth telling the operator, shown on the control bar.
     pub notice: Option<String>,
@@ -118,15 +113,7 @@ impl App {
             audio,
             strip: Strip::default(),
             ui_scale: shared.ui_scale,
-            ioc: settings.ioc,
-            lines_per_minute: settings.lines_per_minute,
-            auto_start: settings.auto_start,
-            auto_stop: settings.auto_stop,
-            infer_lines_per_minute: settings.infer_lines_per_minute,
-            slant_tracking: settings.slant_tracking,
-            inverted: settings.inverted,
-            narrow_shift: settings.narrow_shift,
-            auto_save: settings.auto_save,
+            settings: settings.clone(),
             notice: None,
             format: None,
             session,
@@ -210,7 +197,7 @@ impl App {
             self.report(&error);
         }
         if let Some(chart) = self.audio.take_chart()
-            && self.auto_save
+            && self.settings.auto_save
         {
             self.write_chart(&chart);
         }
@@ -243,27 +230,12 @@ impl App {
             locale: self.i18n.locale(),
             ui_scale: self.ui_scale,
         });
-        let settings = self.settings();
-        if settings == self.saved {
+        self.settings.device = self.audio.device.as_ref().map(|device| device.name().to_owned());
+        if self.settings == self.saved {
             return;
         }
-        self.config.save(&settings);
-        self.saved = settings;
-    }
-
-    fn settings(&self) -> Settings {
-        Settings {
-            device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
-            ioc: self.ioc,
-            lines_per_minute: self.lines_per_minute,
-            auto_start: self.auto_start,
-            auto_stop: self.auto_stop,
-            infer_lines_per_minute: self.infer_lines_per_minute,
-            slant_tracking: self.slant_tracking,
-            inverted: self.inverted,
-            narrow_shift: self.narrow_shift,
-            auto_save: self.auto_save,
-        }
+        self.config.save(&self.settings);
+        self.saved = self.settings.clone();
     }
 
     /// Hands the receive settings to the worker.
@@ -271,7 +243,7 @@ impl App {
     /// Called after anything on the control bar changes, rather than on every
     /// frame, so a setting the operator did not touch is not rewritten.
     pub fn push_settings(&mut self) {
-        self.audio.set_settings(worker_settings(&self.settings()));
+        self.audio.set_settings(worker_settings(&self.settings));
     }
 
     pub fn set_ui_scale(&mut self, scale: f32) {
