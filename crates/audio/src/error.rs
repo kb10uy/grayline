@@ -33,6 +33,22 @@ pub enum AudioError {
     Backend(String),
 }
 
+impl AudioError {
+    pub(crate) fn backend(error: impl core::fmt::Display) -> Self {
+        Self::Backend(error.to_string())
+    }
+
+    pub(crate) fn check_queue(sample_rate_hz: u32, capacity_samples: usize) -> Result<(), Self> {
+        if capacity_samples == 0 {
+            return Err(Self::EmptyCapacity);
+        }
+        if sample_rate_hz < crate::MINIMUM_SAMPLE_RATE_HZ {
+            return Err(Self::UnsupportedConfiguration(format!("{sample_rate_hz} Hz")));
+        }
+        Ok(())
+    }
+}
+
 /// Why a stream that was running stopped on its own.
 ///
 /// The host's own error kinds are not exposed; these are the distinctions the

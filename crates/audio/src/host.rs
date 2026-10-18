@@ -36,10 +36,7 @@ impl AudioHost {
     /// are skipped rather than failing the whole enumeration, because one
     /// broken device should not hide the rest.
     pub fn input_devices(&self) -> Result<Vec<InputDevice>, AudioError> {
-        let devices = self
-            .host
-            .input_devices()
-            .map_err(|error| AudioError::Backend(error.to_string()))?;
+        let devices = self.host.input_devices().map_err(AudioError::backend)?;
         let described = devices
             .filter(|device| device.default_input_config().is_ok())
             .filter_map(|device| describe(&device))
@@ -60,10 +57,7 @@ impl AudioHost {
 
     /// Lists usable playback devices.
     pub fn output_devices(&self) -> Result<Vec<OutputDevice>, AudioError> {
-        let devices = self
-            .host
-            .output_devices()
-            .map_err(|error| AudioError::Backend(error.to_string()))?;
+        let devices = self.host.output_devices().map_err(AudioError::backend)?;
         let described = devices
             .filter(|device| device.default_output_config().is_ok())
             .filter_map(|device| describe(&device))
@@ -145,7 +139,7 @@ impl AudioHost {
                 return Err(AudioError::UnsupportedConfiguration(device.name.clone()));
             }
         }
-        .map_err(|error| AudioError::Backend(error.to_string()))?;
+        .map_err(AudioError::backend)?;
 
         let capture = Capture::new(stream, sample_rate, channels, faults);
         capture.resume()?;
@@ -208,7 +202,7 @@ impl AudioHost {
             ),
             _ => return Err(AudioError::UnsupportedConfiguration(device.name.clone())),
         }
-        .map_err(|error| AudioError::Backend(error.to_string()))?;
+        .map_err(AudioError::backend)?;
         Ok((Playback::new(stream, sample_rate, channels, state, faults), writer))
     }
 }
