@@ -191,8 +191,8 @@ fn non_uniform_image_survives_a_transmit_receive_round_trip(#[case] mode: Mode, 
 fn pixel_window_averages_the_expanded_transmitted_interval(#[case] mode: Mode, #[case] expected: u64) {
     let decoder = RxDecoder::new(mode, SAMPLE_RATE).unwrap();
     let clock = RasterClock::from_estimate(0.0, f64::from(SAMPLE_RATE)).unwrap();
-    let segment = decoder.segment(ScanChannel::Green, 0).unwrap();
-    let (first, end) = decoder.pixel_window(clock, 0, segment, 10).unwrap();
+    let segment = decoder.raster.segment(ScanChannel::Green, 0).unwrap();
+    let (first, end) = decoder.raster.pixel_window(clock, 0, segment, 10).unwrap();
     assert_eq!(end - first, expected);
 }
 
@@ -319,7 +319,12 @@ proptest! {
 fn all_supported_profiles_construct_with_exact_component_time(#[case] mode: Mode, #[case] component_ps: u64) {
     let decoder = RxDecoder::new(mode, SAMPLE_RATE).unwrap();
     assert_eq!(
-        decoder.profile.pixels().last().map(|segment| segment.duration_ps),
+        decoder
+            .raster
+            .profile
+            .pixels()
+            .last()
+            .map(|segment| segment.duration_ps),
         Some(component_ps)
     );
     assert_eq!(decoder.image().size().width(), mode.spec().width() as usize);
@@ -377,7 +382,7 @@ fn malformed_blocks_and_gaps_are_rejected() {
 #[test]
 fn unsuccessful_acquisition_window_is_consumed_without_error() {
     let decoder = RxDecoder::new(Mode::Martin2, SAMPLE_RATE).unwrap();
-    let count = startup_window_samples(decoder.profile, SAMPLE_RATE) as usize;
+    let count = startup_window_samples(decoder.raster.profile, SAMPLE_RATE) as usize;
     let frequency = vec![1500.0; count];
     let sync = vec![0.0; count];
     let mut decoder = decoder;
@@ -391,7 +396,7 @@ fn unsuccessful_acquisition_window_is_consumed_without_error() {
 #[test]
 fn process_errors_report_the_consumed_prefix() {
     let mut decoder = RxDecoder::new(Mode::Martin2, SAMPLE_RATE).unwrap();
-    let count = startup_window_samples(decoder.profile, SAMPLE_RATE) as usize;
+    let count = startup_window_samples(decoder.raster.profile, SAMPLE_RATE) as usize;
     let mut frequency = vec![1500.0; count + 1];
     let sync = vec![0.0; count + 1];
     frequency[count] = f32::NAN;
@@ -424,7 +429,7 @@ fn acquisition_recovers_after_more_than_two_periods_of_noise_and_chunked_retry()
 fn first_row_is_decoded_from_the_startup_buffer(#[case] mode: Mode) {
     let (frequency, sync) = sampled_body(mode, 0);
     let mut decoder = RxDecoder::new(mode, SAMPLE_RATE).unwrap();
-    let startup = startup_window_samples(decoder.profile, SAMPLE_RATE) as usize;
+    let startup = startup_window_samples(decoder.raster.profile, SAMPLE_RATE) as usize;
     let available = startup + 1;
     let absolute_start = 40_000;
     let mut offset = 0;
@@ -474,7 +479,7 @@ fn a_header_start_decodes_before_any_sync_pulse_is_buffered(#[case] mode: Mode, 
             effective_sample_rate_hz: f64::from(SAMPLE_RATE),
         })
     );
-    let startup = startup_window_samples(decoder.profile, SAMPLE_RATE) as usize;
+    let startup = startup_window_samples(decoder.raster.profile, SAMPLE_RATE) as usize;
     let mut offset = result.consumed();
     let mut first_row = None;
     while first_row.is_none() && offset < frequency.len() {
@@ -936,14 +941,18 @@ fn robot36_tcs_classification_overrides_parity_and_initial_selector() {
     let (mut frequency, sync) = sampled_body(Mode::Robot36, 0);
     fill_robot36_selector(&mut frequency, 0..1, 2300.0);
     fill_robot36_selector(&mut frequency, 1..2, 1500.0);
-    let mut decoder = RxDecoder::new(Mode::Robot36, SAMPLE_RATE).unwrap();
+    let decoder = RxDecoder::new(Mode::Robot36, SAMPLE_RATE).unwrap();
     let block = DemodulatedBlock::new(0, &frequency, &sync);
     let mut input = SampleBuffer::new(0);
     input.append(block, frequency.len());
-    decoder.input = Some(input);
-    decoder.decode.clock = Some(RasterClock::from_estimate(0.0, SAMPLE_RATE as f64).unwrap());
-    assert_eq!(decoder.robot_selector_at(0).unwrap(), Some(RobotSelector::Cb));
-    assert_eq!(decoder.robot_selector_at(1).unwrap(), Some(RobotSelector::Cr));
+    let scan = Scan {
+        raster: &decoder.raster,
+        input: &input,
+        clock: RasterClock::from_estimate(0.0, SAMPLE_RATE as f64).unwrap(),
+        source: Source::Live,
+    };
+    assert_eq!(scan.robot_selector_at(0).unwrap(), Some(RobotSelector::Cb));
+    assert_eq!(scan.robot_selector_at(1).unwrap(), Some(RobotSelector::Cr));
     let (_, rows, _) = decode(Mode::Robot36, &frequency, &sync, &[37, 1009, 3]);
     assert_eq!(
         rows,
@@ -960,8 +969,15 @@ fn robot36_ambiguous_selector_matches_mmsstv_initial_alternation() {
     let mut input = SampleBuffer::new(0);
     input.append(block, frequency.len());
     decoder.input = Some(input);
-    decoder.decode.clock = Some(RasterClock::from_estimate(0.0, SAMPLE_RATE as f64).unwrap());
-    assert_eq!(decoder.robot_selector_at(0).unwrap(), None);
+    let clock = RasterClock::from_estimate(0.0, SAMPLE_RATE as f64).unwrap();
+    decoder.decode.clock = Some(clock);
+    let scan = Scan {
+        raster: &decoder.raster,
+        input: decoder.input.as_ref().unwrap(),
+        clock,
+        source: Source::Live,
+    };
+    assert_eq!(scan.robot_selector_at(0).unwrap(), None);
     decoder.decode_next().unwrap();
     assert_eq!(decoder.decode.robot_selector, Some(RobotSelector::Cb));
     decoder.decode_next().unwrap();
@@ -1000,7 +1016,7 @@ fn frequency_inverse_matches_transmit_integer_mapping() {
     let band = Mode::Martin1.spec().signal_band();
     for level in 0..=255_u8 {
         let frequency = f64::from(band.level_to_frequency(level).as_hz());
-        assert_eq!(decoder.frequency_to_level(frequency), level);
+        assert_eq!(decoder.raster.frequency_to_level(frequency), level);
     }
 }
 

@@ -50,23 +50,22 @@ impl RxDecoder {
     /// [`RxState::Complete`], so callers must collect the complete transmission
     /// before invoking this method.
     pub fn refine_staged(&mut self) -> Result<RefinementResult, SstvError> {
-        if self.staged.is_none() {
+        let Some(staged) = self.staged.as_ref() else {
             return Err(SstvError::StagingDisabled);
-        }
+        };
         let estimator =
-            SlantEstimator::for_mode(self.sample_rate_hz, self.mode).expect("decoder mode has a raster profile");
-        let staged = self.staged.as_ref().expect("staging checked above");
+            SlantEstimator::for_mode(self.sample_rate_hz, self.raster.mode).expect("decoder mode has a raster profile");
         let acquisition_clock = acquire_full(
             staged,
-            self.profile,
+            self.raster.profile,
             self.sample_rate_hz,
             self.config.sync_detector_delay,
         )?;
-        let observations: Vec<_> = (0..self.raster_units())
+        let observations: Vec<_> = (0..self.raster.units())
             .filter_map(|unit| {
                 observe(
                     staged,
-                    self.profile,
+                    self.raster.profile,
                     acquisition_clock,
                     unit,
                     self.sample_rate_hz,
@@ -78,34 +77,11 @@ impl RxDecoder {
             .estimate(&observations)
             .ok_or(SstvError::InsufficientStagedSync)?;
         let clock = RasterClock::from_estimate(slant.source_epoch, slant.effective_sample_rate_hz)?;
-        let staged = self.staged.take().expect("staging checked above");
-        if let Err(error) = self.validate_staged_coverage(&staged, clock, self.raster_units()) {
-            self.staged = Some(staged);
-            return Err(error);
-        }
-        let mut rebuilding = DecodeState::new(self.decode.image.size());
-        rebuilding.clock = Some(clock);
-        let old_decode = core::mem::replace(&mut self.decode, rebuilding);
-        let saved_input = self.input.take();
-        self.input = Some(staged);
-        let units = self.raster_units();
-        self.rebuilding = true;
-        let rebuild_result = (|| {
-            while self.decode.raster_unit < units {
-                self.decode_next()?;
-                self.decode.pending_row = None;
-            }
-            Ok(())
-        })();
-        self.rebuilding = false;
-        self.staged = self.input.take();
-        self.input = saved_input;
-        if let Err(error) = rebuild_result {
-            self.decode = old_decode;
-            return Err(error);
-        }
-        self.decode.delivered_rows = self.mode.spec().active_rows() as usize;
-        self.decode.state = RxState::Complete;
+        self.validate_staged_coverage(staged, clock, self.raster.units())?;
+        let mut candidate = self.redraw(staged, clock, self.raster.units())?;
+        candidate.delivered_rows = self.raster.mode.spec().active_rows() as usize;
+        candidate.state = RxState::Complete;
+        self.decode = candidate;
         self.image_revision = self.image_revision.saturating_add(1);
         Ok(RefinementResult {
             revision: self.image_revision,
@@ -127,7 +103,7 @@ impl RxDecoder {
             return Ok(());
         }
         let estimator =
-            SlantEstimator::for_mode(self.sample_rate_hz, self.mode).expect("decoder mode has a raster profile");
+            SlantEstimator::for_mode(self.sample_rate_hz, self.raster.mode).expect("decoder mode has a raster profile");
         let Some(estimate) = estimator.estimate(&self.staged_observations) else {
             return Ok(());
         };
@@ -166,62 +142,57 @@ impl RxDecoder {
     /// Returns the number of units redrawn, which may be fewer than `units`
     /// when the refit reaches past the samples received so far.
     pub(super) fn rebuild_live(&mut self, clock: RasterClock, units: usize) -> Result<usize, SstvError> {
-        let staged = self.staged.take().expect("staging checked by the caller");
-        let units = self.covered_units(&staged, clock, units);
+        let staged = self.staged.as_ref().expect("staging checked by the caller");
+        let units = self.covered_units(staged, clock, units);
         if units == 0 {
-            self.staged = Some(staged);
             return Err(SstvError::InsufficientStagedSync);
         }
-        let mut rebuilding = DecodeState::new(self.decode.image.size());
-        rebuilding.clock = Some(clock);
-        let old_decode = core::mem::replace(&mut self.decode, rebuilding);
-        let saved_input = self.input.take();
-        self.input = Some(staged);
-        self.rebuilding = true;
-        let result = (|| {
-            while self.decode.raster_unit < units {
-                self.decode_next()?;
-                self.decode.pending_row = None;
-            }
-            Ok(())
-        })();
-        self.rebuilding = false;
-        let staged = self.input.take().expect("staged buffer installed above");
-        if let Err(error) = result {
-            self.decode = old_decode;
-            self.input = saved_input;
-            self.staged = Some(staged);
-            return Err(error);
-        }
+        let mut candidate = self.redraw(staged, clock, units)?;
         // Decoding continues from the refitted clock, so the working window is
         // taken again from the retained samples rather than from the window
         // that was trimmed against the old one.
         let resume = clock.sample_at(
-            self.profile
+            self.raster
+                .profile
                 .period_ps
                 .checked_mul(units as u64)
                 .ok_or(SstvError::TimeOverflow)?,
         )?;
+        let input = staged.tail_from(resume);
         // Rows are delivered by the live path, not by a rebuild, so the
         // delivery bookkeeping is restated for the units that were redrawn.
         // Row events still queued deliver later and count themselves then, so
         // the restatement leaves them out rather than counting their rows
         // twice and completing the reception early.
-        let queued_rows = old_decode
+        let queued_rows = self
+            .decode
             .pending_events
             .iter()
             .filter(|event| matches!(event, RxEvent::RowDecoded { .. }))
             .count();
-        self.decode.delivered_rows =
-            (units * self.mode.spec().rows_per_raster_unit() as usize).saturating_sub(queued_rows);
-        self.decode.state = RxState::Decoding {
-            completed_rows: self.decode.delivered_rows,
+        candidate.delivered_rows = (units * self.raster.rows_per_unit()).saturating_sub(queued_rows);
+        candidate.state = RxState::Decoding {
+            completed_rows: candidate.delivered_rows,
         };
-        self.decode.pending_events = old_decode.pending_events;
-        self.input = Some(staged.tail_from(resume));
-        self.staged = Some(staged);
+        candidate.pending_events = core::mem::take(&mut self.decode.pending_events);
+        self.decode = candidate;
+        self.input = Some(input);
         self.image_revision = self.image_revision.saturating_add(1);
         Ok(units)
+    }
+    fn redraw(&self, staged: &SampleBuffer, clock: RasterClock, units: usize) -> Result<DecodeState, SstvError> {
+        let mut candidate = DecodeState::new(self.decode.image.size());
+        candidate.clock = Some(clock);
+        let scan = Scan {
+            raster: &self.raster,
+            input: staged,
+            clock,
+            source: Source::Staged,
+        };
+        while candidate.raster_unit < units {
+            scan.draw(&mut candidate)?;
+        }
+        Ok(candidate)
     }
     /// Returns how many leading raster units `staged` covers under `clock`.
     ///
@@ -235,21 +206,21 @@ impl RxDecoder {
             .count()
     }
     pub(super) fn unit_is_covered(&self, staged: &SampleBuffer, clock: RasterClock, unit: usize) -> bool {
-        let width = self.decode.image.size().width();
+        let width = self.raster.width;
         let covered = |sample: u64| staged.frequency(sample).is_some();
-        for segment in self.profile.pixels().iter() {
-            let Ok((first, _)) = self.pixel_window(clock, unit, segment, 0) else {
+        for segment in self.raster.profile.pixels().iter() {
+            let Ok((first, _)) = self.raster.pixel_window(clock, unit, segment, 0) else {
                 return false;
             };
-            let Ok((_, end)) = self.pixel_window(clock, unit, segment, width - 1) else {
+            let Ok((_, end)) = self.raster.pixel_window(clock, unit, segment, width - 1) else {
                 return false;
             };
             if !covered(first) || !covered(end - 1) {
                 return false;
             }
         }
-        if self.profile.selector_window_ps().is_some() {
-            let Ok((first, end)) = self.selector_window(clock, unit) else {
+        if self.raster.profile.selector_window_ps().is_some() {
+            let Ok((first, end)) = self.raster.selector_window(clock, unit) else {
                 return false;
             };
             if !covered(first) || !covered(end - 1) {
@@ -264,7 +235,7 @@ impl RxDecoder {
         clock: RasterClock,
         units: usize,
     ) -> Result<(), SstvError> {
-        let width = self.decode.image.size().width();
+        let width = self.raster.width;
         let require = |sample: u64| -> Result<(), SstvError> {
             if staged.frequency(sample).is_some() {
                 Ok(())
@@ -277,14 +248,14 @@ impl RxDecoder {
         for unit in 0..units {
             // Sampling positions increase monotonically, so covering the first
             // and last sample of every segment covers everything between them.
-            for segment in self.profile.pixels().iter() {
-                let (first, _) = self.pixel_window(clock, unit, segment, 0)?;
-                let (_, end) = self.pixel_window(clock, unit, segment, width - 1)?;
+            for segment in self.raster.profile.pixels().iter() {
+                let (first, _) = self.raster.pixel_window(clock, unit, segment, 0)?;
+                let (_, end) = self.raster.pixel_window(clock, unit, segment, width - 1)?;
                 require(first)?;
                 require(end - 1)?;
             }
-            if self.profile.selector_window_ps().is_some() {
-                let (first, end) = self.selector_window(clock, unit)?;
+            if self.raster.profile.selector_window_ps().is_some() {
+                let (first, end) = self.raster.selector_window(clock, unit)?;
                 require(first)?;
                 require(end - 1)?;
             }

@@ -11,7 +11,7 @@ impl RxDecoder {
         let unit = self.decode.raster_unit;
         let observation = observe(
             self.input.as_ref().expect("input initialized"),
-            self.profile,
+            self.raster.profile,
             self.decode.clock.expect("clock acquired"),
             unit,
             self.sample_rate_hz,
@@ -28,10 +28,11 @@ impl RxDecoder {
             return self.note_bad_sync();
         }
         let expected_protocol = self
+            .raster
             .profile
             .period_ps
             .checked_mul(unit as u64)
-            .and_then(|value| value.checked_add(self.profile.sync_center_ps))
+            .and_then(|value| value.checked_add(self.raster.profile.sync_center_ps))
             .ok_or(SstvError::TimeOverflow)?;
         let expected = self
             .decode
@@ -43,7 +44,7 @@ impl RxDecoder {
             .decode
             .clock
             .expect("clock acquired")
-            .samples_for(self.profile.period_ps)?
+            .samples_for(self.raster.profile.period_ps)?
             / 4;
         if displacement.unsigned_abs() > u128::from(max_consistent.max(2)) {
             self.phase_displacements.clear();
