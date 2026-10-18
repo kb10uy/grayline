@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use grayline_sstv::{image::RgbImage, mode::Mode, rx::RxOutcome};
 use grayline_sstv_fskid::FskId;
 use grayline_sstv_rx::{MINIMUM_SAMPLE_RATE_HZ, PipelineOptions, ReceivePipeline};
-use hound::{SampleFormat, WavReader};
+use grayline_wav::MonoReader;
 
 /// First-channel mono PCM samples handed to the pipeline per packet.
 pub const DEFAULT_PCM_PACKET_SIZE: usize = 1_024;
@@ -48,54 +48,20 @@ pub fn decode_file_with_options(input: &Path, output: &Path, options: DecodeOpti
     if options.pcm_packet_size == 0 {
         bail!("PCM packet size must be greater than zero");
     }
-    let mut reader = WavReader::open(input).with_context(|| format!("failed to open WAV file {}", input.display()))?;
-    let spec = reader.spec();
-    if spec.channels == 0 {
-        bail!("WAV file has no channels");
-    }
-    if spec.sample_rate < MINIMUM_SAMPLE_RATE_HZ {
-        bail!("WAV sample rate {} Hz is too low for SSTV", spec.sample_rate);
-    }
-    let channels = spec.channels as usize;
-    let max_samples = reader.duration() as usize;
+    let mut reader = MonoReader::open(input, MINIMUM_SAMPLE_RATE_HZ)
+        .with_context(|| format!("failed to open WAV file {}", input.display()))?;
+    let max_samples = reader.frames() as usize;
     let pipeline = ReceivePipeline::new(
-        spec.sample_rate,
+        reader.sample_rate_hz(),
         PipelineOptions {
             live_slant: false,
             staging_max_samples: max_samples,
         },
     )?;
-    let result = match spec.sample_format {
-        SampleFormat::Int => {
-            if spec.bits_per_sample == 0 || spec.bits_per_sample > 32 {
-                bail!("unsupported PCM depth: {} bits", spec.bits_per_sample);
-            }
-            let scale = 2_f64.powi(i32::from(spec.bits_per_sample) - 1);
-            let samples = reader
-                .samples::<i32>()
-                .enumerate()
-                .filter_map(|(index, sample)| (index % channels == 0).then_some(sample))
-                .map(|sample| {
-                    let value = sample.context("failed to read integer PCM sample")?;
-                    Ok((f64::from(value) / scale) as f32)
-                });
-            decode_samples(pipeline, samples, options.pcm_packet_size)
-        }
-        SampleFormat::Float => {
-            let samples = reader
-                .samples::<f32>()
-                .enumerate()
-                .filter_map(|(index, sample)| (index % channels == 0).then_some(sample))
-                .map(|sample| {
-                    let value = sample.context("failed to read floating-point PCM sample")?;
-                    if !value.is_finite() {
-                        bail!("WAV contains a non-finite floating-point sample");
-                    }
-                    Ok(value.clamp(-1.0, 1.0))
-                });
-            decode_samples(pipeline, samples, options.pcm_packet_size)
-        }
-    };
+    let samples = reader
+        .samples()
+        .map(|sample| sample.context("failed to read a PCM sample"));
+    let result = decode_samples(pipeline, samples, options.pcm_packet_size);
     let result = result.with_context(|| format!("failed to decode {}", input.display()))?;
     save_image(&result.image, output)?;
     Ok(result.report)
@@ -165,7 +131,7 @@ mod tests {
         TxEncoder,
         image::{ImageSize, Rgb8},
     };
-    use hound::{WavSpec, WavWriter};
+    use hound::{SampleFormat, WavSpec, WavWriter};
 
     use super::*;
 

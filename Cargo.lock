@@ -2078,6 +2078,7 @@ name = "grayline-audio"
 version = "0.6.0-beta.1"
 dependencies = [
  "cpal",
+ "grayline-wav",
  "hound",
  "ringbuf",
  "rstest",
@@ -2206,7 +2207,7 @@ dependencies = [
  "anyhow",
  "clap",
  "grayline-rtty",
- "hound",
+ "grayline-wav",
  "rstest",
 ]
 
@@ -2283,6 +2284,7 @@ dependencies = [
  "grayline-sstv-rx",
  "grayline-sstv-template",
  "grayline-tone-tx",
+ "grayline-wav",
  "hound",
  "image",
  "jiff",
@@ -2346,6 +2348,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-wav"
+version = "0.6.0-beta.1"
+dependencies = [
+ "hound",
+ "rstest",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "grayline-web-demo"
 version = "0.6.0-beta.1"
 dependencies = [
@@ -2392,6 +2404,7 @@ version = "0.6.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
+ "grayline-wav",
  "grayline-wefax",
  "hound",
  "image",

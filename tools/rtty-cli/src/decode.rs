@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use grayline_rtty::{ReceivePipeline, RxConfig, RxEvent, code::Case, params::ToneSet, rx::MINIMUM_SAMPLE_RATE_HZ};
-use hound::{SampleFormat, WavReader};
+use grayline_wav::MonoReader;
 
 /// First-channel mono PCM samples handed to the pipeline per packet.
 pub const DEFAULT_PCM_PACKET_SIZE: usize = 1_024;
@@ -57,48 +57,13 @@ pub fn decode_file_with_options(input: &Path, options: DecodeOptions) -> Result<
     if options.pcm_packet_size == 0 {
         bail!("PCM packet size must be greater than zero");
     }
-    let mut reader = WavReader::open(input).with_context(|| format!("failed to open WAV file {}", input.display()))?;
-    let spec = reader.spec();
-    if spec.channels == 0 {
-        bail!("WAV file has no channels");
-    }
-    if spec.sample_rate < MINIMUM_SAMPLE_RATE_HZ {
-        bail!("WAV sample rate {} Hz is too low for RTTY", spec.sample_rate);
-    }
-    let channels = spec.channels as usize;
-    let pipeline = ReceivePipeline::new(spec.sample_rate, options.config)?;
-    match spec.sample_format {
-        SampleFormat::Int => {
-            if spec.bits_per_sample == 0 || spec.bits_per_sample > 32 {
-                bail!("unsupported PCM depth: {} bits", spec.bits_per_sample);
-            }
-            let scale = 2_f64.powi(i32::from(spec.bits_per_sample) - 1);
-            let samples = reader
-                .samples::<i32>()
-                .enumerate()
-                .filter_map(|(index, sample)| (index % channels == 0).then_some(sample))
-                .map(|sample| {
-                    let value = sample.context("failed to read integer PCM sample")?;
-                    Ok((f64::from(value) / scale) as f32)
-                });
-            decode_samples(pipeline, samples, &options)
-        }
-        SampleFormat::Float => {
-            let samples = reader
-                .samples::<f32>()
-                .enumerate()
-                .filter_map(|(index, sample)| (index % channels == 0).then_some(sample))
-                .map(|sample| {
-                    let value = sample.context("failed to read floating-point PCM sample")?;
-                    if !value.is_finite() {
-                        bail!("WAV contains a non-finite floating-point sample");
-                    }
-                    Ok(value.clamp(-1.0, 1.0))
-                });
-            decode_samples(pipeline, samples, &options)
-        }
-    }
-    .with_context(|| format!("failed to decode {}", input.display()))
+    let mut reader = MonoReader::open(input, MINIMUM_SAMPLE_RATE_HZ)
+        .with_context(|| format!("failed to open WAV file {}", input.display()))?;
+    let pipeline = ReceivePipeline::new(reader.sample_rate_hz(), options.config)?;
+    let samples = reader
+        .samples()
+        .map(|sample| sample.context("failed to read a PCM sample"));
+    decode_samples(pipeline, samples, &options).with_context(|| format!("failed to decode {}", input.display()))
 }
 
 fn decode_samples<I>(mut pipeline: ReceivePipeline, samples: I, options: &DecodeOptions) -> Result<DecodeReport>

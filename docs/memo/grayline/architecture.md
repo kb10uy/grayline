@@ -353,7 +353,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twenty-four packages:
+The workspace currently contains twenty-five packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -366,6 +366,7 @@ The workspace currently contains twenty-four packages:
 | `grayline-sstv-cli` | Offline receive and transmit integration, as `gl-sstv` | Implemented |
 | `grayline-web-demo` | Browser receive integration | Implemented |
 | `grayline-audio` | Host audio adapters | Bounded capture and playback implemented |
+| `grayline-wav` | Mono WAV reading and writing for the tools and file sources | Implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
 | `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
 | `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
@@ -387,7 +388,7 @@ packages it uses. External and development-only dependencies are omitted.
 
 | Package | Direct workspace dependencies |
 | --- | --- |
-| `grayline-audio` | None |
+| `grayline-audio` | `grayline-wav` |
 | `grayline-dsp` | None |
 | `grayline-qso` | None |
 | `grayline-qso-cli` | `grayline-qso` |
@@ -395,22 +396,23 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |
 | `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
-| `grayline-rtty-cli` | `grayline-rtty` |
+| `grayline-rtty-cli` | `grayline-rtty`, `grayline-wav` |
 | `grayline-keyer-protocol` | `grayline-rig`, `grayline-rtty` |
 | `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
 | `grayline-shell` | None |
 | `grayline-sstv` | `grayline-sstv-fskid` |
-| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
-| `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx`, `grayline-wav` |
 | `grayline-sstv-fskid` | None |
 | `grayline-sstv-rx` | `grayline-dsp`, `grayline-sstv`, `grayline-sstv-fskid` |
 | `grayline-sstv-template` | `grayline-sstv`, `grayline-variables` |
 | `grayline-tone-tx` | `grayline-dsp`, `grayline-sstv` |
 | `grayline-variables` | None |
-| `grayline-web-demo` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx` |
+| `grayline-web-demo` | `grayline-sstv`, `grayline-sstv-rx` |
 | `grayline-wefax` | `grayline-dsp` |
 | `grayline-wefax-app` | `grayline-audio`, `grayline-shell`, `grayline-wefax` |
-| `grayline-wefax-cli` | `grayline-wefax` |
+| `grayline-wefax-cli` | `grayline-wav`, `grayline-wefax` |
+| `grayline-wav` | None |
 
 `grayline-wefax` depends on `grayline-dsp` and on nothing else in this
 workspace. That it needs no part of `grayline-sstv` is the point of the split
@@ -461,7 +463,9 @@ library the keyer itself needs ([keyer.md](keyer.md)).
 `grayline-dsp`, `grayline-sstv`, `grayline-sstv-rx`, `grayline-wefax`, and
 `grayline-rtty` build as allocation-backed `no_std` crates by default.
 `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
-remain in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
+remain in `grayline-wav` and in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
+`grayline-wav` reads a recording's first channel and writes 16-bit mono for the three tools and for
+`grayline-audio`'s file source, so what a recording is checked for is written once.
 `grayline-sstv-template` is a
 standard-library application-support crate: it depends on `grayline-sstv` only at
 the received-image and final RGB composition boundaries. It does not expose

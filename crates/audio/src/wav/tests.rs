@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use hound::{WavSpec, WavWriter};
+use hound::{SampleFormat, WavSpec, WavWriter};
 use rstest::{fixture, rstest};
 
 use super::*;
