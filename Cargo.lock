@@ -2255,7 +2255,6 @@ dependencies = [
  "grayline-audio",
  "grayline-dsp",
  "grayline-qso",
- "grayline-rig",
  "grayline-rig-control",
  "grayline-shell",
  "grayline-sstv",

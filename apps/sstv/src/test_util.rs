@@ -1,5 +1,4 @@
-use grayline_rig::RigError;
-use grayline_rig_control::{DEFAULT_PORT_NAME, RigControlError, script::ScriptError};
+use grayline_rig_control::{DEFAULT_PORT_NAME, RigControlError, RigError, script::ScriptError};
 
 use std::{
     fs,

@@ -26,7 +26,6 @@ grayline-dsp = { path = "../../crates/dsp" }
 grayline-qso = { path = "../../crates/qso" }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-tone-tx = { path = "../../crates/tone-tx" }
-grayline-rig = { path = "../../crates/rig" }
 grayline-rig-control = { path = "../../crates/rig-control" }
 grayline-shell = { path = "../../crates/shell" }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }
