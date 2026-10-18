@@ -17,6 +17,18 @@ use crate::PREFERRED_SAMPLE_RATE_HZ;
 /// the tail of the last line rather than seconds of the picture.
 const OUTPUT_BUFFER_MS: u32 = 40;
 
+/// How much audio the crate asks a capture device to deliver at once, in
+/// milliseconds.
+///
+/// Left to the host, PulseAudio and the PipeWire server answering for it hand
+/// a recording stream its audio in fragments of their own choosing, which run
+/// to a large fraction of a second. Every fragment is that long behind the
+/// antenna before the decoder hears any of it, so the text trailed what the
+/// operator heard by about half a second. This is short enough to keep up with
+/// a decoder printing what it heard, and long enough for a client thread
+/// scheduled late on a busy desktop not to lose a fragment to the server.
+const INPUT_BUFFER_MS: u32 = 20;
+
 /// One selectable capture device.
 ///
 /// Devices are identified by the host's own identifier rather than by name, so
@@ -184,6 +196,29 @@ pub(crate) fn preferred_output_rate(
     if supported { PREFERRED_SAMPLE_RATE_HZ } else { fallback }
 }
 
+/// Asks the device for [`INPUT_BUFFER_MS`] of audio, within what it accepts.
+pub(crate) fn preferred_input_buffer_size(
+    device: &cpal::Device,
+    sample_rate_hz: u32,
+    channels: u16,
+    sample_format: SampleFormat,
+) -> BufferSize {
+    let Ok(configs) = device.supported_input_configs() else {
+        return BufferSize::Default;
+    };
+    configs
+        .into_iter()
+        .find(|range| {
+            range.channels() == channels
+                && range.sample_format() == sample_format
+                && range.min_sample_rate() <= sample_rate_hz
+                && sample_rate_hz <= range.max_sample_rate()
+        })
+        .map_or(BufferSize::Default, |range| {
+            bounded_buffer_size(range.buffer_size(), sample_rate_hz, INPUT_BUFFER_MS)
+        })
+}
+
 /// Asks the device for [`OUTPUT_BUFFER_MS`] of audio, within what it accepts.
 pub(crate) fn preferred_output_buffer_size(
     device: &cpal::Device,
@@ -203,7 +238,7 @@ pub(crate) fn preferred_output_buffer_size(
                 && sample_rate_hz <= range.max_sample_rate()
         })
         .map_or(BufferSize::Default, |range| {
-            bounded_buffer_size(range.buffer_size(), sample_rate_hz)
+            bounded_buffer_size(range.buffer_size(), sample_rate_hz, OUTPUT_BUFFER_MS)
         })
 }
 
@@ -214,14 +249,14 @@ pub(crate) fn preferred_output_buffer_size(
 /// a fixed size to the device rather than to the stream and rejects one its
 /// hardware cannot hold, which would reach the operator as an output that
 /// cannot be opened at all.
-fn bounded_buffer_size(supported: &SupportedBufferSize, sample_rate_hz: u32) -> BufferSize {
+fn bounded_buffer_size(supported: &SupportedBufferSize, sample_rate_hz: u32, milliseconds: u32) -> BufferSize {
     let SupportedBufferSize::Range { min, max } = *supported else {
         return BufferSize::Default;
     };
     if min > max || max == 0 {
         return BufferSize::Default;
     }
-    let preferred = u64::from(sample_rate_hz) * u64::from(OUTPUT_BUFFER_MS) / 1_000;
+    let preferred = u64::from(sample_rate_hz) * u64::from(milliseconds) / 1_000;
     let preferred = FrameCount::try_from(preferred).unwrap_or(FrameCount::MAX);
     BufferSize::Fixed(preferred.max(1).clamp(min, max))
 }
@@ -306,16 +341,20 @@ mod tests {
     /// The buffer is asked for in time, not in frames, so a device running at
     /// twice the rate is not given twice the delay.
     #[rstest]
-    #[case(48_000, BufferSize::Fixed(1_920))]
-    #[case(44_100, BufferSize::Fixed(1_764))]
-    #[case(96_000, BufferSize::Fixed(3_840))]
+    #[case(48_000, OUTPUT_BUFFER_MS, BufferSize::Fixed(1_920))]
+    #[case(44_100, OUTPUT_BUFFER_MS, BufferSize::Fixed(1_764))]
+    #[case(96_000, OUTPUT_BUFFER_MS, BufferSize::Fixed(3_840))]
+    #[case(48_000, INPUT_BUFFER_MS, BufferSize::Fixed(960))]
+    #[case(44_100, INPUT_BUFFER_MS, BufferSize::Fixed(882))]
+    #[case(8_000, INPUT_BUFFER_MS, BufferSize::Fixed(160))]
     fn a_permissive_device_is_asked_for_the_same_span_of_audio(
         #[case] sample_rate_hz: u32,
+        #[case] milliseconds: u32,
         #[case] expected: BufferSize,
     ) {
         let supported = SupportedBufferSize::Range { min: 1, max: 65_536 };
 
-        assert_eq!(bounded_buffer_size(&supported, sample_rate_hz), expected);
+        assert_eq!(bounded_buffer_size(&supported, sample_rate_hz, milliseconds), expected);
     }
 
     #[rstest]
@@ -325,7 +364,7 @@ mod tests {
         #[case] supported: SupportedBufferSize,
         #[case] expected: BufferSize,
     ) {
-        assert_eq!(bounded_buffer_size(&supported, 48_000), expected);
+        assert_eq!(bounded_buffer_size(&supported, 48_000, OUTPUT_BUFFER_MS), expected);
     }
 
     #[rstest]
@@ -333,7 +372,10 @@ mod tests {
     #[case(SupportedBufferSize::Range { min: 2_048, max: 1_024 })]
     #[case(SupportedBufferSize::Range { min: 0, max: 0 })]
     fn a_device_that_states_no_usable_range_sizes_itself(#[case] supported: SupportedBufferSize) {
-        assert_eq!(bounded_buffer_size(&supported, 48_000), BufferSize::Default);
+        assert_eq!(
+            bounded_buffer_size(&supported, 48_000, OUTPUT_BUFFER_MS),
+            BufferSize::Default
+        );
     }
 
     #[test]

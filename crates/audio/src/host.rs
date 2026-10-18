@@ -12,7 +12,10 @@ use ringbuf::{HeapRb, traits::Split};
 use crate::{
     AudioError, Capture, CaptureReader, FaultKind, InputDevice, MINIMUM_SAMPLE_RATE_HZ, OutputDevice, Playback,
     PlaybackWriter, StreamFault, capture,
-    device::{describe, named, preferred_output_buffer_size, preferred_output_rate, preferred_rate},
+    device::{
+        describe, named, preferred_input_buffer_size, preferred_output_buffer_size, preferred_output_rate,
+        preferred_rate,
+    },
     error::FaultSlot,
     playback,
 };
@@ -125,7 +128,7 @@ impl AudioHost {
         let config = StreamConfig {
             channels,
             sample_rate,
-            buffer_size: cpal::BufferSize::Default,
+            buffer_size: preferred_input_buffer_size(&target, sample_rate, channels, sample_format),
         };
         let (producer, consumer) = HeapRb::<f32>::new(capacity_samples).split();
         let dropped = Arc::new(AtomicU64::new(0));
