@@ -79,7 +79,7 @@ pub fn model(app: &App) -> Vec<Menu> {
                     items: vec![
                         Item::Check {
                             label: text("action-contact-lookup"),
-                            checked: app.contact_settings.lookup,
+                            checked: app.settings.contact.lookup,
                             action: Action::ToggleContactLookup,
                         },
                         Item::Command {
@@ -100,12 +100,12 @@ pub fn model(app: &App) -> Vec<Menu> {
                 Item::Separator,
                 Item::Check {
                     label: text("action-unshift-on-space"),
-                    checked: app.unshift_on_space,
+                    checked: app.settings.unshift_on_space,
                     action: Action::ToggleUnshiftOnSpace,
                 },
                 Item::Check {
                     label: text("action-atc"),
-                    checked: app.atc,
+                    checked: app.settings.atc,
                     action: Action::ToggleAtc,
                 },
                 Item::Separator,
@@ -160,7 +160,7 @@ fn output_device_items(app: &App) -> Vec<Item> {
 pub fn apply(app: &mut App, action: Action) -> bool {
     match action {
         Action::ShowStation => app.open_station(),
-        Action::ToggleContactLookup => app.set_contact_lookup(!app.contact_settings.lookup),
+        Action::ToggleContactLookup => app.set_contact_lookup(!app.settings.contact.lookup),
         Action::WriteContactCredentials => app.write_contact_credentials(),
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
@@ -170,11 +170,11 @@ pub fn apply(app: &mut App, action: Action) -> bool {
             app.set_scope_open(!open);
         }
         Action::ToggleUnshiftOnSpace => {
-            app.unshift_on_space = !app.unshift_on_space;
+            app.settings.unshift_on_space = !app.settings.unshift_on_space;
             app.push_settings();
         }
         Action::ToggleAtc => {
-            app.atc = !app.atc;
+            app.settings.atc = !app.settings.atc;
             app.push_settings();
         }
         Action::ClearText => app.clear(),

@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -97,9 +98,9 @@ fn closing_the_window_from_its_own_frame_stops_the_tap() {
 #[test]
 fn a_window_left_open_is_written_to_the_settings() {
     let mut app = App::headless();
-    assert!(!app.settings().scope);
+    assert!(!app.settings.scope);
     app.set_scope_open(true);
-    assert!(app.settings().scope);
+    assert!(app.settings.scope);
 }
 
 #[test]
@@ -136,8 +137,8 @@ fn the_zoom_stays_inside_what_the_settings_allow() {
 #[test]
 fn the_shift_is_added_to_the_mark_tone() {
     let mut app = App::headless();
-    app.mark_hz = 1_275.0;
-    app.shift_hz = 850.0;
+    app.settings.mark_hz = 1_275.0;
+    app.settings.shift_hz = 850.0;
     assert_eq!(
         app.tones(),
         ToneSet {
@@ -150,11 +151,11 @@ fn the_shift_is_added_to_the_mark_tone() {
 #[test]
 fn the_tuning_settings_reach_the_worker() {
     let mut app = App::headless();
-    app.mark_hz = 1_275.0;
-    app.shift_hz = 425.0;
-    app.baud = 75.0;
-    app.reverse = true;
-    app.afc = true;
+    app.settings.mark_hz = 1_275.0;
+    app.settings.shift_hz = 425.0;
+    app.settings.baud = 75.0;
+    app.settings.reverse = true;
+    app.settings.afc = true;
     app.push_settings();
 
     let settings = app.audio.settings();
@@ -168,11 +169,11 @@ fn the_tuning_settings_reach_the_worker() {
 #[test]
 fn a_threshold_of_nothing_is_no_squelch_at_all() {
     let mut app = App::headless();
-    app.squelch_threshold = 0.0;
+    app.settings.squelch_threshold = 0.0;
     app.push_settings();
     assert_eq!(app.audio.settings().squelch, None);
 
-    app.squelch_threshold = 0.4;
+    app.settings.squelch_threshold = 0.4;
     app.push_settings();
     assert_eq!(app.audio.settings().squelch, Some(0.4));
 }
@@ -180,8 +181,8 @@ fn a_threshold_of_nothing_is_no_squelch_at_all() {
 #[test]
 fn what_is_persisted_is_brought_back_into_range() {
     let mut app = App::headless();
-    app.mark_hz = 40_000.0;
-    app.squelch_threshold = 9.0;
+    app.settings.mark_hz = 40_000.0;
+    app.settings.squelch_threshold = 9.0;
     app.push_settings();
 
     assert_eq!(app.audio.settings().tones.mark_hz, MAXIMUM_MARK_HZ);
@@ -211,7 +212,7 @@ fn a_new_capture_session_starts_the_text_over() {
 fn the_detected_pair_can_be_taken_up() {
     let mut app = App::headless();
     app.adopt_detected_tones();
-    assert_eq!(app.mark_hz, Settings::default().mark_hz);
+    assert_eq!(app.settings.mark_hz, Settings::default().mark_hz);
 }
 
 #[test]
@@ -295,7 +296,7 @@ fn the_shared_settings_are_read_and_written_where_the_family_keeps_them() {
 #[test]
 fn a_settings_change_is_persisted_once() {
     let mut app = App::headless();
-    app.baud = 50.0;
+    app.settings.baud = 50.0;
     app.persist();
     assert_eq!(app.saved.baud, 50.0);
     app.persist();
@@ -321,7 +322,7 @@ fn a_station_keying_fsk_needs_no_output_device() {
     app.transmit.draft = "CQ DE JL1HIS".to_owned();
     assert_eq!(app.keying(), Keying::Audio);
 
-    app.keyer.enabled = true;
+    app.settings.keyer.enabled = true;
 
     assert_eq!(app.keying(), Keying::Fsk);
     assert!(!app.lacks_output());
@@ -341,8 +342,8 @@ fn run_until_idle(app: &mut App) {
 fn a_message_keyed_as_fsk_goes_to_the_keyer_and_is_echoed() {
     let fake = FakeKeyer::spawn(&[("sending", 0), ("completed", 60_000_000)]);
     let mut app = App::headless();
-    app.keyer.enabled = true;
-    app.keyer.address.clone_from(&fake.address);
+    app.settings.keyer.enabled = true;
+    app.settings.keyer.address.clone_from(&fake.address);
     app.transmit.queue("RYRY".to_owned());
 
     run_until_idle(&mut app);
@@ -364,8 +365,8 @@ fn a_keyer_that_is_not_running_gives_the_messages_back() {
     let address = listener.local_addr().unwrap().to_string();
     drop(listener);
     let mut app = App::headless();
-    app.keyer.enabled = true;
-    app.keyer.address = address;
+    app.settings.keyer.enabled = true;
+    app.settings.keyer.address = address;
     app.transmit.queue("FIRST".to_owned());
     app.transmit.queue("SECOND".to_owned());
 
@@ -385,7 +386,7 @@ fn a_rig_that_has_not_answered_holds_the_send_button() {
     // A station keying with VOX has no rig to wait for.
     assert_eq!(app.rig_problem(), None);
 
-    app.rig.enabled = true;
+    app.settings.rig.enabled = true;
     app.rig_snapshot.state = RigState::Failed;
     app.rig_snapshot.error = Some(refused_port());
     let problem = app.rig_problem().expect("a problem");
@@ -480,10 +481,10 @@ fn stopping_returns_queued_messages_to_the_draft() {
 #[test]
 fn the_transmitter_follows_the_tuning_panel() {
     let mut app = App::headless();
-    app.mark_hz = 1_275.0;
-    app.shift_hz = 170.0;
-    app.baud = 75.0;
-    app.reverse = true;
+    app.settings.mark_hz = 1_275.0;
+    app.settings.shift_hz = 170.0;
+    app.settings.baud = 75.0;
+    app.settings.reverse = true;
 
     let config = app.tx_config();
 
@@ -499,7 +500,7 @@ fn the_transmitter_follows_the_tuning_panel() {
 #[case(1.0)]
 fn every_level_produces_a_transmitter_that_can_be_built(#[case] level: f64) {
     let mut app = App::headless();
-    app.tx_level = level;
+    app.settings.tx_level = level;
     let config = app.tx_config();
     assert!(config.amplitude > 0.0);
     assert!(grayline_rtty::Transmitter::new(core::iter::empty(), 48_000, config).is_ok());
@@ -508,10 +509,11 @@ fn every_level_produces_a_transmitter_that_can_be_built(#[case] level: f64) {
 #[test]
 fn the_transmit_level_is_stored_and_read_back() {
     let mut app = App::headless();
-    app.tx_level = 0.25;
-    app.tx_unshift_on_space = false;
+    app.settings.tx_level = 0.25;
+    app.settings.tx_unshift_on_space = false;
 
-    let settings = app.settings();
+    app.persist();
+    let settings = app.saved.clone();
 
     assert_eq!(settings.tx_level, 0.25);
     assert!(!settings.tx_unshift_on_space);
@@ -520,7 +522,7 @@ fn the_transmit_level_is_stored_and_read_back() {
 #[test]
 fn a_macro_is_written_into_the_draft_at_the_caret() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CALL".to_owned(),
         text: "DE ${station.callsign}".to_owned(),
@@ -537,7 +539,7 @@ fn a_macro_is_written_into_the_draft_at_the_caret() {
 #[test]
 fn a_macro_written_into_the_middle_of_a_draft_stays_in_the_middle() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CALL".to_owned(),
         text: "${station.callsign}".to_owned(),
@@ -569,7 +571,7 @@ fn a_sending_macro_does_not_disturb_the_draft() {
 #[test]
 fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
     let mut app = App::headless();
-    app.station.callsign = "jl1his".to_owned();
+    app.settings.station.callsign = "jl1his".to_owned();
     app.macros = vec![crate::app::macros::Macro {
         label: "CQ".to_owned(),
         text: "cq de ${station.callsign}\n".to_owned(),
@@ -582,7 +584,7 @@ fn an_expanded_macro_is_brought_into_the_shape_the_field_holds() {
 #[test]
 fn a_set_message_takes_the_draft_over() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
     app.templates = vec![crate::app::macros::Template {
         name: "BK".to_owned(),
         text: "BK DE ${station.callsign} BK".to_owned(),
@@ -646,10 +648,11 @@ fn a_callsign_taken_from_the_received_text_is_brought_into_shape() {
 #[test]
 fn the_station_details_are_stored_and_read_back() {
     let mut app = App::headless();
-    app.station.callsign = "JL1HIS".to_owned();
-    app.station.qth = "TOKYO".to_owned();
+    app.settings.station.callsign = "JL1HIS".to_owned();
+    app.settings.station.qth = "TOKYO".to_owned();
 
-    let settings = app.settings();
+    app.persist();
+    let settings = app.saved.clone();
 
     assert_eq!(settings.station.callsign, "JL1HIS");
     assert_eq!(settings.station.qth, "TOKYO");
@@ -680,15 +683,15 @@ fn only_usable_rows_become_fields_the_macros_can_read() {
 
     app.commit_custom_variables();
 
-    assert_eq!(app.custom_variables.len(), 1);
-    assert_eq!(app.custom_variables["grid"], "PM95UQ");
+    assert_eq!(app.settings.custom_variables.len(), 1);
+    assert_eq!(app.settings.custom_variables["grid"], "PM95UQ");
     assert_eq!(app.variables_draft.len(), 2);
 }
 
 #[test]
 fn opening_the_window_loads_the_fields_that_are_stored() {
     let mut app = App::headless();
-    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
 
     app.open_station();
 
@@ -699,7 +702,7 @@ fn opening_the_window_loads_the_fields_that_are_stored() {
 #[test]
 fn a_macro_reads_the_fields_the_operator_added() {
     let mut app = App::headless();
-    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
     app.macros = vec![crate::app::macros::Macro {
         label: "GRID".to_owned(),
         text: "MY GRID IS ${custom.grid}".to_owned(),
@@ -712,9 +715,10 @@ fn a_macro_reads_the_fields_the_operator_added() {
 #[test]
 fn the_operator_fields_are_stored_and_read_back() {
     let mut app = App::headless();
-    app.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
 
-    let settings = app.settings();
+    app.persist();
+    let settings = app.saved.clone();
 
     assert_eq!(settings.custom_variables["grid"], "PM95UQ");
 }

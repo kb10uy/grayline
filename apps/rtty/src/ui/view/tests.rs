@@ -428,7 +428,7 @@ fn the_settings_menu_names_the_station_window() {
 fn the_extra_fields_are_edited_in_the_station_window(#[case] locale: Locale) {
     let mut app = App::headless();
     app.select_locale(locale);
-    app.custom_variables = std::collections::BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
+    app.settings.custom_variables = std::collections::BTreeMap::from([("grid".to_owned(), "PM95UQ".to_owned())]);
     let i18n = I18n::new(locale, &crate::locales::CATALOG);
 
     menu::apply(&mut app, menu::Action::ShowStation);
@@ -475,7 +475,7 @@ fn the_contact_window_shows_the_fields_the_settings_ask_for(#[case] locale: Loca
 #[test]
 fn a_field_no_catalogue_knows_stands_under_its_own_name() {
     let mut app = App::headless();
-    app.contact_settings.fields = vec!["club".to_owned()];
+    app.settings.contact.fields = vec!["club".to_owned()];
     app.contact.callsign = "JA1ABC".to_owned();
     app.open_contact();
 

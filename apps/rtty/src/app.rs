@@ -4,9 +4,9 @@
 //! draws. Keeping the two apart is what lets the whole of the state be driven
 //! from a test without a window.
 
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use grayline_rig_control::{Keying, RigControlError, RigSettings, RigSnapshot, RigState, RigWorker, bands::BandPlan};
+use grayline_rig_control::{Keying, RigControlError, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
 use grayline_shell::{
     common::{CommonConfig, CommonSettings, UI_SCALE_RANGE},
@@ -18,13 +18,13 @@ use grayline_shell::{
 
 use crate::{
     app::{
-        macros::{Contact, Macro, MacroContext, Station, Template, expand, valid_variable_name},
+        macros::{Contact, Macro, MacroContext, Template, expand, valid_variable_name},
         transmit::{Sending, Transmit},
     },
     error::AppError,
     locales::CATALOG,
     storage::{
-        config::{Config, ContactSettings, KeyerSettings, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
+        config::{Config, MAXIMUM_MARK_HZ, MINIMUM_MARK_HZ, Settings},
         library,
         paths::{AppPaths, Folder},
     },
@@ -89,31 +89,14 @@ pub struct App {
     pub columns: Vec<Scrollback>,
     pub ui_scale: f32,
 
-    /// The tone a mark is expected at; space sits `shift_hz` above it.
-    pub mark_hz: f64,
-    pub shift_hz: f64,
-    pub baud: f64,
-    pub reverse: bool,
-    pub afc: bool,
-    /// The reading a signal has to beat to be printed; zero prints
-    /// everything, which is the squelch being off.
-    pub squelch_threshold: f64,
-    pub unshift_on_space: bool,
-    pub atc: bool,
-    /// Whether a transmission re-announces figures after a space.
+    /// What the operator chose, as it is saved.
     ///
-    /// Separate from the receive setting above, and on by default, because it
-    /// is about the station being sent to rather than this one: a receiver
-    /// with unshift-on-space would otherwise print a contest exchange after a
-    /// space as letters.
-    pub tx_unshift_on_space: bool,
-    /// How hard the transmission is driven, as fader travel in `0..=1`.
-    pub tx_level: f64,
+    /// The panels, the menus, and the dialogs edit this directly; the receive
+    /// worker is handed its part through [`push_settings`](Self::push_settings).
+    pub settings: Settings,
 
     /// The draft, the queue behind it, and the message on the air.
     pub transmit: Transmit,
-    /// Who this station is, for the macros that say so.
-    pub station: Station,
     /// The station being worked, as entered beside the received text.
     pub contact: Contact,
     /// The buttons under the message field.
@@ -121,15 +104,6 @@ pub struct App {
     /// The set messages listed beside the buttons, in the order they are
     /// offered.
     pub templates: Vec<Template>,
-    /// The operator's own fields, reached from a macro as `${custom.<name>}`.
-    pub custom_variables: BTreeMap<String, String>,
-    /// Where the contact directory looks a callsign up.
-    pub contact_settings: ContactSettings,
-    /// How the rig is keyed, read from the file and not edited here.
-    pub rig: RigSettings,
-    /// Whether a transmission goes to the FSK keyer rather than the audio
-    /// device, read from the file and not edited here either.
-    pub keyer: KeyerSettings,
     /// The thread that reads and writes the contact directory.
     pub contact_directory: ContactWorker,
     /// What it last found, read once per frame.
@@ -260,25 +234,11 @@ impl App {
             audio,
             columns: DecodePath::ALL.map(|_| Scrollback::default()).into_iter().collect(),
             ui_scale: shared.ui_scale,
-            mark_hz: settings.mark_hz,
-            shift_hz: settings.shift_hz,
-            baud: settings.baud,
-            reverse: settings.reverse,
-            afc: settings.afc,
-            squelch_threshold: settings.squelch_threshold,
-            unshift_on_space: settings.unshift_on_space,
-            atc: settings.atc,
-            tx_unshift_on_space: settings.tx_unshift_on_space,
-            tx_level: settings.tx_level,
+            settings: settings.clone(),
             transmit: Transmit::default(),
-            station: settings.station.clone(),
             contact: Contact::default(),
             macros: library.macros,
             templates: library.templates,
-            custom_variables: settings.custom_variables.clone(),
-            contact_settings: settings.contact.clone(),
-            rig: settings.rig.clone(),
-            keyer: settings.keyer.clone(),
             contact_directory: contact::spawn(&settings.contact, &contact_paths, waker.clone()),
             contact_snapshot: ContactSnapshot::default(),
             contact_dialog_open: false,
@@ -346,8 +306,8 @@ impl App {
     /// The pair the receiver is listening for, before any AFC movement.
     pub fn tones(&self) -> ToneSet {
         ToneSet {
-            mark_hz: self.mark_hz,
-            space_hz: self.mark_hz + self.shift_hz,
+            mark_hz: self.settings.mark_hz,
+            space_hz: self.settings.mark_hz + self.settings.shift_hz,
         }
     }
 
@@ -435,6 +395,7 @@ impl App {
     pub fn set_scope_open(&mut self, open: bool) {
         self.scope.set_open(open);
         self.audio.set_scope(open);
+        self.settings.scope = open;
     }
 
     /// Returns how long the interface may sleep for.
@@ -459,36 +420,14 @@ impl App {
             locale: self.i18n.locale(),
             ui_scale: self.ui_scale,
         });
-        let settings = self.settings();
-        if settings == self.saved {
+        self.settings.device = self.audio.device.as_ref().map(|device| device.name().to_owned());
+        self.settings.output_device = self.audio.output_device.as_ref().map(|device| device.name().to_owned());
+        self.settings = core::mem::take(&mut self.settings).clamped();
+        if self.settings == self.saved {
             return;
         }
-        self.config.save(&settings);
-        self.saved = settings;
-    }
-
-    fn settings(&self) -> Settings {
-        Settings {
-            device: self.audio.device.as_ref().map(|device| device.name().to_owned()),
-            output_device: self.audio.output_device.as_ref().map(|device| device.name().to_owned()),
-            mark_hz: self.mark_hz,
-            shift_hz: self.shift_hz,
-            baud: self.baud,
-            reverse: self.reverse,
-            afc: self.afc,
-            squelch_threshold: self.squelch_threshold,
-            unshift_on_space: self.unshift_on_space,
-            atc: self.atc,
-            tx_unshift_on_space: self.tx_unshift_on_space,
-            tx_level: self.tx_level,
-            station: self.station.clone(),
-            custom_variables: self.custom_variables.clone(),
-            contact: self.contact_settings.clone(),
-            rig: self.rig.clone(),
-            keyer: self.keyer.clone(),
-            scope: self.scope.is_open(),
-        }
-        .clamped()
+        self.config.save(&self.settings);
+        self.saved = self.settings.clone();
     }
 
     /// Hands the receive settings to the worker.
@@ -498,7 +437,8 @@ impl App {
     /// a receiver cannot be retuned in place, so a frame that changed nothing
     /// does not restart the decoders.
     pub fn push_settings(&mut self) {
-        self.audio.set_settings(worker_settings(&self.settings()));
+        self.settings = core::mem::take(&mut self.settings).clamped();
+        self.audio.set_settings(worker_settings(&self.settings));
     }
 
     pub fn set_ui_scale(&mut self, scale: f32) {
@@ -519,13 +459,13 @@ impl App {
         let tones = column.tones;
         // The detected pair is reported in the roles the receiver is using,
         // so a reversed one has already been swapped back.
-        let (mark, space) = if self.reverse {
+        let (mark, space) = if self.settings.reverse {
             (tones.space_hz, tones.mark_hz)
         } else {
             (tones.mark_hz, tones.space_hz)
         };
-        self.mark_hz = mark.clamp(MINIMUM_MARK_HZ, MAXIMUM_MARK_HZ);
-        self.shift_hz = (space - mark).abs();
+        self.settings.mark_hz = mark.clamp(MINIMUM_MARK_HZ, MAXIMUM_MARK_HZ);
+        self.settings.shift_hz = (space - mark).abs();
         self.push_settings();
     }
 
@@ -573,12 +513,12 @@ impl App {
         TxConfig {
             tones: self.tones(),
             framing: TxFraming {
-                baud: BaudRate::new(self.baud).unwrap_or_default(),
+                baud: BaudRate::new(self.settings.baud).unwrap_or_default(),
                 ..default.framing
             },
-            reverse: self.reverse,
-            tx_unshift_on_space: self.tx_unshift_on_space,
-            amplitude: tx_amplitude(self.tx_level),
+            reverse: self.settings.reverse,
+            tx_unshift_on_space: self.settings.tx_unshift_on_space,
+            amplitude: tx_amplitude(self.settings.tx_level),
             ..default
         }
     }
@@ -595,6 +535,7 @@ impl App {
     /// Opens the window naming this station, with its fields loaded.
     pub fn open_station(&mut self) {
         self.variables_draft = self
+            .settings
             .custom_variables
             .iter()
             .map(|(name, value)| (name.clone(), value.clone()))
@@ -612,7 +553,7 @@ impl App {
     /// window to be corrected but left out of what the macros see, so a name
     /// still being typed never briefly becomes a field of its own.
     pub fn commit_custom_variables(&mut self) {
-        self.custom_variables = self
+        self.settings.custom_variables = self
             .variables_draft
             .iter()
             .filter(|(name, _)| valid_variable_name(name))
@@ -640,10 +581,10 @@ impl App {
         expand(
             text,
             &MacroContext {
-                station: &self.station,
+                station: &self.settings.station,
                 contact: &self.contact,
                 directory: &self.contact_snapshot.fields,
-                custom: &self.custom_variables,
+                custom: &self.settings.custom_variables,
                 now: &now,
             },
         )
@@ -787,7 +728,7 @@ impl App {
     /// A control that would do nothing is not offered: with the lookup off, or
     /// with no instance and no key configured, there is nobody to ask again.
     pub fn can_refresh_contact(&self) -> bool {
-        self.contact_settings.lookup && grayline_qso::normalize_callsign(&self.contact.callsign).is_some()
+        self.settings.contact.lookup && grayline_qso::normalize_callsign(&self.contact.callsign).is_some()
     }
 
     /// Opens the window on what is filed under the callsign being worked.
@@ -799,7 +740,7 @@ impl App {
     /// Anything else already filed follows, under its own name.
     pub fn open_contact(&mut self) {
         let known = &self.contact_snapshot.fields;
-        let offered = grayline_qso::expand_fields(self.contact_settings.fields.iter().map(String::as_str));
+        let offered = grayline_qso::expand_fields(self.settings.contact.fields.iter().map(String::as_str));
         let mut draft: Vec<ContactRow> = offered
             .iter()
             .map(|key| ContactRow {
@@ -870,12 +811,12 @@ impl App {
     /// directory composed over a logger or over nothing, and which of those it
     /// is was decided when it was built.
     pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.contact_settings.lookup == lookup {
+        if self.settings.contact.lookup == lookup {
             return;
         }
-        self.contact_settings.lookup = lookup;
+        self.settings.contact.lookup = lookup;
         self.contact_directory =
-            contact::spawn(&self.contact_settings, &self.contact_paths, self.contact_waker.clone());
+            contact::spawn(&self.settings.contact, &self.contact_paths, self.contact_waker.clone());
         self.contact_snapshot = ContactSnapshot::default();
         self.contact_requested.clear();
         self.look_up_contact();
@@ -890,7 +831,7 @@ impl App {
             return;
         };
         if !path.exists()
-            && let Err(error) = grayline_qso::Credentials::write(&path, Some(&self.contact_settings.wavelog_url), "")
+            && let Err(error) = grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
         {
             let message = self.i18n.text("error-credentials");
             self.notice = Some(format!("{message}: {error}"));
@@ -974,12 +915,16 @@ impl App {
     /// found out by the transmission that tries it, because nothing here holds
     /// a connection to it between messages.
     pub fn lacks_output(&self) -> bool {
-        !self.keyer.enabled && self.audio.output_device.is_none()
+        !self.settings.keyer.enabled && self.audio.output_device.is_none()
     }
 
     /// How a transmission reaches the rig.
     pub const fn keying(&self) -> Keying {
-        if self.keyer.enabled { Keying::Fsk } else { Keying::Audio }
+        if self.settings.keyer.enabled {
+            Keying::Fsk
+        } else {
+            Keying::Audio
+        }
     }
 
     /// Queues the draft.
@@ -1053,7 +998,7 @@ impl App {
     /// in a test asks for a rig: the setting is off by default, and a station
     /// that switched it on gets its transports opened on the first frame.
     fn poll_rig(&mut self) {
-        if self.rig.enabled && self.rig_worker.is_none() {
+        if self.settings.rig.enabled && self.rig_worker.is_none() {
             let (plan, problem) = BandPlan::load(self.paths.config_dir());
             // Logged rather than shown: nothing here draws a band, so a plan
             // that would not parse costs the script its `ctx.band` and costs
@@ -1062,7 +1007,7 @@ impl App {
                 log::note(&problem);
             }
             self.rig_worker = Some(RigWorker::spawn(
-                &self.rig,
+                &self.settings.rig,
                 self.paths.config_dir(),
                 Arc::new(plan),
                 log::note,
@@ -1105,7 +1050,7 @@ impl App {
     /// A rig that was asked to key and did not leaves a message nobody hears,
     /// so it holds the send button rather than being let through quietly.
     pub fn rig_problem(&self) -> Option<String> {
-        if !self.rig.enabled || self.rig_snapshot.state.is_ready() {
+        if !self.settings.rig.enabled || self.rig_snapshot.state.is_ready() {
             return None;
         }
         let detail = self.rig_snapshot.error.as_ref().map_or_else(
@@ -1235,10 +1180,10 @@ impl App {
     fn open_transmission(&mut self, text: &str) -> Result<TxSchedule, AppError> {
         let config = self.tx_config();
         let codes = encode_text(text, &config)?;
-        if self.keyer.enabled {
+        if self.settings.keyer.enabled {
             let schedule = TxSchedule::new(text, KEYER_TICKS_PER_SECOND, &config)?;
             self.tx
-                .begin_keyer(KeyerWorker::spawn(self.keyer.address.clone(), codes, config));
+                .begin_keyer(KeyerWorker::spawn(self.settings.keyer.address.clone(), codes, config));
             return Ok(schedule);
         }
         let (playback, writer) = self.audio.open_playback(PLAYBACK_CAPACITY_SAMPLES)?;
@@ -1357,7 +1302,7 @@ impl core::fmt::Debug for App {
             .debug_struct("App")
             .field("locale", &self.i18n.locale())
             .field("tones", &self.tones())
-            .field("baud", &self.baud)
+            .field("baud", &self.settings.baud)
             .finish_non_exhaustive()
     }
 }

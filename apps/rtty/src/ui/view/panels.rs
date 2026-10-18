@@ -59,7 +59,7 @@ fn tuning_panel(ui: &mut Ui, app: &mut App) {
     let mark_label = app.i18n.text("label-mark");
     ui.horizontal(|ui| {
         field_label(ui, &mark_label);
-        let mark = egui::DragValue::new(&mut app.mark_hz)
+        let mark = egui::DragValue::new(&mut app.settings.mark_hz)
             .speed(MARK_STEP_HZ)
             .range(MINIMUM_MARK_HZ..=MAXIMUM_MARK_HZ)
             .fixed_decimals(0)
@@ -71,12 +71,12 @@ fn tuning_panel(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         field_label(ui, &shift_label);
         ComboBox::from_id_salt("shift")
-            .selected_text(format!("{:.0} Hz", app.shift_hz))
+            .selected_text(format!("{:.0} Hz", app.settings.shift_hz))
             .width(fields)
             .show_ui(ui, |ui| {
                 for shift in SHIFTS_HZ {
                     changed |= ui
-                        .selectable_value(&mut app.shift_hz, shift, format!("{shift:.0} Hz"))
+                        .selectable_value(&mut app.settings.shift_hz, shift, format!("{shift:.0} Hz"))
                         .changed();
                 }
             });
@@ -86,11 +86,13 @@ fn tuning_panel(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         field_label(ui, &speed_label);
         ComboBox::from_id_salt("baud")
-            .selected_text(baud_text(app.baud))
+            .selected_text(baud_text(app.settings.baud))
             .width(fields)
             .show_ui(ui, |ui| {
                 for baud in BAUD_RATES {
-                    changed |= ui.selectable_value(&mut app.baud, baud, baud_text(baud)).changed();
+                    changed |= ui
+                        .selectable_value(&mut app.settings.baud, baud, baud_text(baud))
+                        .changed();
                 }
             });
     });
@@ -100,9 +102,11 @@ fn tuning_panel(ui: &mut Ui, app: &mut App) {
     let afc = app.i18n.text("action-afc");
     ui.horizontal(|ui| {
         changed |= ui
-            .checkbox(&mut app.reverse, RichText::new(reverse).size(SMALL))
+            .checkbox(&mut app.settings.reverse, RichText::new(reverse).size(SMALL))
             .changed();
-        changed |= ui.checkbox(&mut app.afc, RichText::new(afc).size(SMALL)).changed();
+        changed |= ui
+            .checkbox(&mut app.settings.afc, RichText::new(afc).size(SMALL))
+            .changed();
     });
 
     // What the frequency control found is lost the next time the receiver is
@@ -148,7 +152,7 @@ fn squelch_row(ui: &mut Ui, app: &mut App, changed: &mut bool) {
     ui.horizontal(|ui| {
         field_label(ui, &label);
         ui.spacing_mut().slider_width = (ui.available_width() - SLIDER_VALUE_WIDTH).max(MINIMUM_SLIDER_WIDTH);
-        let slider = egui::Slider::new(&mut app.squelch_threshold, MINIMUM_SQUELCH..=MAXIMUM_SQUELCH)
+        let slider = egui::Slider::new(&mut app.settings.squelch_threshold, MINIMUM_SQUELCH..=MAXIMUM_SQUELCH)
             .fixed_decimals(2)
             .show_value(true);
         *changed |= ui.add(slider).on_hover_text(hint).changed();
@@ -212,7 +216,7 @@ fn transmit_controls(ui: &mut Ui, app: &mut App) {
         field_label(ui, &level_label);
         ui.spacing_mut().slider_width = ui.available_width();
         ui.add(
-            egui::Slider::new(&mut app.tx_level, MINIMUM_TX_LEVEL..=MAXIMUM_TX_LEVEL)
+            egui::Slider::new(&mut app.settings.tx_level, MINIMUM_TX_LEVEL..=MAXIMUM_TX_LEVEL)
                 .show_value(false)
                 .max_decimals(2),
         );

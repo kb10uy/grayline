@@ -33,10 +33,10 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
             let id = Id::new(["station-callsign", "station-name", "station-qth", "station-grid"][index]);
             crate::ui::input::sanitize(ui.ctx(), id);
             let target = match index {
-                0 => &mut app.station.callsign,
-                1 => &mut app.station.name,
-                2 => &mut app.station.qth,
-                _ => &mut app.station.grid,
+                0 => &mut app.settings.station.callsign,
+                1 => &mut app.settings.station.name,
+                2 => &mut app.settings.station.qth,
+                _ => &mut app.settings.station.grid,
             };
             ui.horizontal(|ui| {
                 field_label(ui, label);
