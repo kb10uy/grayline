@@ -15,7 +15,6 @@ path = "src/main.rs"
 directories.workspace = true
 eframe.workspace = true
 egui.workspace = true
-fluent-bundle.workspace = true
 fontdb.workspace = true
 jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
@@ -28,7 +27,6 @@ grayline-shell = { path = "../../crates/shell" }
 grayline-variables = { path = "../../crates/variables" }
 thiserror.workspace = true
 toml_edit.workspace = true
-unic-langid.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 embed-resource.workspace = true

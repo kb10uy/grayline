@@ -2183,7 +2183,6 @@ dependencies = [
  "egui",
  "egui_kittest",
  "embed-resource",
- "fluent-bundle",
  "fontdb",
  "grayline-audio",
  "grayline-dsp",
@@ -2198,7 +2197,6 @@ dependencies = [
  "rstest",
  "thiserror 2.0.21",
  "toml_edit",
- "unic-langid",
 ]
 
 [[package]]
@@ -2253,7 +2251,6 @@ dependencies = [
  "egui_extras",
  "egui_kittest",
  "embed-resource",
- "fluent-bundle",
  "fontdb",
  "grayline-audio",
  "grayline-dsp",
@@ -2266,7 +2263,6 @@ dependencies = [
  "grayline-sstv-rx",
  "grayline-sstv-template",
  "grayline-tone-tx",
- "hound",
  "image",
  "image-webp",
  "jiff",
@@ -2274,8 +2270,6 @@ dependencies = [
  "rstest",
  "thiserror 2.0.21",
  "toml_edit",
- "unic-langid",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2325,7 +2319,6 @@ dependencies = [
  "image",
  "jiff",
  "kdl",
- "proptest",
  "resvg",
  "rstest",
  "thiserror 2.0.21",
@@ -2357,7 +2350,6 @@ version = "0.6.0-beta.1"
 dependencies = [
  "console_error_panic_hook",
  "grayline-sstv",
- "grayline-sstv-fskid",
  "grayline-sstv-rx",
  "wasm-bindgen",
 ]
@@ -2382,7 +2374,6 @@ dependencies = [
  "egui",
  "egui_kittest",
  "embed-resource",
- "fluent-bundle",
  "fontdb",
  "grayline-audio",
  "grayline-shell",
@@ -2393,7 +2384,6 @@ dependencies = [
  "rstest",
  "thiserror 2.0.21",
  "toml_edit",
- "unic-langid",
 ]
 
 [[package]]
