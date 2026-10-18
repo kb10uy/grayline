@@ -37,6 +37,7 @@ pub(super) fn status_bar(ui: &mut Ui, app: &App) {
                 [
                     app.tx_error.as_deref(),
                     app.library.error.as_deref(),
+                    app.error.as_deref(),
                     app.config_error(),
                 ]
                 .into_iter()

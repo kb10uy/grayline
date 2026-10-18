@@ -122,6 +122,7 @@ error-transmit-active = A picture is being sent
 error-no-output-device = Select an output device first
 error-invalid-station-call = Invalid station callsign: { $error }
 error-rig-unavailable = Rig control is not ready: { $error }
+error-open-folder = The folder could not be opened
 error-open-manual = The manual could not be opened in a browser
 
 geometry = { $mode } · { $width }×{ $height }

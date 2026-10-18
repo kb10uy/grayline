@@ -269,7 +269,7 @@ fn writing_the_credentials_file_does_nothing_without_one_to_write() {
     app.write_contact_credentials();
 
     assert!(app.notice.is_none());
-    assert!(app.library.error.is_none());
+    assert!(app.error.is_none());
 }
 
 #[test]
@@ -537,7 +537,7 @@ fn the_manual_opens_at_this_application_s_own_address() {
     app.open_manual();
 
     assert_eq!(browser.0.take(), vec![crate::identity::MANUAL_URL.to_owned()]);
-    assert_eq!(app.library.error, None);
+    assert_eq!(app.error, None);
 }
 
 #[test]
@@ -1282,9 +1282,9 @@ fn a_written_file_reports_as_a_notice_rather_than_a_failure() {
     let mut app = App::headless();
     app.report_written(Ok(std::path::PathBuf::from("rig.lua")));
     assert!(app.notice.is_some());
-    assert!(app.library.error.is_none());
+    assert!(app.error.is_none());
 
     app.report_written(Err(std::io::Error::other("disk full")));
     assert!(app.notice.is_none());
-    assert_eq!(app.library.error.as_deref(), Some("disk full"));
+    assert_eq!(app.error.as_deref(), Some("disk full"));
 }

@@ -183,6 +183,10 @@ pub struct App {
     /// A success the status line reports, as opposed to a failure: writing
     /// out the rig script or the band plan says where the file went.
     pub notice: Option<String>,
+    /// The last failure doing something on the operator's behalf outside the
+    /// application: opening a folder or the manual, writing a file out, or
+    /// reading the band plan. Shown on the status line.
+    pub error: Option<String>,
     pub rx_raster: Raster,
     pub tx_raster: Raster,
     pub tx_snapshot: TxSnapshot,
@@ -479,11 +483,12 @@ impl App {
                 template: None,
                 stocks: Vec::new(),
                 stock: None,
-                error: bands_error,
+                error: None,
             },
             library_scan: None,
             history_writers: Vec::new(),
             notice: None,
+            error: bands_error,
             rx_raster: Raster::blank(settings.rx_mode),
             tx_raster: Raster::test_pattern(settings.tx_mode),
             tx_snapshot: TxSnapshot::default(),
@@ -690,8 +695,9 @@ impl App {
     /// browsing them is the file manager's job and the interface only has to
     /// point at the folder.
     pub fn reveal(&mut self, folder: Folder) {
+        let message = self.i18n.text("error-open-folder");
         let opened = self.platform.open_path(self.paths.folder(folder));
-        self.library.error = opened.err().map(|error| error.to_string());
+        self.error = opened.err().map(|error| format!("{message}: {error}"));
     }
 
     /// Opens the operator's manual.
@@ -703,7 +709,7 @@ impl App {
         let url = grayline_shell::manual_url(&crate::identity::IDENTITY);
         let message = self.i18n.text("error-open-manual");
         let opened = self.platform.open_url(&url);
-        self.library.error = opened.err().map(|error| format!("{message}: {error}"));
+        self.error = opened.err().map(|error| format!("{message}: {error}"));
     }
 
     pub fn normalize_call(&mut self) {
@@ -1294,11 +1300,11 @@ impl App {
                     self.i18n
                         .text_with("rig-script-written", &[("path", owned(path.display().to_string()))]),
                 );
-                self.library.error = None;
+                self.error = None;
                 self.reveal(Folder::Config);
             }
             Err(error) => {
-                self.library.error = Some(error.to_string());
+                self.error = Some(error.to_string());
                 self.notice = None;
             }
         }

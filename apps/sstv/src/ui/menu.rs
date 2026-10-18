@@ -294,7 +294,7 @@ mod tests {
 
         apply(&mut app, Action::OpenManual);
 
-        assert_eq!(app.library.error, None);
+        assert_eq!(app.error, None);
     }
 
     #[test]
