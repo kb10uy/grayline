@@ -18,11 +18,6 @@ const BAND_UPPER_HZ: f64 = 2_800.0;
 const BAND_MARGIN_HZ: f64 = 100.0;
 /// Stopband attenuation of the receive band-pass, in decibels.
 const BAND_ATTENUATION_DB: f64 = 20.0;
-/// Band-pass order at 11 025 Hz, scaled linearly with the sampling frequency.
-const BAND_REFERENCE_ORDER: f64 = 24.0;
-/// Sampling frequency the reference order is stated at, in hertz.
-const BAND_REFERENCE_RATE_HZ: f64 = 11_025.0;
-const BAND_MINIMUM_ORDER: usize = 12;
 
 const LEVEL_CUTOFF_HZ: f64 = 5.0;
 
@@ -52,11 +47,7 @@ pub(crate) struct FrontEnd {
 
 impl FrontEnd {
     pub(crate) fn new(sample_rate_hz: f64) -> Result<Self, WefaxError> {
-        let mut order = libm::round(BAND_REFERENCE_ORDER * sample_rate_hz / BAND_REFERENCE_RATE_HZ) as usize;
-        order = order.max(BAND_MINIMUM_ORDER);
-        if !order.is_multiple_of(2) {
-            order += 1;
-        }
+        let order = FirDesign::receive_band_pass_order(sample_rate_hz);
         let upper_frequency_hz = BAND_UPPER_HZ.min(sample_rate_hz * 0.5 - BAND_MARGIN_HZ);
         Ok(Self {
             band_pass: Fir::from_design(FirDesign {

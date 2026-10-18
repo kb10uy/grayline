@@ -16,9 +16,6 @@ use crate::{
     },
 };
 
-/// Base order of the input band-pass at 11025 Hz, scaled linearly with the
-/// capture rate as the other receive front ends do.
-const BAND_PASS_BASE_ORDER: f64 = 24.0;
 /// Seconds the peak normalizer's gain estimate decays over: 4.5 bit times at
 /// 45.45 baud, slow enough not to pump within one character.
 const NORMALIZER_DECAY_SECONDS: f64 = 0.1;
@@ -75,11 +72,7 @@ impl FrontEnd {
     /// if the sideband is inverted.
     pub(crate) fn new(sample_rate_hz: f64, tones: ToneSet, config: &RxConfig) -> Result<Self, RttyError> {
         tones.validate(sample_rate_hz)?;
-        let mut order = libm::round(BAND_PASS_BASE_ORDER * sample_rate_hz / 11_025.0) as usize;
-        order = order.max(12);
-        if !order.is_multiple_of(2) {
-            order += 1;
-        }
+        let order = FirDesign::receive_band_pass_order(sample_rate_hz);
         let band_pass = Fir::from_design(FirDesign {
             kind: FirKind::BandPass,
             order,
