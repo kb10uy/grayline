@@ -2306,6 +2306,7 @@ dependencies = [
  "grayline-sstv",
  "grayline-sstv-fskid",
  "grayline-tone-tx",
+ "libm",
  "rstest",
  "thiserror 2.0.21",
 ]

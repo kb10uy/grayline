@@ -1,4 +1,6 @@
+use alloc::vec::Vec;
 use core::num::NonZeroU32;
+
 use grayline_dsp::{
     detector::{ToneDetector, ToneDetectorDesign},
     filter::{Fir, FirDesign, FirKind},

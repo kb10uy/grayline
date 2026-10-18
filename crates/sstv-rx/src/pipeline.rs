@@ -6,6 +6,8 @@
 //! worker keeps a loop of its own because it also restarts, publishes, and
 //! refines mid-stream.
 
+use alloc::vec::Vec;
+
 use grayline_sstv::{
     RxDecoder, SstvError,
     mode::Mode,

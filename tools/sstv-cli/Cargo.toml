@@ -15,7 +15,7 @@ clap.workspace = true
 hound.workspace = true
 image.workspace = true
 jiff.workspace = true
-grayline-sstv-rx = { path = "../../crates/sstv-rx" }
+grayline-sstv-rx = { path = "../../crates/sstv-rx", features = ["std"] }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-tone-tx = { path = "../../crates/tone-tx" }
 grayline-sstv = { path = "../../crates/sstv", features = ["std"] }

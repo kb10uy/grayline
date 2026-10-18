@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use grayline_sstv::{mode::Mode, time::SstvDuration};
 use grayline_sstv_fskid::{FskId, FskNumber, FskRecord};
 

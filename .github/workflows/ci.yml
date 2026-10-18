@@ -87,6 +87,7 @@ jobs:
       - name: Build the no_std crates without std
         run: |
           cargo build -p grayline-sstv --no-default-features
+          cargo build -p grayline-sstv-rx --no-default-features
           cargo build -p grayline-dsp --no-default-features
           cargo build -p grayline-wefax --no-default-features
           cargo build -p grayline-rtty --no-default-features

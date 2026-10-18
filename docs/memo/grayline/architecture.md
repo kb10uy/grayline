@@ -458,8 +458,9 @@ and a client for them over `grayline-rig`'s transport. It is a crate of its own
 so that an application reaches the keyer without linking the serial port
 library the keyer itself needs ([keyer.md](keyer.md)).
 
-`grayline-dsp`, `grayline-sstv`, `grayline-wefax`, and `grayline-rtty` build as
-allocation-backed `no_std` crates by default. `grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
+`grayline-dsp`, `grayline-sstv`, `grayline-sstv-rx`, `grayline-wefax`, and
+`grayline-rtty` build as allocation-backed `no_std` crates by default.
+`grayline-sstv-fskid` is also `no_std`. Audio file and image format dependencies
 remain in `grayline-sstv-cli`, `grayline-wefax-cli`, and `grayline-rtty-cli`, outside the portable core.
 `grayline-sstv-template` is a
 standard-library application-support crate: it depends on `grayline-sstv` only at
@@ -682,6 +683,7 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 cargo build --workspace
 cargo build -p grayline-sstv --no-default-features
+cargo build -p grayline-sstv-rx --no-default-features
 cargo build -p grayline-dsp --no-default-features
 cargo build -p grayline-wefax --no-default-features
 cargo build -p grayline-rtty --no-default-features
