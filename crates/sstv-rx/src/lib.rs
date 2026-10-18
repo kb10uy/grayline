@@ -16,7 +16,7 @@ use grayline_sstv::{
     time::SstvDuration,
 };
 
-pub use demodulator::{DemodulatedAudio, DemodulatedChunk, Demodulator, demodulate};
+pub use demodulator::{DemodulatedAudio, DemodulatedChunk, Demodulator, MINIMUM_SAMPLE_RATE_HZ, demodulate};
 pub use error::DemodulatorError;
 pub use frontend::Detection;
 pub use pipeline::{PipelineError, PipelineOptions, PipelineOutcome, ReceivePipeline};

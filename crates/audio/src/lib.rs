@@ -24,5 +24,5 @@ pub use wav::WavSource;
 /// Capture rate preferred by the rest of the project.
 pub const PREFERRED_SAMPLE_RATE_HZ: u32 = 48_000;
 
-/// Lowest rate the SSTV receive front end accepts.
+/// Lowest rate any receive front end in the family accepts.
 pub const MINIMUM_SAMPLE_RATE_HZ: u32 = 6_000;

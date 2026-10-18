@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use grayline_sstv::{image::RgbImage, mode::Mode, rx::RxOutcome};
 use grayline_sstv_fskid::FskId;
-use grayline_sstv_rx::{PipelineOptions, ReceivePipeline};
+use grayline_sstv_rx::{MINIMUM_SAMPLE_RATE_HZ, PipelineOptions, ReceivePipeline};
 use hound::{SampleFormat, WavReader};
 
 /// First-channel mono PCM samples handed to the pipeline per packet.
@@ -53,7 +53,7 @@ pub fn decode_file_with_options(input: &Path, output: &Path, options: DecodeOpti
     if spec.channels == 0 {
         bail!("WAV file has no channels");
     }
-    if spec.sample_rate < 6_000 {
+    if spec.sample_rate < MINIMUM_SAMPLE_RATE_HZ {
         bail!("WAV sample rate {} Hz is too low for SSTV", spec.sample_rate);
     }
     let channels = spec.channels as usize;

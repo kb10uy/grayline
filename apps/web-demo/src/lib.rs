@@ -12,10 +12,9 @@ use grayline_sstv::{
     mode::Mode,
     rx::{RxEvent, RxOutcome, RxState, StopReason},
 };
-use grayline_sstv_rx::{PipelineOptions, ReceivePipeline};
+use grayline_sstv_rx::{MINIMUM_SAMPLE_RATE_HZ, PipelineOptions, ReceivePipeline};
 use wasm_bindgen::prelude::*;
 
-const MINIMUM_SAMPLE_RATE_HZ: f64 = 6_000.0;
 const LOG_LIMIT: usize = 1_024;
 
 /// A finished reception, kept because [`ReceivePipeline::finish`] consumes the
@@ -92,7 +91,7 @@ impl SstvReceiver {
     #[wasm_bindgen(constructor)]
     pub fn new(sample_rate_hz: f64, live_slant: bool, staging_seconds: f64) -> Result<SstvReceiver, JsError> {
         console_error_panic_hook::set_once();
-        if !sample_rate_hz.is_finite() || sample_rate_hz < MINIMUM_SAMPLE_RATE_HZ {
+        if !sample_rate_hz.is_finite() || sample_rate_hz < f64::from(MINIMUM_SAMPLE_RATE_HZ) {
             return Err(JsError::new(&format!(
                 "the sample rate must be at least {MINIMUM_SAMPLE_RATE_HZ} Hz, not {sample_rate_hz}"
             )));
