@@ -161,7 +161,7 @@ impl App {
 
     /// The window title, which carries what the receiver is doing.
     pub fn title(&self) -> String {
-        let name = format!("{} {}", crate::identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION"));
+        let name = crate::identity::IDENTITY.title();
         match self.progress() {
             RxProgress::Idle => name,
             progress => format!("{} \u{2014} {}", name, self.i18n.text(progress.label_key())),

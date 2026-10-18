@@ -44,6 +44,11 @@ pub struct Identity {
     /// What the operator is shown, in the window title and the log's first
     /// line.
     pub display_name: &'static str,
+    /// The application's own version, beside its name in the same two places.
+    ///
+    /// Each application's package carries a version of its own, released on
+    /// its own schedule, so this is read there rather than from this crate.
+    pub version: &'static str,
     /// The executable's name, which the desktop entry, the Wayland `app_id`,
     /// and the single-instance claim all have to agree on.
     pub process_name: &'static str,
@@ -68,6 +73,13 @@ pub struct Identity {
     /// The application icon, for the platforms with nowhere else to read one
     /// from.
     pub icon_png: &'static [u8],
+}
+
+impl Identity {
+    /// The name and version the window title and the log lead with.
+    pub fn title(&self) -> String {
+        format!("{} {}", self.display_name, self.version)
+    }
 }
 
 /// The variable that points an application at a different manual.
@@ -130,6 +142,7 @@ mod tests {
     const TEST_IDENTITY: Identity = Identity {
         app_directory: "test",
         display_name: "Grayline Test",
+        version: "0.0.0",
         process_name: "grayline-test",
         pictures_directory: "Grayline Test",
         manual_url: "https://grayline.jl1his.radio/test/",

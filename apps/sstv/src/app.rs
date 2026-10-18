@@ -579,7 +579,7 @@ impl App {
     }
 
     pub fn title(&self) -> String {
-        format!("{} {}", crate::identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION"))
+        crate::identity::IDENTITY.title()
     }
 
     /// Reselects the library entries named by `settings`.

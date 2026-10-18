@@ -22,6 +22,8 @@ use std::{
 
 use jiff::Zoned;
 
+use crate::Identity;
+
 /// How large the file may grow before it is started again, in bytes.
 ///
 /// A session that runs for weeks with a misbehaving device would otherwise
@@ -35,19 +37,14 @@ static SINK: OnceLock<Mutex<File>> = OnceLock::new();
 ///
 /// Returns the error rather than reporting it, because at the point this is
 /// called there is nowhere to report it to yet.
-pub fn open(path: &Path, display_name: &str) -> io::Result<()> {
+pub fn open(path: &Path, identity: &Identity) -> io::Result<()> {
     if path.metadata().is_ok_and(|data| data.len() >= MAX_BYTES) {
         let _ = std::fs::rename(path, path.with_extension("log.1"));
     }
 
     let file = OpenOptions::new().create(true).append(true).open(path)?;
     let _ = SINK.set(Mutex::new(file));
-    note(&format!(
-        "{} {} starting on {}",
-        display_name,
-        env!("CARGO_PKG_VERSION"),
-        std::env::consts::OS
-    ));
+    note(&format!("{} starting on {}", identity.title(), std::env::consts::OS));
     Ok(())
 }
 

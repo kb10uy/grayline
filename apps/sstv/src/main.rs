@@ -120,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let paths = paths::AppPaths::discover()?;
     paths.initialize()?;
-    if let Err(error) = log::open(paths.log_file(), identity::DISPLAY_NAME) {
+    if let Err(error) = log::open(paths.log_file(), &identity::IDENTITY) {
         eprintln!("could not open the log file: {error}");
     }
 
@@ -144,7 +144,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
     eframe::run_native(
-        &format!("{} {}", identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION")),
+        &identity::IDENTITY.title(),
         options,
         Box::new(|cc| Ok(Box::new(Interface::new(cc, paths, instance)))),
     )?;

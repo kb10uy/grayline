@@ -464,6 +464,7 @@ mod tests {
     const TEST_IDENTITY: Identity = Identity {
         app_directory: "test",
         display_name: "Grayline Test",
+        version: "0.0.0",
         process_name: "grayline-test",
         pictures_directory: "Grayline Test",
         manual_url: "https://grayline.jl1his.radio/test/",

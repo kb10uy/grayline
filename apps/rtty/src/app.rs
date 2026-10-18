@@ -340,7 +340,7 @@ impl App {
     /// either printing or idle, and a title that followed the squelch would
     /// flicker in the taskbar all evening.
     pub fn title(&self) -> String {
-        format!("{} {}", crate::identity::DISPLAY_NAME, env!("CARGO_PKG_VERSION"))
+        crate::identity::IDENTITY.title()
     }
 
     /// The pair the receiver is listening for, before any AFC movement.
