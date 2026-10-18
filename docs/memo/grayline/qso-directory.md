@@ -384,13 +384,17 @@ snapshot for both desktop applications. `ContactPaths::open` selects the named
 store and optional logger; absent paths keep tests in memory and offline. The
 worker accepts the opened directory, a thread name and a notification callback,
 without depending on egui or application error types. Snapshot errors are shared
-`QsoError` values. Each application's `worker/contact.rs` only adapts its settings
-and `Waker` to that interface.
+`QsoError` values. `ContactEditor` wraps it for an interface; each application
+hands that its settings and a wake function.
 
 The worker is kept for the session, works with the network switched off, and
-writes corrected records. Turning lookup off replaces the worker with one whose
-directory has no logger. Dropping it drains queued requests and checkpoints the
-store before joining the thread.
+writes corrected records. Turning lookup on or off sends the worker the logger
+to ask from then on, queued behind whatever it was already asked, rather than
+replacing it: a replacement would wait in the frame for a lookup that can be
+waiting on the network, and a save queued on the old worker could land after
+the new one had read the store. Only a worker that could not open its
+directory, and so has stopped, is opened again. Dropping it drains queued
+requests and checkpoints the store before joining the thread.
 
 A lookup is asked for when the callsign is **committed**, which is leaving the
 field, and again when an FSK identifier arrives — the identifier path writes the

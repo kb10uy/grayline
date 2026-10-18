@@ -104,6 +104,34 @@ fn a_remote_failure_is_published_beside_the_local_answer() {
 }
 
 #[test]
+fn a_logger_handed_over_to_a_running_worker_is_asked_from_then_on() {
+    let server = FakeWavelog::spawn(&[(503, "")]);
+    let (sent, received) = mpsc::channel();
+    let worker = ContactWorker::spawn(
+        Ok(Directory::new(Store::in_memory().unwrap(), None)),
+        "contact-test".to_owned(),
+        move || {
+            sent.send(()).unwrap();
+        },
+    );
+    worker.save(record("JA1AAA", "Filed"), vec![]);
+    received.recv_timeout(TEST_TIMEOUT).unwrap();
+    worker.use_remote(Some(server.client()));
+    worker.refresh("JA1AAA");
+    let snapshot = loop {
+        received.recv_timeout(TEST_TIMEOUT).unwrap();
+        let snapshot = worker.latest();
+        if snapshot.state != ContactState::Looking {
+            break snapshot;
+        }
+    };
+
+    assert_eq!(snapshot.fields["name"], "Filed");
+    assert!(matches!(snapshot.error.as_deref(), Some(QsoError::Refused(503))));
+    assert!(worker.is_running());
+}
+
+#[test]
 fn an_open_failure_is_kept_in_the_snapshot() {
     let mut worker = ContactWorker::spawn(
         Err(QsoError::Store("cannot open".to_owned())),

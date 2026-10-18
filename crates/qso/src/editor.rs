@@ -197,14 +197,21 @@ impl ContactEditor {
         self.worker.save(record, dropped);
     }
 
-    /// Opens the directory again over what `settings` now say.
+    /// Asks the logger `settings` now name, or nobody.
     ///
-    /// The worker is replaced rather than told: what it holds is a directory
-    /// composed over a logger or over nothing, and which of those it is was
-    /// decided when it was built. What it last answered goes with it, and the
-    /// next lookup asks again.
-    pub fn reopen(&mut self, settings: &ContactSettings) {
-        self.worker = spawn(settings, &self.paths, &self.thread_name, &self.wake);
+    /// The running worker is told rather than replaced, behind whatever it was
+    /// already asked: replacing it would wait in this frame for a lookup that
+    /// can be waiting on the network, and would let a save queued on the old
+    /// one land after the new one had already read the store. A worker that
+    /// could not open its directory has stopped, and is opened again. What it
+    /// last answered is set aside either way, and the next lookup asks again.
+    pub fn reconfigure(&mut self, settings: &ContactSettings) {
+        if self.worker.is_running() {
+            self.worker
+                .use_remote(self.paths.remote(settings.lookup, &settings.wavelog_url));
+        } else {
+            self.worker = spawn(settings, &self.paths, &self.thread_name, &self.wake);
+        }
         self.snapshot = ContactSnapshot::default();
         self.requested.clear();
     }

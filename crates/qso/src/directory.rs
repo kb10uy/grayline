@@ -52,6 +52,11 @@ impl Directory {
         Self { store, remote }
     }
 
+    /// Asks `remote` from now on, or nobody.
+    pub fn set_remote(&mut self, remote: Option<Wavelog>) {
+        self.remote = remote;
+    }
+
     /// Answers what is known about `callsign`.
     ///
     /// The store first, and the remote only when the store has nothing recent

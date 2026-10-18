@@ -698,7 +698,7 @@ impl App {
             return;
         }
         self.settings.contact.lookup = lookup;
-        self.directory.reopen(&self.settings.contact);
+        self.directory.reconfigure(&self.settings.contact);
         self.look_up_contact();
     }
 
