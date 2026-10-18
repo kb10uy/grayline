@@ -4,6 +4,7 @@ use crate::{
     DspError,
     filter::{Iir, IirLowPassDesign, IirResponse},
     transform::{AnalyticSample, HilbertTransformer},
+    validate::validate_sample_rate,
 };
 
 /// Largest phase difference the discriminator measures over, in samples.
@@ -150,9 +151,7 @@ impl HilbertDiscriminator {
 }
 
 fn validate(design: &HilbertDiscriminatorDesign) -> Result<(), DspError> {
-    if !design.sample_rate_hz.is_finite() || design.sample_rate_hz <= 0.0 {
-        return Err(DspError::InvalidSampleRate);
-    }
+    validate_sample_rate(design.sample_rate_hz)?;
     let finite = design.minimum_hz.is_finite()
         && design.maximum_hz.is_finite()
         && design.output_cutoff_hz.is_finite()

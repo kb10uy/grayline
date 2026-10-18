@@ -1,4 +1,4 @@
-use crate::DspError;
+use crate::{DspError, validate::validate_sample_rate};
 
 #[derive(Clone, Debug)]
 /// Measures instantaneous frequency from interpolated zero crossings.
@@ -16,9 +16,7 @@ pub struct ZeroCrossingFrequency {
 impl ZeroCrossingFrequency {
     /// Creates a frequency meter for the given sampling frequency.
     pub fn new(sample_rate_hz: f64) -> Result<Self, DspError> {
-        if !sample_rate_hz.is_finite() || sample_rate_hz <= 0.0 {
-            return Err(DspError::InvalidSampleRate);
-        }
+        validate_sample_rate(sample_rate_hz)?;
         Ok(Self {
             sample_rate_hz,
             previous_sample: None,

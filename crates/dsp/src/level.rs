@@ -1,6 +1,6 @@
 //! Level tracking and normalization.
 
-use crate::DspError;
+use crate::{DspError, validate::validate_sample_rate};
 
 /// Parameters for a decaying peak-follower normalizer.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -29,9 +29,7 @@ pub struct PeakNormalizer {
 impl PeakNormalizer {
     /// Designs and creates a normalizer.
     pub fn new(design: PeakNormalizerDesign) -> Result<Self, DspError> {
-        if !design.sample_rate_hz.is_finite() || design.sample_rate_hz <= 0.0 {
-            return Err(DspError::InvalidSampleRate);
-        }
+        validate_sample_rate(design.sample_rate_hz)?;
         if !design.decay_seconds.is_finite() || design.decay_seconds <= 0.0 {
             return Err(DspError::InvalidDuration);
         }
