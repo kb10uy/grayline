@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs, io,
+    io,
     path::PathBuf,
     sync::{Arc, mpsc},
     thread,
@@ -1326,18 +1326,10 @@ impl App {
 
     /// Writes the default script out for the operator to edit.
     ///
-    /// Refuses to write over one that is already there: the file only exists
-    /// because someone edited it, and replacing it with the default is the one
-    /// thing this must never do. The result is reported on the status line
-    /// rather than in front of the interface, because nothing was lost either
-    /// way.
+    /// The result is reported on the status line rather than in front of the
+    /// interface, because nothing was lost either way.
     pub fn write_rig_script(&mut self) {
-        let path = self.paths.config_dir().join(script::SCRIPT_FILE);
-        let written = if path.exists() {
-            Ok(path)
-        } else {
-            fs::write(&path, script::DEFAULT_SCRIPT).map(|()| path)
-        };
+        let written = script::write_default(self.paths.config_dir());
         self.report_written(written);
     }
 

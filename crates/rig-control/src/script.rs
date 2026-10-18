@@ -9,7 +9,7 @@ use std::{
     cell::Cell,
     collections::BTreeMap,
     fs, io,
-    path::Path,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
@@ -33,6 +33,20 @@ pub const SCRIPT_FILE: &str = "rigcontrol.lua";
 /// is a file that never gains a later fix, and most operators never need to
 /// edit it. The menu writes it out for the ones who do.
 pub const DEFAULT_SCRIPT: &str = include_str!("../assets/rigcontrol.lua");
+
+/// Writes the default script out beside `config.toml` for the operator to edit.
+///
+/// Refuses to write over one that is already there: the file only exists
+/// because someone edited it, and replacing it with the default is the one
+/// thing this must never do.
+pub fn write_default(config_dir: &Path) -> io::Result<PathBuf> {
+    let path = config_dir.join(SCRIPT_FILE);
+    if path.exists() {
+        return Ok(path);
+    }
+    fs::write(&path, DEFAULT_SCRIPT)?;
+    Ok(path)
+}
 
 /// How long one call may run before it is abandoned.
 ///

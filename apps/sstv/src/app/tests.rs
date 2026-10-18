@@ -2,6 +2,7 @@
 
 use std::{
     cell::RefCell,
+    fs,
     path::Path,
     rc::Rc,
     time::{Duration, Instant},
