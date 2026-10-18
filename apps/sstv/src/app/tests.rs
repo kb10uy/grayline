@@ -17,8 +17,23 @@ use tempfile::TempDir;
 use super::*;
 use crate::{
     test_util::refused_port,
-    worker::receive::{Frame, HistoryCandidate, RxSnapshot},
+    worker::{
+        receive::{Frame, HistoryCandidate, RxSnapshot},
+        transmit::TxPhase,
+    },
 };
+
+fn sending(phase: TxPhase) -> Outgoing {
+    let mut outgoing = Outgoing::new(1.0);
+    outgoing.begin_for_test(Kind::Picture, phase);
+    outgoing
+}
+
+fn ended(ending: Ending) -> Outgoing {
+    let mut outgoing = sending(TxPhase::Producing);
+    outgoing.end(&ending, None);
+    outgoing
+}
 
 fn disconnected(paths: AppPaths, settings: &Settings) -> App {
     let config = Config::load(paths.config_file());
@@ -397,22 +412,35 @@ fn a_rig_worker_exists_exactly_while_rig_control_is_switched_on() {
     assert_eq!(app.rig_snapshot.state, RigState::Disconnected);
 }
 
-/// The lead-in is time anything sent into the rig is lost, so a keyed
-/// transmission has to wait out the rig before any audio leaves.
-#[rstest]
-#[case::nothing_was_keyed(false, RigState::Receiving, true)]
-#[case::still_switching_over(true, RigState::Receiving, false)]
-#[case::keyed_and_settled(true, RigState::Transmitting, true)]
-fn audio_waits_until_the_rig_says_it_is_transmitting(
-    #[case] keyed: bool,
-    #[case] state: RigState,
-    #[case] expected: bool,
-) {
+#[test]
+fn switching_rig_control_off_mid_transmission_gives_the_keying_back() {
     let mut app = App::headless();
-    app.rig_keyed = keyed;
-    app.rig_snapshot.state = state;
+    app.settings.rig.enabled = true;
+    app.poll_rig();
+    app.outgoing = sending(TxPhase::Producing);
+    app.outgoing.key_for_test();
 
-    assert_eq!(app.rig_ready_to_send(), expected);
+    app.settings.rig.enabled = false;
+    app.poll_rig();
+
+    assert!(app.outgoing.is_active());
+    assert!(!app.outgoing.is_keyed());
+}
+
+#[test]
+fn a_failed_transmission_reports_why_and_gives_the_rig_back() {
+    let mut app = App::headless();
+    app.outgoing = sending(TxPhase::Producing);
+    app.outgoing.key_for_test();
+    app.poll_workers();
+    assert!(app.audio.is_muted_for_transmit());
+
+    app.end_transmission(Ending::Failed("broken".to_owned()));
+    app.poll_workers();
+
+    assert_eq!(app.tx_error.as_deref(), Some("broken"));
+    assert!(!app.outgoing.is_keyed());
+    assert!(!app.audio.is_muted_for_transmit());
 }
 
 /// Transmitting into a rig that was asked to key and did not is a
@@ -571,18 +599,15 @@ fn an_unchanged_activity_is_not_reported_again() {
 }
 
 #[rstest]
-#[case(TxPhase::Priming, Activity::Transmitting)]
-#[case(TxPhase::Producing, Activity::Transmitting)]
-#[case(TxPhase::Draining, Activity::Transmitting)]
-#[case(TxPhase::Complete, Activity::Receiving)]
-#[case(TxPhase::Cancelled, Activity::Receiving)]
-fn a_transmission_outranks_a_reception(#[case] phase: TxPhase, #[case] expected: Activity) {
+#[case(sending(TxPhase::Priming), Activity::Transmitting)]
+#[case(sending(TxPhase::Producing), Activity::Transmitting)]
+#[case(sending(TxPhase::Draining), Activity::Transmitting)]
+#[case(ended(Ending::Complete), Activity::Receiving)]
+#[case(ended(Ending::Cancelled), Activity::Receiving)]
+fn a_transmission_outranks_a_reception(#[case] outgoing: Outgoing, #[case] expected: Activity) {
     let mut app = App::headless();
     app.audio.set_snapshot(decoding(40, 100));
-    app.tx_snapshot = TxSnapshot {
-        phase,
-        ..TxSnapshot::default()
-    };
+    app.outgoing = outgoing;
 
     app.poll_workers();
 
@@ -590,18 +615,15 @@ fn a_transmission_outranks_a_reception(#[case] phase: TxPhase, #[case] expected:
 }
 
 #[rstest]
-#[case(TxPhase::Priming, true)]
-#[case(TxPhase::Producing, true)]
-#[case(TxPhase::Draining, true)]
-#[case(TxPhase::Complete, false)]
-#[case(TxPhase::Cancelled, false)]
-#[case(TxPhase::Failed, false)]
-fn reception_is_muted_for_as_long_as_a_transmission_runs(#[case] phase: TxPhase, #[case] expected: bool) {
+#[case(sending(TxPhase::Priming), true)]
+#[case(sending(TxPhase::Producing), true)]
+#[case(sending(TxPhase::Draining), true)]
+#[case(ended(Ending::Complete), false)]
+#[case(ended(Ending::Cancelled), false)]
+#[case(ended(Ending::Failed("broken".to_owned())), false)]
+fn reception_is_muted_for_as_long_as_a_transmission_runs(#[case] outgoing: Outgoing, #[case] expected: bool) {
     let mut app = App::headless();
-    app.tx_snapshot = TxSnapshot {
-        phase,
-        ..TxSnapshot::default()
-    };
+    app.outgoing = outgoing;
 
     app.poll_workers();
 
@@ -659,7 +681,7 @@ fn a_tune_tone_needs_only_an_output_device() {
 #[test]
 fn a_tone_and_a_picture_refuse_each_other() {
     let mut app = App::headless();
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing = sending(TxPhase::Producing);
 
     assert_eq!(app.tune_problem(), Some(app.i18n.text("error-transmit-active")));
 
@@ -672,13 +694,21 @@ fn a_tone_and_a_picture_refuse_each_other() {
 #[test]
 fn a_tune_tone_stops_itself_once_its_time_is_up() {
     let mut app = App::headless();
-    app.tune_for_test();
-    app.tune_until = Some(Instant::now() - Duration::from_millis(1));
+    app.outgoing.begin_for_test(
+        Kind::Tune {
+            until: Instant::now() - Duration::from_millis(1),
+        },
+        TxPhase::Producing,
+    );
+    app.outgoing.key_for_test();
 
-    app.poll_transmit();
+    app.poll_workers();
 
     assert!(!app.is_tuning());
-    assert_eq!(app.tx_snapshot.phase, TxPhase::Complete);
+    assert!(!app.outgoing.is_keyed());
+    assert!(!app.audio.is_muted_for_transmit());
+    assert!(app.outgoing.is_complete());
+    assert_eq!(app.tx_progress(), TxProgress::Complete);
 }
 
 #[test]
@@ -689,7 +719,8 @@ fn stopping_a_tune_tone_ends_the_transmission() {
     app.stop_tune();
 
     assert!(!app.is_tuning());
-    assert_eq!(app.tx_snapshot.phase, TxPhase::Cancelled);
+    assert!(!app.outgoing.is_active());
+    assert!(!app.outgoing.is_complete());
 }
 
 #[test]
@@ -1223,8 +1254,11 @@ size width=(fw)100 height=(fh)100 fit="stretch"
     assert_eq!(frame.pixels().first(), Some(&Rgb8::new(200, 10, 20)));
 }
 
-#[test]
-fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
+#[rstest]
+#[case::stopped(None)]
+#[case::complete(Some(Ending::Complete))]
+#[case::failed(Some(Ending::Failed("broken".to_owned())))]
+fn a_selection_during_a_transmission_takes_effect_when_it_ends(#[case] ending: Option<Ending>) {
     let root = TempDir::new().unwrap();
     let paths = library(&root);
     image::RgbImage::from_pixel(8, 6, image::Rgb([200, 30, 30]))
@@ -1239,14 +1273,17 @@ fn a_selection_during_a_transmission_takes_effect_when_it_ends() {
     let first = composed(&mut app);
     assert!(center(&first).r > center(&first).g);
 
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing = sending(TxPhase::Producing);
     app.library.stock = Some(1);
     app.stock_changed();
 
     app.poll_workers();
     assert_eq!(app.composition.frame.as_deref(), Some(first.as_ref()));
 
-    app.stop_transmit();
+    match ending {
+        Some(ending) => app.end_transmission(ending),
+        None => app.stop_transmit(),
+    }
 
     let second = composed(&mut app);
     assert!(center(&second).g > center(&second).r);

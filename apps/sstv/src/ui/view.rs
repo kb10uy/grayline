@@ -132,7 +132,7 @@ fn main_pane(ui: &mut Ui, app: &mut App) {
 fn state(app: &App) -> String {
     match app.tab {
         Tab::Transmit if app.is_tuning() => app.i18n.text("state-transmit-tone"),
-        Tab::Transmit => match app.tx_snapshot.phase {
+        Tab::Transmit => match app.outgoing.phase() {
             TxPhase::Priming => app.i18n.text("state-transmit-preparing"),
             TxPhase::Producing | TxPhase::Draining => match app.tx_progress() {
                 TxProgress::Scanning { rows, total } => app.i18n.text_with(
@@ -142,7 +142,7 @@ fn state(app: &App) -> String {
                 TxProgress::Identifying => app.i18n.text("state-transmit-identifying"),
                 _ => app.i18n.text("state-transmit-leader"),
             },
-            TxPhase::Complete => app.i18n.text("state-transmit-complete"),
+            _ if app.outgoing.is_complete() => app.i18n.text("state-transmit-complete"),
             _ if app.can_transmit() => app.i18n.text("state-transmit-ready"),
             _ => app.i18n.text("state-transmit-not-ready"),
         },
@@ -217,7 +217,7 @@ fn transmit_controls(ui: &mut Ui, app: &mut App, height: f32) {
 fn transmit_button(ui: &mut Ui, app: &mut App, width: f32, height: f32) {
     // A tone is transmitting too, but not this: stopping it is the other
     // button's, so this one is disabled and says what is holding the rig.
-    let active = app.tx_snapshot.phase.is_active() && !app.is_tuning();
+    let active = app.outgoing.is_sending_picture();
     let label = app.i18n.text(if active {
         "action-stop-transmit"
     } else {

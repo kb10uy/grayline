@@ -20,7 +20,7 @@ use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_sstv_rx::SyncStart;
 
 use grayline_rig_control::{
-    Keying, Reading, RigControlError, RigSnapshot, RigState, RigWorker,
+    Reading, RigControlError, RigSnapshot, RigState, RigWorker,
     bands::{BandDefinition, BandPlan},
     script,
 };
@@ -32,19 +32,22 @@ use grayline_shell::{
 };
 
 use crate::{
-    error::AppError,
     storage::{
         config::{Config, Settings},
         paths::{AppPaths, Folder},
     },
     ui::raster::{Raster, test_pattern_image},
     worker::{
-        audio::{AudioState, TxState},
+        audio::AudioState,
         compose::{ComposeRequest, Composer},
         receive::{Frame, RxProgress, RxSettings},
-        transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxPhase, TxProgress, TxSnapshot, TxWorker},
+        transmit::{Identification, TUNE_FREQUENCY_HZ, TUNE_LIMIT, TxGain, TxProgress, TxWorker},
     },
 };
+
+pub mod outgoing;
+
+use outgoing::{Ending, Kind, Outgoing};
 
 pub use crate::storage::config::{DspFlags, FIRST_QSO_NUMBER};
 pub use crate::storage::library::Entry;
@@ -190,7 +193,8 @@ pub struct App {
     pub error: Option<String>,
     pub rx_raster: Raster,
     pub tx_raster: Raster,
-    pub tx_snapshot: TxSnapshot,
+    /// The transmission going out, and how the last one ended.
+    pub outgoing: Outgoing,
     pub tx_error: Option<String>,
     /// The device fault waiting to be acknowledged, if one is.
     ///
@@ -224,21 +228,7 @@ pub struct App {
     /// The language and the scale, which the whole family shares.
     common: CommonConfig,
     composition: Composition,
-    /// The amplitude a running transmission reads, shared with its worker.
-    tx_gain: Arc<TxGain>,
-    tx: TxState,
-    /// When a tune tone stops itself, set for as long as one is being sent.
-    ///
-    /// The deadline is what says a tone is running rather than a picture: the
-    /// two use the same worker and the same stream, and everything else about
-    /// them differs only in what the operator is told.
-    tune_until: Option<Instant>,
     rig_worker: Option<RigWorker>,
-    /// Set while a transmission has asked for the rig to be keyed.
-    ///
-    /// A transmission that keyed the rig owes it an unkeying however it ends,
-    /// so this outlives the reason the transmission stopped.
-    rig_keyed: bool,
     /// How many decoded station identifiers have reached the QSO panel.
     ///
     /// The worker republishes every identifier it has decoded on each
@@ -429,7 +419,6 @@ impl App {
             settings: settings.clone(),
             rx_modes: modes(|mode| mode.spec().decode_support()),
             tx_modes: modes(|mode| mode.spec().encode_support()),
-            tx_gain: Arc::new(TxGain::from_travel(settings.tx_volume)),
             qso: Qso {
                 number: settings.qso_number.trim().to_owned(),
                 ..Qso::default()
@@ -455,7 +444,7 @@ impl App {
             error: bands_error,
             rx_raster: Raster::blank(settings.rx_mode),
             tx_raster: Raster::test_pattern(settings.tx_mode),
-            tx_snapshot: TxSnapshot::default(),
+            outgoing: Outgoing::new(settings.tx_volume),
             tx_error: None,
             device_fault: None,
             ui_scale: shared.ui_scale,
@@ -486,10 +475,7 @@ impl App {
                 shows_frequency: false,
                 reading: None,
             },
-            tx: TxState::default(),
-            tune_until: None,
             rig_worker: None,
-            rig_keyed: false,
             adopted_callsigns: 0,
             adopted_numbers: 0,
             adopted_session: 0,
@@ -944,7 +930,7 @@ impl App {
         // A transmission is read from its worker and from the playback queue,
         // neither of which announces anything, and the row being sent moves
         // continuously while it runs.
-        if self.tx_snapshot.phase.is_active() || self.tune_until.is_some() {
+        if self.outgoing.is_active() {
             at_most(LIVE_INTERVAL);
         }
         if self.composition.pending {
@@ -993,7 +979,7 @@ impl App {
         self.adopt_decoded_callsign();
         self.adopt_decoded_number();
         self.push_rx_settings();
-        self.tx_gain.set_travel(self.settings.tx_volume);
+        self.outgoing.set_level(self.settings.tx_volume);
         if self.settings.auto_mode
             && let Some(mode) = self.audio.snapshot().mode
         {
@@ -1008,7 +994,7 @@ impl App {
         // it is the picture being sent. Derived from the phase rather than
         // switched at either end of a transmission, so a tone, a picture, and a
         // transmission that failed all release it the same way.
-        self.audio.set_muted_for_transmit(self.tx_snapshot.phase.is_active());
+        self.audio.set_muted_for_transmit(self.outgoing.is_active());
         self.refresh_timed_composition();
         self.refresh_tuned_composition();
         self.report_activity();
@@ -1035,7 +1021,7 @@ impl App {
                 // A rig switched off mid-transmission is still a keyed rig,
                 // and the request has to go before the channel closes for the
                 // worker to see it at all.
-                self.unkey_rig();
+                self.outgoing.release_rig(self.rig_worker.as_ref());
                 if let Some(worker) = self.rig_worker.take() {
                     worker.stop_in_background();
                 }
@@ -1062,7 +1048,7 @@ impl App {
     /// Giving up the worker is the whole of it: while rig control is switched
     /// on, the next frame is what starts one.
     pub fn retry_rig(&mut self) {
-        self.unkey_rig();
+        self.outgoing.release_rig(self.rig_worker.as_ref());
         if let Some(worker) = self.rig_worker.take() {
             worker.stop_in_background();
         }
@@ -1151,25 +1137,6 @@ impl App {
                 self.notice = None;
             }
         }
-    }
-
-    fn unkey_rig(&mut self) {
-        if !self.rig_keyed {
-            return;
-        }
-        self.rig_keyed = false;
-        if let Some(worker) = self.rig_worker.as_ref() {
-            worker.receive();
-        }
-    }
-
-    /// Whether the audio may start.
-    ///
-    /// A transmission that keyed the rig waits for the rig to say it is
-    /// transmitting, because the lead-in the rig needs to switch over is time
-    /// anything sent into it is simply lost.
-    const fn rig_ready_to_send(&self) -> bool {
-        !self.rig_keyed || matches!(self.rig_snapshot.state, RigState::Transmitting)
     }
 
     /// Puts a newly decoded station identifier in the QSO contact field.
@@ -1283,7 +1250,7 @@ impl App {
     /// Transmission outranks reception: the two cannot overlap on one device,
     /// and a transmission in progress is the stronger claim on the machine.
     fn report_activity(&mut self) {
-        let activity = if self.tx_snapshot.phase.is_active() {
+        let activity = if self.outgoing.is_active() {
             Activity::Transmitting
         } else if matches!(
             self.audio.snapshot().progress,
@@ -1309,7 +1276,7 @@ impl App {
         match self.tab {
             Tab::Receive => self.audio.snapshot().display_fraction,
             Tab::Transmit => {
-                if self.tx_snapshot.phase.is_active() && !self.is_tuning() {
+                if self.outgoing.is_sending_picture() {
                     self.tx_progress().fraction()
                 } else {
                     1.0
@@ -1357,7 +1324,7 @@ impl App {
         // A transmission is sending the frame currently on the tab. Replacing
         // it would show something that is not going out, so the change waits
         // until the transmission is over.
-        if self.tx_snapshot.phase.is_active() {
+        if self.outgoing.is_active() {
             self.composition.deferred = true;
             return;
         }
@@ -1443,53 +1410,13 @@ impl App {
     }
 
     fn poll_transmit(&mut self) {
-        // Checked before the worker is read, because the tone it produces never
-        // runs out on its own and the deadline is the only thing that ends it.
-        if let Some(deadline) = self.tune_until
-            && Instant::now() >= deadline
-        {
-            self.stop_transmit_with(TxPhase::Complete);
-            return;
-        }
-
-        let Some(snapshot) = self.tx.latest() else {
-            return;
-        };
-        self.tx_snapshot = snapshot;
-        if self.tx_snapshot.phase == TxPhase::Failed {
-            self.tx_error = self.tx_snapshot.error.as_ref().map(AppError::to_string);
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        // A rig that refused one of the operator's commands has not been keyed,
-        // so the transmission it was keyed for cannot go out.
-        if self.rig_keyed
-            && let Some(error) = self.rig_snapshot.error.as_ref()
-        {
-            self.tx_error = Some(error.to_string());
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        let should_start = !self.tx.is_started()
-            && self.rig_ready_to_send()
-            && matches!(self.tx_snapshot.phase, TxPhase::Producing | TxPhase::Draining);
-        if should_start && let Err(error) = self.tx.start_playback() {
-            self.tx_error = Some(error.to_string());
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        if self.tx.has_underrun() {
-            self.tx_error = Some(AppError::PlaybackUnderrun.to_string());
-            self.stop_transmit_with(TxPhase::Failed);
-            return;
-        }
-        if self.tx_snapshot.phase == TxPhase::Draining && self.tx.is_drained() {
-            self.stop_transmit_with(TxPhase::Complete);
+        if let Some(ending) = self.outgoing.poll(&self.rig_snapshot, Instant::now()) {
+            self.end_transmission(ending);
         }
     }
 
     pub fn can_transmit(&self) -> bool {
-        self.transmit_problem().is_none() && !self.tx_snapshot.phase.is_active()
+        self.transmit_problem().is_none() && !self.outgoing.is_active()
     }
 
     pub fn transmit_problem(&self) -> Option<String> {
@@ -1579,45 +1506,28 @@ impl App {
             .frame
             .clone()
             .expect("transmit availability requires a prepared frame");
-        let Some(writer) = self.begin_transmission() else {
-            return;
-        };
-        self.tx.attach_worker(TxWorker::spawn(
-            writer,
-            self.settings.tx_mode,
-            frame,
-            identification,
-            Arc::clone(&self.tx_gain),
-        ));
+        let mode = self.settings.tx_mode;
+        self.begin_transmission(Kind::Picture, |writer, gain| {
+            TxWorker::spawn(writer, mode, frame, identification, gain)
+        });
     }
 
     /// Claims the output stream and the rig for something about to go out.
     ///
-    /// Returns the writer the worker fills, or nothing when the stream could
-    /// not be opened, in which case the reason is already in front of the
-    /// operator.
-    fn begin_transmission(&mut self) -> Option<PlaybackWriter> {
+    /// When the stream could not be opened nothing starts, and the reason is
+    /// put in front of the operator.
+    fn begin_transmission(&mut self, kind: Kind, spawn: impl FnOnce(PlaybackWriter, Arc<TxGain>) -> TxWorker) {
         let (playback, writer) = match self.audio.open_playback(PLAYBACK_QUEUE_SAMPLES) {
             Ok(playback) => playback,
             Err(error) => {
                 self.tx_error = Some(error.to_string());
-                return None;
+                return;
             }
         };
-        self.tx_snapshot = TxSnapshot {
-            phase: TxPhase::Priming,
-            ..TxSnapshot::default()
-        };
         self.tx_error = None;
-        self.tx.begin(playback);
-        self.tx_gain.set_travel(self.settings.tx_volume);
-        // Asked for before the audio is generated, so the lead-in the rig
-        // needs runs alongside filling the queue rather than after it.
-        if let Some(worker) = self.rig_worker.as_ref() {
-            worker.transmit(Keying::Audio);
-            self.rig_keyed = true;
-        }
-        Some(writer)
+        self.outgoing.set_level(self.settings.tx_volume);
+        let worker = spawn(writer, self.outgoing.gain());
+        self.outgoing.begin(kind, playback, worker, self.rig_worker.as_ref());
     }
 
     /// Reports why the tune tone could not be sent, if it could not.
@@ -1625,7 +1535,7 @@ impl App {
     /// Less stands in its way than in a picture's: a tone carries no image and
     /// names no station, so only the output device and the rig are asked.
     pub fn tune_problem(&self) -> Option<String> {
-        if self.tx_snapshot.phase.is_active() && !self.is_tuning() {
+        if self.outgoing.is_sending_picture() {
             return Some(self.i18n.text("error-transmit-active"));
         }
         if self.audio.output_device.is_none() {
@@ -1640,25 +1550,22 @@ impl App {
             self.tx_error = Some(error);
             return;
         }
-        let Some(writer) = self.begin_transmission() else {
-            return;
-        };
-        self.tune_until = Some(Instant::now() + TUNE_LIMIT);
-        self.tx.attach_worker(TxWorker::spawn_tune(
-            writer,
-            TUNE_FREQUENCY_HZ,
-            Arc::clone(&self.tx_gain),
-        ));
+        self.begin_transmission(
+            Kind::Tune {
+                until: Instant::now() + TUNE_LIMIT,
+            },
+            |writer, gain| TxWorker::spawn_tune(writer, TUNE_FREQUENCY_HZ, gain),
+        );
     }
 
     pub fn stop_tune(&mut self) {
         if self.is_tuning() {
-            self.stop_transmit_with(TxPhase::Cancelled);
+            self.end_transmission(Ending::Cancelled);
         }
     }
 
-    pub const fn is_tuning(&self) -> bool {
-        self.tune_until.is_some()
+    pub fn is_tuning(&self) -> bool {
+        self.outgoing.is_tuning()
     }
 
     /// Puts the interface in the state a running tone leaves it in.
@@ -1667,45 +1574,41 @@ impl App {
     /// is what the operator can do while it runs rather than its audio.
     #[cfg(test)]
     pub(crate) fn tune_for_test(&mut self) {
-        self.tune_until = Some(Instant::now() + TUNE_LIMIT);
-        self.tx_snapshot.phase = TxPhase::Producing;
+        self.outgoing.begin_for_test(
+            Kind::Tune {
+                until: Instant::now() + TUNE_LIMIT,
+            },
+            crate::worker::transmit::TxPhase::Producing,
+        );
     }
 
     pub fn stop_transmit(&mut self) {
-        if self.tx_snapshot.phase.is_active() {
-            self.stop_transmit_with(TxPhase::Cancelled);
+        if self.outgoing.is_active() {
+            self.end_transmission(Ending::Cancelled);
         }
     }
 
-    fn stop_transmit_with(&mut self, phase: TxPhase) {
-        self.tx.stop();
-        self.tune_until = None;
-        self.unkey_rig();
-        self.tx_snapshot.phase = phase;
+    /// Ends whatever is going out, however it ended.
+    ///
+    /// Every way a transmission ends comes through here, so each of them gives
+    /// the rig back and makes the composition that was put off while it ran.
+    fn end_transmission(&mut self, ending: Ending) {
+        if let Ending::Failed(error) = &ending {
+            self.tx_error = Some(error.clone());
+        }
+        self.outgoing.end(&ending, self.rig_worker.as_ref());
         if self.composition.deferred {
             self.composition.deferred = false;
             self.request_composition();
         }
     }
 
-    /// Reports which image row the transmission is currently on.
-    ///
-    /// The clock is the sample count the device callback has consumed, not the
-    /// worker's generated count: the worker runs ahead to keep the queue full,
-    /// so only the callback knows what is actually being heard. That position
-    /// maps onto a row because the raster scans at a uniform rate.
     pub fn tx_progress(&self) -> TxProgress {
-        if self.tx_snapshot.phase == TxPhase::Complete {
-            return TxProgress::Complete;
-        }
-        if !self.tx_snapshot.phase.is_active() {
-            return TxProgress::Idle;
-        }
-        self.tx_snapshot.raster.progress_at(self.tx.played_samples())
+        self.outgoing.progress()
     }
 
     pub fn output_sample_rate_hz(&self) -> Option<u32> {
-        self.tx.sample_rate_hz()
+        self.outgoing.sample_rate_hz()
     }
 }
 

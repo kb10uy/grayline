@@ -9,7 +9,7 @@ use super::*;
 /// something that could not take effect until it ends.
 pub(super) fn library(ui: &mut Ui, app: &mut App) {
     ui.add_space(2.0);
-    let transmitting = app.tx_snapshot.phase.is_active();
+    let transmitting = app.outgoing.is_active();
     ui.add_enabled_ui(!transmitting, |ui| {
         ui.horizontal_top(|ui| {
             let height = ui.available_height();

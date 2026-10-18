@@ -10,7 +10,7 @@ use rstest::rstest;
 use super::*;
 use grayline_shell::i18n::Locale;
 
-use crate::app::{App, FIRST_QSO_NUMBER};
+use crate::app::{App, FIRST_QSO_NUMBER, outgoing::Kind};
 use crate::test_util::refused_port;
 
 use super::panels::decibels;
@@ -457,7 +457,7 @@ fn the_receive_tab_reports_that_reception_is_muted() {
     let muted = app.i18n.text("state-rx-muted");
     assert_eq!(state(&app), waiting);
 
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing.begin_for_test(Kind::Picture, TxPhase::Producing);
     app.poll_workers();
 
     assert_eq!(state(&app), muted);
@@ -529,7 +529,7 @@ fn clicking_a_row_label_selects_that_row() {
 #[test]
 fn a_transmission_locks_the_library_lists() {
     let mut app = App::headless();
-    app.tx_snapshot.phase = TxPhase::Producing;
+    app.outgoing.begin_for_test(Kind::Picture, TxPhase::Producing);
     app.library.stocks = vec![
         crate::app::Entry::sample("antenna.png", "640x496"),
         crate::app::Entry::sample("shack.png", "320x256"),
@@ -627,7 +627,7 @@ fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     }
 
     assert_eq!(app.tx_error, None);
-    assert_eq!(app.tx_snapshot.phase, TxPhase::Idle);
+    assert!(!app.outgoing.is_active());
 }
 
 #[test]

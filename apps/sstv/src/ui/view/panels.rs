@@ -209,7 +209,7 @@ pub(super) fn rx_state(ui: &mut Ui, app: &mut App) {
 /// across the tabs, and colored while transmitting for the same reason the
 /// receive indicator is: the bar says whether the radio is doing anything.
 pub(super) fn tx_level(ui: &mut Ui, app: &mut App) {
-    let transmitting = app.tx_snapshot.phase.is_active();
+    let transmitting = app.outgoing.is_active();
     let color = if transmitting { colors::TX_LEVEL } else { Color32::WHITE };
     let bar = ui.add(ProgressBar::new(app.settings.tx_volume).fill(color));
     let dragged = bar.interact(egui::Sense::click_and_drag());

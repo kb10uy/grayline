@@ -475,7 +475,7 @@ App
   tab: Tab                       // Receive | Transmit
   audio: AudioState              // device selection, capture status
   rx: RxState                    // live session, image handle, progress, sync
-  tx: TxState                    // selected mode, prepared frame, progress
+  outgoing: Outgoing             // the transmission going out and how the last one ended
   library: LibraryState          // template list, stock list
   qso: QsoState                  // DX call, report received, report and serial sent
   station: Station               // callsign, QTH, grid
@@ -832,6 +832,17 @@ picture, the transmit raster is not drawn out under it and the state line names
 the tone instead of a row. The two ways of keying the rig refuse each other
 rather than interrupting: whichever is running is what the other's disabled
 hover text reports.
+
+One value, `app::outgoing::Outgoing`, owns a transmission from start to end:
+what it is sending (a picture, or a tone with its deadline), the stream and the
+worker filling it, the worker's latest snapshot, and whether it keyed the rig.
+The worker reports priming, producing, draining, and its own failure; the
+interface decides the ending from those, from the rig, and from the stream, and
+every ending goes through one path that stops the audio, unkeys the rig, and
+makes a composition that was put off while the transmission ran. Completion is
+the stream reporting that the closed queue has been played out rather than a
+phase anyone writes. Reception is muted for exactly as long as an `Outgoing` is
+running.
 
 Rig control is implemented against `rigctld`. A worker thread,
 `grayline_rig_control::RigWorker`, owns the transports and a Lua state, keys

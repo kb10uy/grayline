@@ -38,15 +38,8 @@ pub enum TxPhase {
     Priming,
     Producing,
     Draining,
-    Complete,
     Cancelled,
     Failed,
-}
-
-impl TxPhase {
-    pub const fn is_active(self) -> bool {
-        matches!(self, Self::Priming | Self::Producing | Self::Draining)
-    }
 }
 
 /// Where the image raster sits inside the transmission, in output samples.
