@@ -19,7 +19,16 @@ uses `muda` for the native menu bar; Linux and macOS render the same menu model
 inside the window, and a machine whose native bar fails to install falls back
 to the in-window rendering so every menu action stays reachable. System fonts
 are discovered through `fontdb`, with egui's bundled fonts retained as
-fallback.
+fallback; `grayline-shell::fonts` installs them for every application.
+
+`grayline-shell::window` is the window every application runs in. It builds
+the viewport from the application's `Identity`, installs the fonts and the
+menu bar, fits the opening size to the monitor, and runs each frame in one
+order: hand over a dropped file, poll the workers, sync the menu, draw, apply
+what was activated, write back the zoom and title, persist, and schedule the
+next frame. An application implements `window::Application` by pointing each
+of those steps at its own state, menus, and view, so the order cannot drift
+between them.
 
 The coding fonts each platform looks for are listed in
 `crates/shell/src/platform/`, and Monaspace leads every one of them. It is the

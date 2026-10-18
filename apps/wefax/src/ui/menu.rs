@@ -17,8 +17,6 @@ use grayline_shell::{
 
 use crate::{app::App, storage::paths::Folder};
 
-pub type MenuHost = shared_menu::MenuHost<Action>;
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
     SelectDevice(String),
@@ -191,10 +189,6 @@ const ZOOM_STEP: f32 = 0.1;
 #[cfg(test)]
 pub fn flatten(menus: &[Menu]) -> Vec<&Item> {
     shared_menu::flatten(menus)
-}
-
-pub const fn is_in_window() -> bool {
-    shared_menu::is_in_window()
 }
 
 pub fn bar(ui: &mut egui::Ui, model: &[Menu]) -> Option<Action> {

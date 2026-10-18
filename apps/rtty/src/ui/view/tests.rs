@@ -15,7 +15,7 @@ use crate::{
 fn render(app: &mut App) -> Harness<'_> {
     let mut harness = Harness::new_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     harness.run();
     harness
@@ -24,7 +24,7 @@ fn render(app: &mut App) -> Harness<'_> {
 fn render_sized(app: &mut App, size: egui::Vec2) -> Harness<'_> {
     let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
-        view(ui, app, &model, menu::is_in_window());
+        view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
     harness.run();
     harness

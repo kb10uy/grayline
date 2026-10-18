@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 mod app;
 mod error;
@@ -14,30 +14,16 @@ mod worker;
 mod test_util;
 
 use app::App;
-use grayline_shell::{log, platform};
+use grayline_shell::{
+    log, platform,
+    window::{self, Application},
+    worker::Waker,
+};
 use storage::paths;
 use ui::{menu, view};
 
-/// The name the desktop environment knows this application by.
-///
-/// Set explicitly because eframe otherwise derives it from the window title,
-/// which carries the version, so the identity would change with every release.
-/// On Wayland this becomes the surface's `app_id`, which is the only thing a
-/// compositor can match a window against a desktop entry with, and therefore
-/// the only route to a window icon there: winit's Wayland backend discards the
-/// pixels [`platform::window_icon`] provides. It has to equal the base name of
-/// the installed `grayline-sstv.desktop`, which is why it is the process name
-/// rather than the package name.
-const APP_ID: &str = identity::PROCESS_NAME;
-
 /// The window size the interface is laid out for, in points.
 const DEFAULT_WINDOW_SIZE: [f32; 2] = [1024.0, 768.0];
-
-/// How much of the monitor the window may take up when it first opens.
-///
-/// The rest is left to the panels and window decorations the desktop puts
-/// around it, whose sizes the application cannot ask for.
-const MONITOR_FRACTION: f32 = 0.92;
 
 fn main() -> Result<(), Box<dyn Error>> {
     platform::prepare_process(&identity::IDENTITY);
@@ -55,147 +41,48 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("could not open the log file: {error}");
     }
 
-    // eframe's own clamp converts the monitor to points with the scale factor
-    // winit reports before the window exists. A Wayland compositor only sends
-    // the fractional scale once the surface is mapped, so a fractionally
-    // scaled output reads as the next whole number until then and the window
-    // opens at a fraction of the size asked for. `fit_to_monitor` does the
-    // same job once the real scale has arrived.
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_app_id(APP_ID)
-        .with_clamp_size_to_monitor_size(false)
-        .with_inner_size(DEFAULT_WINDOW_SIZE);
-    match platform::window_icon(&identity::IDENTITY) {
-        Some(icon) => viewport = viewport.with_icon(icon),
-        None => log::note("could not load the application icon; using the platform default"),
-    }
-
-    let options = eframe::NativeOptions {
-        viewport,
-        ..Default::default()
-    };
-    eframe::run_native(
-        &identity::IDENTITY.title(),
-        options,
-        Box::new(|cc| Ok(Box::new(Interface::new(cc, paths, instance)))),
-    )?;
+    window::run(&identity::IDENTITY, DEFAULT_WINDOW_SIZE, instance, |cc| {
+        App::new(paths, Waker::new(cc.egui_ctx.clone()))
+    })?;
     Ok(())
 }
 
-struct Interface {
-    app: App,
-    menu: Option<menu::MenuHost>,
-    /// The title the window is currently showing.
-    ///
-    /// Held so the localized title is only pushed to the platform when it
-    /// actually changes, rather than on every frame.
-    title: String,
-    /// Set when the opening size has been measured against the monitor.
-    ///
-    /// The monitor is not known on the first frame, so this stays clear until
-    /// a frame reports one.
-    fitted: bool,
-    /// Set when the operator chose to quit, so the frame can finish drawing
-    /// and persist before the window closes.
-    quitting: bool,
-    /// The claim on being the only running copy.
-    ///
-    /// Held here so it lasts as long as the interface does, and released with
-    /// it so the next launch is let through.
-    _instance: platform::SingleInstance,
-}
+impl Application for App {
+    type Action = menu::Action;
 
-/// Shrinks the window to fit the monitor it opened on.
-///
-/// Returns whether the monitor was known yet, not whether anything was
-/// resized: a window that already fits is left alone.
-fn fit_to_monitor(ctx: &egui::Context) -> bool {
-    let Some(monitor) = ctx.input(|i| i.viewport().monitor_size) else {
-        return false;
-    };
-    let wanted = egui::Vec2::from(DEFAULT_WINDOW_SIZE);
-    let fitted = wanted.min(monitor * MONITOR_FRACTION);
-    if fitted != wanted {
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(fitted));
+    fn poll(&mut self, _ctx: &egui::Context) {
+        self.poll_workers();
     }
-    true
-}
 
-impl Interface {
-    fn new(cc: &eframe::CreationContext<'_>, paths: paths::AppPaths, instance: platform::SingleInstance) -> Self {
-        grayline_shell::fonts::install(&cc.egui_ctx);
-        platform::prepare_window(cc);
-        instance.publish_window(cc);
-
-        let app = App::new(paths, grayline_shell::worker::Waker::new(cc.egui_ctx.clone()));
-        cc.egui_ctx.set_zoom_factor(app.ui_scale);
-        let model = menu::model(&app);
-        let menu = match menu::MenuHost::install(cc, &model) {
-            Ok(menu) => Some(menu),
-            Err(error) => {
-                log::note(&format!("could not install the platform menu bar: {error}"));
-                None
-            }
-        };
-        Self {
-            title: app.title(),
-            app,
-            menu,
-            fitted: false,
-            quitting: false,
-            _instance: instance,
-        }
+    fn menus(&self) -> Vec<menu::Menu> {
+        menu::model(self)
     }
-}
 
-impl Drop for Interface {
-    fn drop(&mut self) {
-        if let Some(menu) = &self.menu {
-            menu.prepare_for_close();
-        }
+    fn apply(&mut self, action: menu::Action) -> bool {
+        menu::apply(self, action)
     }
-}
 
-impl eframe::App for Interface {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if !self.fitted {
-            self.fitted = fit_to_monitor(ui.ctx());
-        }
-        self.app.poll_workers();
+    fn view(&mut self, ui: &mut egui::Ui, menus: &[menu::Menu], in_window_menu: bool) -> Option<menu::Action> {
+        view::view(ui, self, menus, in_window_menu)
+    }
 
-        self.app.set_ui_scale(ui.ctx().zoom_factor());
+    fn title(&self) -> String {
+        App::title(self)
+    }
 
-        let model = menu::model(&self.app);
-        if let Some(native) = self.menu.as_mut() {
-            native.sync(&model);
-            for action in native.poll() {
-                self.quitting |= menu::apply(&mut self.app, action);
-            }
-        }
-        let in_window_menu = menu::is_in_window() || self.menu.is_none();
-        if let Some(action) = view::view(ui, &mut self.app, &model, in_window_menu) {
-            self.quitting |= menu::apply(&mut self.app, action);
-        }
+    fn ui_scale(&self) -> f32 {
+        self.ui_scale
+    }
 
-        if ui.ctx().zoom_factor() != self.app.ui_scale {
-            ui.ctx().set_zoom_factor(self.app.ui_scale);
-        }
+    fn set_ui_scale(&mut self, scale: f32) {
+        App::set_ui_scale(self, scale);
+    }
 
-        let title = self.app.title();
-        if title != self.title {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
-            self.title = title;
-        }
+    fn persist(&mut self) {
+        App::persist(self);
+    }
 
-        self.app.persist();
-        // The receive worker asks for a frame itself when it has decoded
-        // something worth showing, so the interface only schedules the frames
-        // nothing else would produce.
-        if let Some(after) = self.app.repaint_after() {
-            ui.ctx().request_repaint_after(after);
-        }
-        if self.quitting {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-        }
+    fn repaint_after(&self) -> Option<Duration> {
+        App::repaint_after(self)
     }
 }
