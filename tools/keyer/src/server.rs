@@ -257,6 +257,11 @@ mod tests {
         let mut owner = keyer.connect();
         owner.run("\\rtty_open lead_in=0 tail=0").unwrap();
         owner.run("\\rtty_send 0123").unwrap();
+        let started = Instant::now();
+        while !keyer.fsk.levels().contains(&true) {
+            assert!(started.elapsed() < TIMEOUT, "never keyed");
+            thread::sleep(Duration::from_millis(5));
+        }
         drop(owner);
         let mut watcher = keyer.client();
         wait_for_state(&mut watcher, StreamState::Disconnected);
