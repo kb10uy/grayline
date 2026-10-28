@@ -138,7 +138,8 @@ device-lost-dismiss = 閉じる
 menu-contact = 相手局ディレクトリ
 action-contact-lookup = 相手局を照会する
 action-contact-write-credentials = credentials.toml を書き出す
-action-logger-send = 相手局情報をロガーへ送る
+action-logger-send = ロガーと連携する
+logger-synced = ロガーの入力フォームと同期中
 error-logger = 相手局情報をロガーへ送れませんでした
 
 contact-title = 相手局

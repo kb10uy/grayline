@@ -16,7 +16,7 @@ use grayline_sstv_fskid::{FskId, FskNumber};
 use grayline_sstv_template::valid_variable_name;
 use jiff::{Timestamp, Zoned};
 
-use grayline_logger_link::LoggerLink;
+use grayline_logger_link::{FormUpdate, LoggerLink};
 use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_sstv_rx::SyncStart;
 
@@ -212,8 +212,15 @@ pub struct App {
     /// The contact directory, what it last answered, and the dialog editing it.
     pub directory: ContactEditor,
     /// Where the QSO panel is sent for the operator's logger to fill its entry
-    /// form from.
+    /// form from, and where that form comes back from.
     logger: LoggerLink,
+    /// The received report and exchange as the logger last held them.
+    ///
+    /// The panel holds them as one field, and splitting it again reads an
+    /// exchange the logger holds without a report, `012`, as a report. While
+    /// the field still says what the logger said, the logger's own pair is
+    /// what is sent.
+    logger_received: Option<(String, String)>,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -463,6 +470,7 @@ impl App {
                 move || waker.wake()
             }),
             logger: LoggerLink::new("grayline-sstv-logger", move || waker.wake()),
+            logger_received: None,
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -773,6 +781,67 @@ impl App {
         }
     }
 
+    /// Whether the logger is sharing its entry form, which the QSO panel then
+    /// follows instead of being edited.
+    pub fn logger_synced(&self) -> bool {
+        self.logger.is_synced()
+    }
+
+    /// Takes the logger's entry form into the QSO panel.
+    ///
+    /// The logger's form is the one the contact is logged from, so it wins.
+    /// Only when the logger has just been found again does a field it has
+    /// nothing for keep what the panel holds, which is then sent to it: the
+    /// panel was the form while the logger was away. The serial number being
+    /// sent is the logger's whenever it counts one.
+    fn poll_logger(&mut self) {
+        let Some(FormUpdate { form, resumed }) = self.logger.take_form() else {
+            return;
+        };
+        let pick = |theirs: &str, own: &str| if resumed && theirs.is_empty() { own } else { theirs }.to_owned();
+        let (own_report, own_number) = received_fields(&self.qso.rsv_received, self.logger_received.as_ref());
+        let report = pick(form.get("RST_RCVD"), own_report);
+        let number = pick(form.get("SRX_STRING"), own_number);
+        let call = pick(form.get("CALL"), &self.qso.call);
+        let rsv = pick(form.get("RST_SENT"), &self.qso.rsv);
+        let serial = match form.get("STX_STRING") {
+            "" => self.qso.number.clone(),
+            serial => serial.to_owned(),
+        };
+        let received = format!("{report}{number}");
+        let new_call = call != self.qso.call;
+        let changed = new_call || rsv != self.qso.rsv || received != self.qso.rsv_received || serial != self.qso.number;
+        self.qso = Qso {
+            call,
+            rsv_received: received,
+            rsv,
+            number: serial,
+        };
+        self.logger_received = Some((report, number));
+        if changed {
+            self.qso_changed();
+        }
+        if new_call {
+            self.look_up_contact();
+        }
+        self.reflect_to_logger();
+    }
+
+    /// Takes the logger's form in until `done` holds, for a test whose fake
+    /// logger answers on its own thread.
+    #[cfg(test)]
+    pub(crate) fn await_logger(&mut self, done: impl Fn(&Self) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            self.poll_logger();
+            if done(self) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "the logger's form never arrived");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     /// Fills the logger's entry form in from the QSO panel.
     ///
     /// The frequency and the mode are left to the logger, which reads them
@@ -781,7 +850,7 @@ impl App {
     /// rather than on every keystroke, so the logger is not handed half a
     /// callsign.
     fn reflect_to_logger(&mut self) {
-        let (report, number) = split_received_report(&self.qso.rsv_received);
+        let (report, number) = received_fields(&self.qso.rsv_received, self.logger_received.as_ref());
         let fields = [
             ("CALL", self.qso.call.as_str()),
             ("RST_SENT", self.qso.rsv.as_str()),
@@ -1023,6 +1092,7 @@ impl App {
         }
         self.history_writers.retain(|writer| !writer.is_finished());
         self.poll_library_scan();
+        self.poll_logger();
         if self.audio.session() != self.adopted_session {
             self.adopted_session = self.audio.session();
             self.adopted_callsigns = 0;
@@ -1688,11 +1758,15 @@ fn rx_settings(settings: &Settings) -> RxSettings {
     }
 }
 
-/// Takes the spaces off a finished field, reporting whether any were there.
-///
-/// The operator's own template variables are the exception and are never put
-/// through this: what they hold is text the operator wrote, and its spaces are
-/// theirs to keep.
+/// The received report and exchange `received` holds, read as the logger's
+/// pair while it still says what `logger` said.
+fn received_fields<'a>(received: &'a str, logger: Option<&'a (String, String)>) -> (&'a str, &'a str) {
+    match logger {
+        Some((report, number)) if received.strip_prefix(report.as_str()) == Some(number.as_str()) => (report, number),
+        _ => split_received_report(received),
+    }
+}
+
 /// Splits the received report into the RSV and the contest number after it.
 ///
 /// The panel holds the two as one field, `595012`, the way MMSSTV writes them
@@ -1706,6 +1780,11 @@ fn split_received_report(received: &str) -> (&str, &str) {
     }
 }
 
+/// Takes the spaces off a finished field, reporting whether any were there.
+///
+/// The operator's own template variables are the exception and are never put
+/// through this: what they hold is text the operator wrote, and its spaces are
+/// theirs to keep.
 fn trim_in_place(text: &mut String) -> bool {
     let trimmed = text.trim();
     if trimmed.len() == text.len() {

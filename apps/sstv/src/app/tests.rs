@@ -1380,6 +1380,98 @@ fn a_decoded_identifier_and_number_reach_the_logger() {
     );
 }
 
+const SHARED_FORM: [(&str, &str); 7] = [
+    ("CALL", "JA1ABC"),
+    ("NAME", ""),
+    ("QTH", ""),
+    ("RST_RCVD", "595"),
+    ("RST_SENT", "577"),
+    ("SRX_STRING", "012"),
+    ("STX_STRING", "013"),
+];
+
+fn following(app: &mut App, fields: &[(&str, &str)]) -> FakeLogger {
+    let logger = logged(app);
+    logger.share(fields);
+    app.await_logger(App::logger_synced);
+    app.poll_logger();
+    logger
+}
+
+#[test]
+fn the_loggers_form_fills_the_panel_and_nothing_goes_back() {
+    let mut app = App::headless();
+
+    let logger = following(&mut app, &SHARED_FORM);
+
+    assert!(app.logger_synced());
+    assert_eq!(app.qso.call, "JA1ABC");
+    assert_eq!(app.qso.rsv, "577");
+    assert_eq!(app.qso.rsv_received, "595012");
+    assert_eq!(app.qso.number, "013");
+    assert_eq!(logger.received(), Some(set_message(&[("RST_SENT", DEFAULT_RSV)])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_logger_found_again_is_handed_what_it_lacks() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+    app.qso.number = "007".to_owned();
+
+    let logger = following(
+        &mut app,
+        &[
+            ("CALL", ""),
+            ("RST_RCVD", ""),
+            ("RST_SENT", "599"),
+            ("SRX_STRING", ""),
+            ("STX_STRING", ""),
+        ],
+    );
+    logger.received();
+
+    assert_eq!(app.qso.call, "JA1ABC");
+    assert_eq!(app.qso.rsv, "599");
+    assert_eq!(app.qso.number, "007");
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn an_identifier_heard_while_following_is_all_that_is_sent() {
+    let mut app = App::headless();
+    let logger = following(
+        &mut app,
+        &[
+            ("CALL", ""),
+            ("RST_RCVD", ""),
+            ("RST_SENT", DEFAULT_RSV),
+            ("SRX_STRING", "012"),
+        ],
+    );
+    logger.received();
+    assert_eq!(app.qso.rsv_received, "012");
+
+    app.audio.set_snapshot(identified(&["JA1XYZ"]));
+    app.poll_workers();
+
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1XYZ")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn the_panel_keeps_the_loggers_contact_once_it_says_goodbye() {
+    let mut app = App::headless();
+    let logger = following(&mut app, &SHARED_FORM);
+
+    logger.bye();
+    app.await_logger(|app| !app.logger_synced());
+
+    assert_eq!(app.qso.call, "JA1ABC");
+    assert_eq!(app.qso.rsv_received, "595012");
+}
+
 #[rstest]
 #[case::with_number("595012", ("595", "012"))]
 #[case::spaced("599 012", ("599", "012"))]
