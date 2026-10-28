@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use grayline_logger_link::set_message;
 use grayline_qso::{ContactPaths, ContactSnapshot, ContactState};
 use grayline_shell::paths::Roots;
 use grayline_sstv::image::Rgb8;
@@ -16,7 +17,7 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::{
-    test_util::refused_port,
+    test_util::{FakeLogger, refused_port},
     worker::{
         receive::{Frame, HistoryCandidate, RxSnapshot},
         transmit::TxPhase,
@@ -1322,4 +1323,84 @@ fn a_written_file_reports_as_a_notice_rather_than_a_failure() {
     app.report_written(Err(std::io::Error::other("disk full")));
     assert!(app.notice.is_none());
     assert_eq!(app.error.as_deref(), Some("disk full"));
+}
+
+fn logged(app: &mut App) -> FakeLogger {
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger
+}
+
+#[test]
+fn switching_the_logger_on_sends_what_the_panel_already_holds() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+
+    let logger = logged(&mut app);
+
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("CALL", "JA1ABC"), ("RST_SENT", DEFAULT_RSV)]))
+    );
+}
+
+#[test]
+fn a_settled_field_is_sent_to_the_logger_and_nothing_else_is() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+
+    app.finish_qso_edit();
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_decoded_identifier_and_number_reach_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.audio.set_snapshot(identified(&["JA1ABC"]));
+    app.poll_workers();
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+
+    app.audio.set_snapshot(RxSnapshot {
+        callsigns: vec!["JA1ABC".to_owned()],
+        ..numbered(&["012"])
+    });
+    app.poll_workers();
+    assert_eq!(logger.received(), Some(set_message(&[("RST_RCVD", "595012")])));
+}
+
+#[test]
+fn nothing_reaches_the_logger_while_it_is_switched_off() {
+    let mut app = App::headless();
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn an_address_the_logger_cannot_be_at_is_reported() {
+    let mut app = App::headless();
+    app.settings.logger.address = "logger.invalid".to_owned();
+
+    app.set_logger_enabled(true);
+
+    assert!(
+        app.error
+            .as_deref()
+            .is_some_and(|error| error.contains("logger.invalid")),
+        "{:?}",
+        app.error
+    );
 }

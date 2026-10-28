@@ -6,6 +6,7 @@
 
 use std::{collections::BTreeMap, path::Path};
 
+use grayline_logger_link::LoggerSettings;
 use grayline_qso::ContactSettings;
 use grayline_shell::config::{self, Document};
 use grayline_sstv::mode::Mode;
@@ -130,6 +131,7 @@ pub struct Settings {
     pub history_format: HistoryFormat,
     pub rig: RigSettings,
     pub contact: ContactSettings,
+    pub logger: LoggerSettings,
 }
 
 impl Default for Settings {
@@ -159,6 +161,7 @@ impl Default for Settings {
             history_format: HistoryFormat::default(),
             rig: RigSettings::default(),
             contact: ContactSettings::default(),
+            logger: LoggerSettings::default(),
         }
     }
 }
@@ -232,6 +235,10 @@ impl Config {
                 .unwrap_or(defaults.history_format),
             rig: RigSettings::read(document.get("rig").and_then(Item::as_table), RigSettings::default()),
             contact: ContactSettings::read(document.get("qso").and_then(Item::as_table), ContactSettings::default()),
+            logger: LoggerSettings::read(
+                document.get("logger").and_then(Item::as_table),
+                LoggerSettings::default(),
+            ),
         }
     }
 
@@ -282,6 +289,7 @@ impl Config {
             set(document, TRANSMIT_MODE, Some(value(settings.tx_mode.spec().name())));
             settings.rig.write(table_mut(document, "rig"));
             settings.contact.write(table_mut(document, "qso"));
+            settings.logger.write(table_mut(document, "logger"));
         });
     }
 }
@@ -412,6 +420,10 @@ mod tests {
                 lookup: false,
                 wavelog_url: "https://log.example.org".to_owned(),
                 fields: vec!["!ja".to_owned(), "dxcc".to_owned()],
+            },
+            logger: LoggerSettings {
+                enabled: true,
+                address: "127.0.0.1:2237".to_owned(),
             },
         }
     }

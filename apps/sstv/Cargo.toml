@@ -21,6 +21,7 @@ jiff.workspace = true
 grayline-audio = { path = "../../crates/audio" }
 grayline-sstv-rx = { path = "../../crates/sstv-rx", features = ["std"] }
 grayline-dsp = { path = "../../crates/dsp", features = ["std"] }
+grayline-logger-link = { path = "../../crates/logger-link" }
 grayline-qso = { path = "../../crates/qso" }
 grayline-sstv-fskid = { path = "../../crates/sstv-fskid" }
 grayline-tone-tx = { path = "../../crates/tone-tx", features = ["std"] }

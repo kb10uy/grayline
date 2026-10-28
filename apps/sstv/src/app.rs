@@ -16,6 +16,7 @@ use grayline_sstv_fskid::{FskId, FskNumber};
 use grayline_sstv_template::valid_variable_name;
 use jiff::{Timestamp, Zoned};
 
+use grayline_logger_link::LoggerLink;
 use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_sstv_rx::SyncStart;
 
@@ -164,9 +165,10 @@ pub struct App {
     /// The panels and the menus edit this directly. The station, the serial
     /// number, the library selection, and the devices are kept where they are
     /// worked with and copied in when the settings are persisted. Only whether
-    /// to connect the rig and whether to look a contact up are the interface's
-    /// to change: the rest of those two sections belongs to the station and is
-    /// edited in the configuration file.
+    /// to connect the rig, whether to look a contact up, and whether to send
+    /// it to the logger are the interface's to change: the rest of those
+    /// sections belongs to the station and is edited in the configuration
+    /// file.
     pub settings: Settings,
     pub rx_modes: Vec<Mode>,
     pub tx_modes: Vec<Mode>,
@@ -209,6 +211,9 @@ pub struct App {
     pub ui_scale: f32,
     /// The contact directory, what it last answered, and the dialog editing it.
     pub directory: ContactEditor,
+    /// Where the QSO panel is sent for the operator's logger to fill its entry
+    /// form from.
+    logger: LoggerLink,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -361,6 +366,7 @@ impl App {
             waker,
             platform::host(),
         );
+        app.open_logger();
         app.refresh_library();
         app.restore_selection(&settings);
         app.request_composition();
@@ -383,14 +389,18 @@ impl App {
     #[cfg(test)]
     pub(crate) fn headless_on(platform: Box<dyn Platform>) -> Self {
         let scratch = crate::test_util::scratch_dir();
+        let settings = Settings {
+            logger: crate::test_util::logger_sink(),
+            ..Settings::default()
+        };
         Self::from_parts(
-            AudioState::disconnected(rx_settings(&Settings::default())),
+            AudioState::disconnected(rx_settings(&settings)),
             AppPaths::from_roots(grayline_shell::paths::Roots::under(scratch)),
             Stored {
                 config: Config::detached(),
                 common: CommonConfig::detached(),
             },
-            &Settings::default(),
+            &settings,
             // Nothing named, so the store is held in memory and no logger is
             // reached: the suite must neither write into the directory the
             // operator's applications share nor put a question to the logger
@@ -454,6 +464,7 @@ impl App {
                 "grayline-sstv-contact".to_owned(),
                 move || waker.wake(),
             ),
+            logger: LoggerLink::default(),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -686,6 +697,7 @@ impl App {
         // the callsign whether or not trimming changed anything, and the
         // request guards itself against being made twice for one station.
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     fn look_up_contact(&mut self) {
@@ -744,6 +756,48 @@ impl App {
         if self.directory.poll() {
             self.request_composition();
         }
+    }
+
+    /// Turns sending the QSO panel to the operator's logger on or off, and
+    /// sends it at once when it was turned on.
+    pub fn set_logger_enabled(&mut self, enabled: bool) {
+        if self.settings.logger.enabled == enabled {
+            return;
+        }
+        self.settings.logger.enabled = enabled;
+        self.open_logger();
+        self.reflect_to_logger();
+    }
+
+    fn open_logger(&mut self) {
+        self.logger = match LoggerLink::open(&self.settings.logger) {
+            Ok(link) => link,
+            Err(error) => {
+                self.report_logger_error(&error);
+                LoggerLink::default()
+            }
+        };
+    }
+
+    /// Fills the logger's entry form in from the QSO panel.
+    ///
+    /// The frequency and the mode are left to the logger, which reads them
+    /// from the rig itself. Called where a field is settled rather than on
+    /// every keystroke, so the logger is not handed half a callsign.
+    fn reflect_to_logger(&mut self) {
+        let fields = [
+            ("CALL", self.qso.call.as_str()),
+            ("RST_SENT", self.qso.rsv.as_str()),
+            ("RST_RCVD", self.qso.rsv_received.as_str()),
+        ];
+        if let Err(error) = self.logger.reflect(fields) {
+            self.report_logger_error(&error);
+        }
+    }
+
+    fn report_logger_error(&mut self, error: &grayline_logger_link::LinkError) {
+        let message = self.i18n.text("error-logger");
+        self.error = Some(format!("{message}: {error}"));
     }
 
     pub fn normalize_station(&mut self) {
@@ -1171,6 +1225,7 @@ impl App {
         // The identifier path does not go through `finish_qso_edit`, so the
         // lookup a typed callsign gets has to be asked for here too.
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     /// Puts a newly decoded contest number in the received report field.
@@ -1201,6 +1256,7 @@ impl App {
         }
         self.qso.rsv_received = report;
         self.qso_changed();
+        self.reflect_to_logger();
     }
 
     /// Keeps a finished reception as the image `rximage` layers show.

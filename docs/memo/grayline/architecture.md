@@ -413,7 +413,7 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
 | `grayline-shell` | None |
 | `grayline-sstv` | `grayline-dsp`, `grayline-sstv-fskid` |
-| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-logger-link`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
 | `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx`, `grayline-wav` |
 | `grayline-sstv-fskid` | None |
 | `grayline-sstv-rx` | `grayline-dsp`, `grayline-sstv`, `grayline-sstv-fskid` |

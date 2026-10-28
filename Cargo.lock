@@ -2266,6 +2266,7 @@ dependencies = [
  "embed-resource",
  "grayline-audio",
  "grayline-dsp",
+ "grayline-logger-link",
  "grayline-qso",
  "grayline-rig-control",
  "grayline-shell",

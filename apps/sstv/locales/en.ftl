@@ -138,6 +138,8 @@ device-lost-dismiss = Close
 menu-contact = Contact Directory
 action-contact-lookup = Look Up Contacts
 action-contact-write-credentials = Write credentials.toml
+action-logger-send = Send Contact to Logger
+error-logger = The contact could not be sent to the logger
 
 contact-title = Contact
 contact-open = What the directory has filed under this station

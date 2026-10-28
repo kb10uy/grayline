@@ -28,6 +28,7 @@ pub enum Action {
     ToggleVisStrict,
     ToggleContactLookup,
     WriteContactCredentials,
+    ToggleLoggerSend,
     WriteRigScript,
     WriteBandPlan,
     ToggleAutoHistory,
@@ -132,6 +133,11 @@ pub fn model(app: &App) -> Vec<Menu> {
                         },
                     ],
                 },
+                Item::Check {
+                    label: text("action-logger-send"),
+                    checked: app.settings.logger.enabled,
+                    action: Action::ToggleLoggerSend,
+                },
                 Item::Submenu {
                     label: text("menu-rig"),
                     items: vec![
@@ -226,6 +232,7 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::ToggleVisStrict => app.set_vis_strict(!app.settings.vis_strict),
         Action::ToggleContactLookup => app.set_contact_lookup(!app.settings.contact.lookup),
         Action::WriteContactCredentials => app.write_contact_credentials(),
+        Action::ToggleLoggerSend => app.set_logger_enabled(!app.settings.logger.enabled),
         Action::WriteRigScript => app.write_rig_script(),
         Action::WriteBandPlan => app.write_band_plan(),
         Action::ToggleAutoHistory => app.settings.auto_history = !app.settings.auto_history,
