@@ -236,6 +236,10 @@ fn transmit_controls(ui: &mut Ui, app: &mut App) {
 /// the other station just sent: the callsign is read off the line above and
 /// the report is judged from the same signal the meter is reading.
 fn contact_panel(ui: &mut Ui, app: &mut App) {
+    if app.logger_synced() {
+        followed_contact_panel(ui, app);
+        return;
+    }
     let gap = ui.spacing().item_spacing.x;
     let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
     let details_hint = app.i18n.text("contact-open");
@@ -293,6 +297,38 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
     if finished {
         app.finish_contact_edit();
     }
+    if opening {
+        app.open_contact();
+    }
+}
+
+/// The contact fields while the logger shares its entry form.
+///
+/// The contact is typed into the logger then, and two forms for one contact
+/// would be two places to type it. What is left is the callsign the macros are
+/// working from, which can be read and copied but not edited, and the contact
+/// directory beside it.
+fn followed_contact_panel(ui: &mut Ui, app: &mut App) {
+    let gap = ui.spacing().item_spacing.x;
+    let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
+    let label = app.i18n.text("label-his-call");
+    let details_hint = app.i18n.text("contact-open");
+    let mut opening = false;
+    ui.horizontal(|ui| {
+        field_label(ui, &label);
+        let height = ui.spacing().interact_size.y;
+        let mut callsign = app.contact.callsign.as_str();
+        ui.add_sized(
+            [fields - height - gap, height],
+            egui::TextEdit::singleline(&mut callsign),
+        );
+        let known = grayline_qso::normalize_callsign(&app.contact.callsign).is_some();
+        opening = ui
+            .add_enabled(known, egui::Button::new("\u{2026}"))
+            .on_hover_text(&details_hint)
+            .clicked();
+    });
+    ui.label(RichText::new(app.i18n.text("logger-synced")).size(SMALL).weak());
     if opening {
         app.open_contact();
     }

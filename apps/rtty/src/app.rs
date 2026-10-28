@@ -6,7 +6,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use grayline_logger_link::LoggerLink;
+use grayline_logger_link::{FormUpdate, LoggerLink};
 use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_rig_control::{Keying, RigControlError, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
@@ -95,7 +95,7 @@ pub struct App {
     /// The contact directory, what it last answered, and the dialog editing it.
     pub directory: ContactEditor,
     /// Where the contact fields are sent for the operator's logger to fill its
-    /// entry form from.
+    /// entry form from, and where that form comes back from.
     logger: LoggerLink,
     /// Whether the window naming this station is open.
     pub station_dialog_open: bool,
@@ -324,6 +324,7 @@ impl App {
 
         self.poll_rig();
         self.poll_transmit();
+        self.poll_logger();
         self.poll_contact();
 
         let activity = if self.is_transmitting() {
@@ -756,6 +757,53 @@ impl App {
     fn open_logger(&mut self) {
         if let Err(error) = self.logger.reconfigure(&self.settings.logger) {
             self.report_logger_error(&error);
+        }
+    }
+
+    /// Whether the logger is sharing its entry form, which the contact fields
+    /// then follow instead of being edited.
+    pub fn logger_synced(&self) -> bool {
+        self.logger.is_synced()
+    }
+
+    /// Takes the logger's entry form into the contact fields.
+    ///
+    /// The logger's form is the one the contact is logged from, so it wins.
+    /// Only when the logger has just been found again does a field it has
+    /// nothing for keep what the panel holds, which is then sent to it: the
+    /// panel was the form while the logger was away.
+    fn poll_logger(&mut self) {
+        let Some(FormUpdate { form, resumed }) = self.logger.take_form() else {
+            return;
+        };
+        let pick = |theirs: &str, own: &str| if resumed && theirs.is_empty() { own } else { theirs }.to_owned();
+        let contact = Contact {
+            callsign: pick(form.get("CALL"), &self.contact.callsign),
+            name: pick(form.get("NAME"), &self.contact.name),
+            qth: pick(form.get("QTH"), &self.contact.qth),
+            rst_sent: pick(form.get("RST_SENT"), &self.contact.rst_sent),
+            rst_received: pick(form.get("RST_RCVD"), &self.contact.rst_received),
+        };
+        let new_call = contact.callsign != self.contact.callsign;
+        self.contact = contact;
+        if new_call {
+            self.look_up_contact();
+        }
+        self.reflect_to_logger();
+    }
+
+    /// Takes the logger's form in until `done` holds, for a test whose fake
+    /// logger answers on its own thread.
+    #[cfg(test)]
+    pub(crate) fn await_logger(&mut self, done: impl Fn(&Self) -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            self.poll_logger();
+            if done(self) {
+                return;
+            }
+            assert!(std::time::Instant::now() < deadline, "the logger's form never arrived");
+            std::thread::sleep(Duration::from_millis(5));
         }
     }
 

@@ -1163,6 +1163,84 @@ fn clearing_the_contact_clears_what_was_sent_to_the_logger() {
     );
 }
 
+fn following(app: &mut App, fields: &[(&str, &str)]) -> FakeLogger {
+    let logger = logged(app);
+    logger.share(fields);
+    app.await_logger(App::logger_synced);
+    app.poll_logger();
+    logger
+}
+
+#[test]
+fn the_loggers_form_fills_the_contact_and_nothing_goes_back() {
+    let mut app = App::headless();
+
+    let logger = following(
+        &mut app,
+        &[
+            ("CALL", "JA1ABC"),
+            ("NAME", "TARO"),
+            ("QTH", "TOKYO"),
+            ("RST_RCVD", "579"),
+            ("RST_SENT", "559"),
+            ("SRX_STRING", ""),
+            ("STX_STRING", ""),
+        ],
+    );
+
+    assert!(app.logger_synced());
+    assert_eq!(app.contact.callsign, "JA1ABC");
+    assert_eq!(app.contact.name, "TARO");
+    assert_eq!(app.contact.qth, "TOKYO");
+    assert_eq!(app.contact.rst_sent, "559");
+    assert_eq!(app.contact.rst_received, "579");
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("RST_SENT", macros::DEFAULT_RST)]))
+    );
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_logger_found_again_is_handed_what_it_lacks() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.name = "TARO".to_owned();
+
+    let logger = following(&mut app, &[("CALL", ""), ("NAME", "JIRO"), ("RST_SENT", "599")]);
+    logger.received();
+
+    assert_eq!(app.contact.callsign, "JA1ABC");
+    assert_eq!(app.contact.name, "JIRO");
+    assert_eq!(app.contact.rst_sent, "599");
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_callsign_taken_from_the_text_while_following_is_all_that_is_sent() {
+    let mut app = App::headless();
+    let logger = following(&mut app, &[("CALL", ""), ("NAME", "TARO"), ("RST_SENT", "599")]);
+    logger.received();
+
+    app.set_contact_callsign("ja1xyz");
+
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1XYZ")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn the_contact_keeps_the_loggers_values_once_it_says_goodbye() {
+    let mut app = App::headless();
+    let logger = following(&mut app, &[("CALL", "JA1ABC"), ("NAME", "TARO")]);
+
+    logger.bye();
+    app.await_logger(|app| !app.logger_synced());
+
+    assert_eq!(app.contact.callsign, "JA1ABC");
+    assert_eq!(app.contact.name, "TARO");
+}
+
 #[test]
 fn an_address_the_logger_cannot_be_at_is_reported() {
     let mut app = App::headless();

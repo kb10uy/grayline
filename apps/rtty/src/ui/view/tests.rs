@@ -475,6 +475,26 @@ fn the_contact_window_shows_the_fields_the_settings_ask_for(#[case] locale: Loca
 }
 
 #[test]
+fn the_contact_fields_give_way_to_the_loggers_form() {
+    let mut app = App::headless();
+    let logger = crate::test_util::FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger.share(&[("CALL", "JA1ABC")]);
+    app.await_logger(|app| app.contact.callsign == "JA1ABC");
+    let synced = app.i18n.text("logger-synced");
+    let name = app.i18n.text("label-his-name");
+    let clear = app.i18n.text("action-clear-contact");
+
+    let harness = render(&mut app);
+
+    harness.get_by_label(&synced);
+    harness.get_by_label("…");
+    assert!(harness.query_by_label(&name).is_none());
+    assert!(harness.query_by_label(&clear).is_none());
+}
+
+#[test]
 fn a_field_no_catalogue_knows_stands_under_its_own_name() {
     let mut app = App::headless();
     app.settings.contact.fields = vec!["club".to_owned()];
