@@ -30,7 +30,8 @@ logger.
 | --- | --- | --- |
 | `CALL` | The QSO panel's callsign | The contact's callsign |
 | `RST_SENT` | The report being sent | The report being sent |
-| `RST_RCVD` | The report received, which the contest number fills in | The report received |
+| `RST_RCVD` | The RSV received | The report received |
+| `SRX_STRING` | The contest number received | — |
 | `NAME` | — | The contact's name |
 | `QTH` | — | The contact's QTH |
 
@@ -38,8 +39,15 @@ logger.
 `rigctld` itself, and a second source for them would only be a second answer
 that could disagree. SSTV sends no name or QTH because its panel has none:
 the directory answers for the template, and what it holds was filed once
-rather than heard on the air for this contact. SSTV's serial number is the one
-being sent, which the logger keeps for itself, and is not sent either.
+rather than heard on the air for this contact.
+
+SSTV's panel holds the received report and the contest number as one field,
+`595012`, the way MMSSTV writes them and the way an identifier's number is
+filled in. They are sent apart: the first three characters, when they are
+digits, as the RSV, and what follows as the received exchange, which is what
+the logger's form keeps it as. The serial number being sent is not sent at
+all. The logger counts its own for the contest it is set up for, and writes
+the sent exchange from it.
 
 ## When it is sent
 
@@ -87,10 +95,3 @@ did not reach the logger loses nothing that is not still on screen.
 The headless applications the test suite builds send to a socket of the
 suite's own rather than to the default address, because applying every menu
 action switches the sending on, and the operator may have the logger running.
-
-## Open questions
-
-**Exchanges.** jl1his-logger's form has `SRX_STRING` for a received exchange.
-SSTV's contest number arrives as part of the received report, the way MMSSTV
-reads it, and is sent as that. Whether it should also fill `SRX_STRING` is a
-question of how the operator logs a contest, which nothing here has asked.

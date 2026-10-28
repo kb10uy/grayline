@@ -782,13 +782,17 @@ impl App {
     /// Fills the logger's entry form in from the QSO panel.
     ///
     /// The frequency and the mode are left to the logger, which reads them
-    /// from the rig itself. Called where a field is settled rather than on
-    /// every keystroke, so the logger is not handed half a callsign.
+    /// from the rig itself, and so is the serial number being sent, which the
+    /// logger counts for its own contest. Called where a field is settled
+    /// rather than on every keystroke, so the logger is not handed half a
+    /// callsign.
     fn reflect_to_logger(&mut self) {
+        let (report, number) = split_received_report(&self.qso.rsv_received);
         let fields = [
             ("CALL", self.qso.call.as_str()),
             ("RST_SENT", self.qso.rsv.as_str()),
-            ("RST_RCVD", self.qso.rsv_received.as_str()),
+            ("RST_RCVD", report),
+            ("SRX_STRING", number),
         ];
         if let Err(error) = self.logger.reflect(fields) {
             self.report_logger_error(&error);
@@ -1695,6 +1699,19 @@ fn rx_settings(settings: &Settings) -> RxSettings {
 /// The operator's own template variables are the exception and are never put
 /// through this: what they hold is text the operator wrote, and its spaces are
 /// theirs to keep.
+/// Splits the received report into the RSV and the contest number after it.
+///
+/// The panel holds the two as one field, `595012`, the way MMSSTV writes them
+/// and the way an identifier's number is filled in. An RSV is always three
+/// digits, so a field that does not start with three is taken as a report
+/// alone.
+fn split_received_report(received: &str) -> (&str, &str) {
+    match received.get(..3) {
+        Some(report) if report.bytes().all(|byte| byte.is_ascii_digit()) => (report, received[3..].trim()),
+        _ => (received, ""),
+    }
+}
+
 fn trim_in_place(text: &mut String) -> bool {
     let trimmed = text.trim();
     if trimmed.len() == text.len() {

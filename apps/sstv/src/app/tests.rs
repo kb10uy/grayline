@@ -1374,7 +1374,21 @@ fn a_decoded_identifier_and_number_reach_the_logger() {
         ..numbered(&["012"])
     });
     app.poll_workers();
-    assert_eq!(logger.received(), Some(set_message(&[("RST_RCVD", "595012")])));
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("RST_RCVD", "595"), ("SRX_STRING", "012")]))
+    );
+}
+
+#[rstest]
+#[case::with_number("595012", ("595", "012"))]
+#[case::spaced("599 012", ("599", "012"))]
+#[case::report_alone("595", ("595", ""))]
+#[case::short_report("59", ("59", ""))]
+#[case::not_a_report("OK", ("OK", ""))]
+#[case::empty("", ("", ""))]
+fn a_received_report_is_split_into_the_rsv_and_the_number(#[case] received: &str, #[case] split: (&str, &str)) {
+    assert_eq!(split_received_report(received), split);
 }
 
 #[test]
