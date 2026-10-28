@@ -351,7 +351,9 @@ The following concerns belong outside the portable DSP and SSTV core:
 - Logging services and external logger integrations. `grayline-qso` is the
   first of these: a directory of stations read by callsign, described in
   [qso-directory.md](qso-directory.md). It is a directory rather than a log,
-  and it deliberately keeps nothing about a contact.
+  and it deliberately keeps nothing about a contact. `grayline-logger-link`
+  is the second: it hands the contact being worked to the operator's own
+  logger, described in [logger-link.md](logger-link.md).
 - History, template editing, settings persistence, and application file
   management.
 - Thread scheduling and application-level queue policy.
@@ -361,7 +363,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twenty-five packages:
+The workspace currently contains twenty-six packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -379,6 +381,7 @@ The workspace currently contains twenty-five packages:
 | `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
 | `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
 | `grayline-qso-cli` | Contact directory command line, as `gl-qso` | Implemented |
+| `grayline-logger-link` | The contact being worked, sent to jl1his-logger's entry form | Implemented; described in [logger-link.md](logger-link.md) |
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
@@ -400,6 +403,7 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-dsp` | None |
 | `grayline-qso` | None |
 | `grayline-qso-cli` | `grayline-qso` |
+| `grayline-logger-link` | None |
 | `grayline-rig` | None |
 | `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |

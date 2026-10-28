@@ -2121,6 +2121,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayline-logger-link"
+version = "0.6.0"
+dependencies = [
+ "rstest",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml_edit",
+]
+
+[[package]]
 name = "grayline-qso"
 version = "0.6.0"
 dependencies = [

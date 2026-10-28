@@ -101,6 +101,8 @@ The Rust implementation: what it is meant to be, and what it currently is.
 - [grayline/qso-directory.md](grayline/qso-directory.md): the directory of
   stations a template looks a callsign up in, the store behind it, and why it
   is not a log.
+- [grayline/logger-link.md](grayline/logger-link.md): the contact being worked,
+  sent to jl1his-logger's entry form over UDP, and what is left to the logger.
 - [grayline/template-design.md](grayline/template-design.md): the portable transmit
   overlay format.
 - [grayline/web-demo.md](grayline/web-demo.md): the browser build of the receive

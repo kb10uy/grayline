@@ -26,7 +26,8 @@ The repository contains:
   receive-only application does not link a Lua interpreter.
   `crates/keyer-protocol/` holds what `gl-keyer` and the applications that
   stream to it share: how the keyer's commands are spelled, and a client
-  for them.
+  for them. `crates/logger-link/` sends the contact being worked to the
+  entry form of the operator's logger, jl1his-logger's desktop client.
 - `tools/`: development command-line tools that are not shipped. One directory
   per mode, named `<mode>-cli`, holding the package `grayline-<mode>-cli` and
   the binary `gl-<mode>`; `gl-sstv` encodes and decodes WAV files and
