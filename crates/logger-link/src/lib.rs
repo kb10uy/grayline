@@ -1,4 +1,4 @@
-//! Filling the entry form of the operator's logger from an application.
+//! Sharing the entry form of the operator's logger with an application.
 //!
 //! The logger is jl1his-logger's desktop client, which takes JSON datagrams on
 //! a local UDP port and fills its entry form field by field from them. What an
@@ -7,19 +7,25 @@
 //! is logged without being typed twice. The frequency and the mode are not:
 //! the logger reads them from the rig itself.
 //!
-//! ```text
-//! let mut link = LoggerLink::open(&settings)?;
-//! link.reflect([("CALL", "JA1ABC"), ("RST_RCVD", "599")])?;
-//! ```
+//! The link also subscribes to the form. A logger sharing it answers with the
+//! whole form and sends it again whenever it changes, so the application can
+//! work from the logger's form rather than keeping one of its own.
 //!
-//! Nothing comes back. The logger answers no datagram, so a link has no state
-//! beyond what it last sent, and a logger that is not running loses nothing
-//! but the form it was not showing.
+//! ```text
+//! let mut link = LoggerLink::new("logger", move || waker.wake());
+//! link.reconfigure(&settings)?;
+//! link.reflect([("CALL", "JA1ABC"), ("RST_RCVD", "599")])?;
+//! if let Some(update) = link.take_form() {
+//!     call = update.form.get("CALL").to_owned();
+//! }
+//! ```
 
 #![deny(missing_docs)]
 
 mod link;
 mod settings;
+mod subscription;
 
 pub use link::{LinkError, LoggerLink, set_message};
 pub use settings::{DEFAULT_ADDRESS, LoggerSettings};
+pub use subscription::{FormUpdate, LoggerForm};

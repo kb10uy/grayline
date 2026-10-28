@@ -120,10 +120,20 @@ impl FakeLogger {
         }
     }
 
-    /// The next datagram, or `None` once nothing has arrived for a while.
+    /// The next datagram filling the form in, or `None` once nothing has
+    /// arrived for a while.
+    ///
+    /// A subscription is passed over, so a test reads what the application
+    /// filled in without minding when it last renewed.
     pub(crate) fn received(&self) -> Option<String> {
         let mut buffer = [0; 4096];
-        let (length, _) = self.socket.recv_from(&mut buffer).ok()?;
-        Some(String::from_utf8(buffer[..length].to_vec()).unwrap())
+        loop {
+            let (length, _) = self.socket.recv_from(&mut buffer).ok()?;
+            let text = String::from_utf8(buffer[..length].to_vec()).unwrap();
+            if text.contains(r#""type":"subscribe""#) || text.contains(r#""type":"unsubscribe""#) {
+                continue;
+            }
+            return Some(text);
+        }
     }
 }

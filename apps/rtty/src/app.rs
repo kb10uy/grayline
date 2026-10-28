@@ -211,13 +211,11 @@ impl App {
             contact: Contact::default(),
             macros: library.macros,
             templates: library.templates,
-            directory: ContactEditor::new(
-                &settings.contact,
-                contact_paths,
-                "grayline-rtty-contact".to_owned(),
-                move || waker.wake(),
-            ),
-            logger: LoggerLink::default(),
+            directory: ContactEditor::new(&settings.contact, contact_paths, "grayline-rtty-contact".to_owned(), {
+                let waker = waker.clone();
+                move || waker.wake()
+            }),
+            logger: LoggerLink::new("grayline-rtty-logger", move || waker.wake()),
             station_dialog_open: false,
             variables_draft: Vec::new(),
             scope,
@@ -756,13 +754,9 @@ impl App {
     }
 
     fn open_logger(&mut self) {
-        self.logger = match LoggerLink::open(&self.settings.logger) {
-            Ok(link) => link,
-            Err(error) => {
-                self.report_logger_error(&error);
-                LoggerLink::default()
-            }
-        };
+        if let Err(error) = self.logger.reconfigure(&self.settings.logger) {
+            self.report_logger_error(&error);
+        }
     }
 
     /// Fills the logger's entry form in from the contact fields.

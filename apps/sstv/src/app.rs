@@ -458,13 +458,11 @@ impl App {
             tx_error: None,
             device_fault: None,
             ui_scale: shared.ui_scale,
-            directory: ContactEditor::new(
-                &settings.contact,
-                contact_paths,
-                "grayline-sstv-contact".to_owned(),
-                move || waker.wake(),
-            ),
-            logger: LoggerLink::default(),
+            directory: ContactEditor::new(&settings.contact, contact_paths, "grayline-sstv-contact".to_owned(), {
+                let waker = waker.clone();
+                move || waker.wake()
+            }),
+            logger: LoggerLink::new("grayline-sstv-logger", move || waker.wake()),
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -770,13 +768,9 @@ impl App {
     }
 
     fn open_logger(&mut self) {
-        self.logger = match LoggerLink::open(&self.settings.logger) {
-            Ok(link) => link,
-            Err(error) => {
-                self.report_logger_error(&error);
-                LoggerLink::default()
-            }
-        };
+        if let Err(error) = self.logger.reconfigure(&self.settings.logger) {
+            self.report_logger_error(&error);
+        }
     }
 
     /// Fills the logger's entry form in from the QSO panel.
