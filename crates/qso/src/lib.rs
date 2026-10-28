@@ -8,15 +8,14 @@
 //! on the way in rather than stored.
 //!
 //! What it holds is a table from a callsign to what is filed under it, filled
-//! in by hand, by importing an ADIF the operator already has, or by asking
-//! their own Wavelog, and read back the next time the same station is worked.
+//! in by hand or by importing an ADIF the operator already has, and read back
+//! the next time the same station is worked.
 //! An application reads it so a transmit template can print the other
 //! operator's name without the operator typing it again.
 
 #![deny(missing_docs)]
 
 mod adif;
-mod credentials;
 mod directory;
 mod editor;
 mod error;
@@ -24,23 +23,17 @@ mod paths;
 mod record;
 mod settings;
 mod store;
-mod wavelog;
 mod worker;
 
-#[cfg(test)]
-mod test_util;
-
 pub use adif::{Adif, AdifRecord, ImportReport, import, read_adif};
-pub use credentials::{Credentials, KEY_VARIABLE, URL_VARIABLE};
-pub use directory::{Directory, HIT_TTL, Lookup, MISS_TTL};
+pub use directory::{Directory, Lookup};
 pub use editor::{ContactEditor, ContactRow};
 pub use error::QsoError;
-pub use paths::{CREDENTIALS_FILE, FAMILY_DIRECTORY, STORE_FILE, default_credentials_path, default_store_path};
+pub use paths::{FAMILY_DIRECTORY, STORE_FILE, default_store_path};
 pub use record::{
     DEFAULT_FIELDS, FIELD_GROUPS, GROUP_PREFIX, Record, WELL_KNOWN_KEYS, expand_fields, field_group,
     normalize_callsign, valid_key,
 };
 pub use settings::ContactSettings;
 pub use store::{Origin, Store};
-pub use wavelog::{DEFAULT_TIMEOUT, Wavelog};
 pub use worker::{ContactPaths, ContactSnapshot, ContactState, ContactWorker};

@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc, Mutex,
         mpsc::{self, Receiver, Sender},
@@ -8,7 +8,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{Credentials, DEFAULT_TIMEOUT, Directory, QsoError, Record, Store, Wavelog};
+use crate::{Directory, QsoError, Record, Store};
 
 /// What the directory is doing about the callsign in the QSO panel.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -18,7 +18,7 @@ pub enum ContactState {
     Idle,
     /// A lookup is pending.
     Looking,
-    /// Something is filed under the callsign, locally or from the logger.
+    /// Something is filed under the callsign.
     Known,
     /// The directory was asked and has nothing filed under it.
     Unknown,
@@ -44,10 +44,7 @@ pub struct ContactSnapshot {
 }
 
 enum Request {
-    LookUp {
-        callsign: String,
-        refresh: bool,
-    },
+    LookUp(String),
     /// What the operator corrected: the fields they left filled in, and the
     /// ones they emptied. Emptying is not the same as leaving alone, so the
     /// two travel together rather than a write standing for both.
@@ -55,32 +52,25 @@ enum Request {
         record: Record,
         dropped: Vec<String>,
     },
-    /// Which logger to ask from now on, queued behind whatever was asked
-    /// before it so a save made before the switch still lands first.
-    UseRemote(Option<Wavelog>),
 }
 
 /// The files the directory is opened over.
 ///
 /// Named rather than discovered, because a discovered path is one the test
 /// suite cannot escape: an application built for a test would otherwise write
-/// its store into the operator's own directory and read the operator's own API
-/// key, which is a live logger a test has no business reaching. `None` means
-/// there is none, and the worker does without.
+/// its store into the operator's own directory. `None` means there is none,
+/// and the worker keeps one in memory.
 #[derive(Clone, Debug, Default)]
 pub struct ContactPaths {
     /// The shared store, or nothing for one that lives only in memory.
     pub store: Option<PathBuf>,
-    /// The credentials file naming the logger, or nothing for no logger.
-    pub credentials: Option<PathBuf>,
 }
 
 /// The thread that reads and writes the contact directory.
 ///
 /// Spawned once and kept for the whole session rather than per lookup: it
-/// holds a store rather than a socket, it works with the network switched off,
-/// and it is where a record the operator corrected is written. Turning the
-/// lookup off takes the logger away from it, not the directory.
+/// holds the store, and it is where a record the operator corrected is
+/// written, off the thread that draws the interface.
 pub struct ContactWorker {
     snapshot: Arc<Mutex<ContactSnapshot>>,
     /// Held as an option so that dropping the worker closes the channel, which
@@ -145,29 +135,12 @@ impl ContactWorker {
     /// station's details under it.
     pub fn look_up(&self, callsign: &str) {
         self.begin(callsign);
-        self.request(Request::LookUp {
-            callsign: callsign.to_owned(),
-            refresh: false,
-        });
+        self.request(Request::LookUp(callsign.to_owned()));
     }
 
-    /// Asks the logger again, whatever the store holds.
-    pub fn refresh(&self, callsign: &str) {
-        self.begin(callsign);
-        self.request(Request::LookUp {
-            callsign: callsign.to_owned(),
-            refresh: true,
-        });
-    }
-
-    /// Files what the operator corrected, which no lookup will displace.
+    /// Files what the operator corrected, which no import will displace.
     pub fn save(&self, record: Record, dropped: Vec<String>) {
         self.request(Request::Save { record, dropped });
-    }
-
-    /// Asks `remote` from now on, or nobody, without waiting for the worker.
-    pub fn use_remote(&self, remote: Option<Wavelog>) {
-        self.request(Request::UseRemote(remote));
     }
 
     /// Whether the thread is still there to take requests.
@@ -214,39 +187,14 @@ impl core::fmt::Debug for ContactWorker {
 }
 
 impl ContactPaths {
-    /// Opens the named store and optional logger; absent paths enable an in-memory, offline directory.
-    pub fn open(&self, lookup: bool, wavelog_url: &str) -> Result<Directory, QsoError> {
+    /// Opens the named store, or one in memory when none is named.
+    pub fn open(&self) -> Result<Directory, QsoError> {
         let store = match &self.store {
             Some(path) => Store::open(path)?,
             None => Store::in_memory()?,
         };
-        Ok(Directory::new(store, self.remote(lookup, wavelog_url)))
+        Ok(Directory::new(store))
     }
-
-    /// The logger `lookup` and `wavelog_url` ask for, with the key the
-    /// credentials file holds.
-    pub fn remote(&self, lookup: bool, wavelog_url: &str) -> Option<Wavelog> {
-        remote(lookup, wavelog_url, self.credentials.as_deref())
-    }
-}
-
-/// The logger to ask, when there is one configured to ask.
-///
-/// Anything missing — the switch, the address, the key — means no logger
-/// rather than an error: an operator who has not set one up has not failed at
-/// anything, and the store answers on its own.
-fn remote(lookup: bool, wavelog_url: &str, credentials: Option<&Path>) -> Option<Wavelog> {
-    if !lookup {
-        return None;
-    }
-    let credentials = credentials?;
-    let credentials = Credentials::read(credentials).unwrap_or_default().with_environment();
-    let url = if wavelog_url.trim().is_empty() {
-        credentials.url?
-    } else {
-        wavelog_url.to_owned()
-    };
-    Wavelog::new(&url, &credentials.key?, DEFAULT_TIMEOUT).ok()
 }
 
 fn contact_loop(
@@ -265,9 +213,8 @@ fn contact_loop(
 
         for request in pending.drain(..) {
             match request {
-                Request::LookUp { callsign, refresh } => look_up(&mut directory, &callsign, refresh, snapshot),
+                Request::LookUp(callsign) => look_up(&directory, &callsign, snapshot),
                 Request::Save { record, dropped } => save(&mut directory, &record, &dropped, snapshot),
-                Request::UseRemote(remote) => directory.set_remote(remote),
             }
         }
         wake();
@@ -280,26 +227,26 @@ fn contact_loop(
 /// Drops every queued lookup but the last.
 ///
 /// An operator tabbing through the panel can leave several queued behind one
-/// slow round trip, and every answer but the last would be about a station they
+/// slow write, and every answer but the last would be about a station they
 /// have already moved on from. A save is never dropped: it is what the operator
 /// asked to have written.
 fn collapse_lookups(pending: &mut VecDeque<Request>) {
     let Some(last) = pending
         .iter()
-        .rposition(|request| matches!(request, Request::LookUp { .. }))
+        .rposition(|request| matches!(request, Request::LookUp(_)))
     else {
         return;
     };
     *pending = pending
         .drain(..)
         .enumerate()
-        .filter(|(index, request)| *index == last || !matches!(request, Request::LookUp { .. }))
+        .filter(|(index, request)| *index == last || !matches!(request, Request::LookUp(_)))
         .map(|(_, request)| request)
         .collect();
 }
 
-fn look_up(directory: &mut Directory, callsign: &str, refresh: bool, snapshot: &Arc<Mutex<ContactSnapshot>>) {
-    match directory.look_up(callsign, refresh) {
+fn look_up(directory: &Directory, callsign: &str, snapshot: &Arc<Mutex<ContactSnapshot>>) {
+    match directory.look_up(callsign) {
         Ok(answer) => update(snapshot, |state| {
             state.callsign = answer.record.callsign().to_owned();
             state.state = if answer.known {
@@ -308,9 +255,7 @@ fn look_up(directory: &mut Directory, callsign: &str, refresh: bool, snapshot: &
                 ContactState::Unknown
             };
             state.fields = fields(&answer.record);
-            // A logger that refused is reported beside what the store knew
-            // rather than instead of it: the answer below is still true.
-            state.error = answer.remote_error.map(Arc::new);
+            state.error = None;
         }),
         Err(error) => update(snapshot, |state| {
             state.state = ContactState::Failed;

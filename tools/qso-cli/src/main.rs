@@ -7,10 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
-use grayline_qso::{
-    CREDENTIALS_FILE, Credentials, DEFAULT_TIMEOUT, Directory, KEY_VARIABLE, Origin, STORE_FILE, Store, URL_VARIABLE,
-    Wavelog, default_credentials_path, default_store_path, import,
-};
+use grayline_qso::{Directory, Origin, Store, default_store_path, import};
 use grayline_qso_cli::{record_from_assignments, render_json, render_keys, render_table};
 
 /// Exit status for a lookup that found nothing. Clap reports a misused command
@@ -31,13 +28,13 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Prints where the store and the credentials file are.
+    /// Prints where the store is.
     Path,
-    /// Prints the keys a lookup and an import fill in.
+    /// Prints the keys an import fills in.
     Keys,
     /// Prints what is filed under a callsign.
     Lookup(LookupArgs),
-    /// Files values by hand, which no lookup will overwrite.
+    /// Files values by hand, which no import will overwrite.
     Set(SetArgs),
     /// Drops fields from a station.
     Unset(UnsetArgs),
@@ -47,9 +44,6 @@ enum Command {
     List(ListArgs),
     /// Reads ADIF logs into the store.
     Import(ImportArgs),
-    /// Manages the Wavelog credentials file.
-    #[command(subcommand)]
-    Credential(CredentialCommand),
 }
 
 #[derive(Debug, Args)]
@@ -57,19 +51,6 @@ struct LookupArgs {
     /// Station to look up.
     #[arg(value_name = "CALLSIGN")]
     callsign: String,
-
-    /// Ask Wavelog when the store has nothing to say.
-    #[arg(long)]
-    remote: bool,
-
-    /// Ask Wavelog even when the store does.
-    #[arg(long)]
-    refresh: bool,
-
-    /// Base URL of the Wavelog instance. Also read from
-    /// `GRAYLINE_WAVELOG_URL` and from the credentials file.
-    #[arg(long, value_name = "URL")]
-    url: Option<String>,
 
     /// How to print the record.
     #[arg(long, value_name = "FORMAT", default_value = "table")]
@@ -138,21 +119,6 @@ struct ImportArgs {
     dry_run: bool,
 }
 
-#[derive(Debug, Subcommand)]
-enum CredentialCommand {
-    /// Writes the credentials file, reading the key from standard input.
-    Set(CredentialSetArgs),
-    /// Removes the credentials file.
-    Clear,
-}
-
-#[derive(Debug, Args)]
-struct CredentialSetArgs {
-    /// Base URL of the Wavelog instance to record alongside the key.
-    #[arg(long, value_name = "URL")]
-    url: Option<String>,
-}
-
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
@@ -177,7 +143,6 @@ fn run() -> Result<ExitCode> {
         Command::Remove(args) => remove(open(cli.store)?, args),
         Command::List(args) => list(&open(cli.store)?, args),
         Command::Import(args) => import_logs(open(cli.store)?, args),
-        Command::Credential(command) => credential(command),
     }
 }
 
@@ -190,32 +155,18 @@ fn open(named: Option<PathBuf>) -> Result<Store> {
 }
 
 fn path(named: Option<&std::path::Path>) -> Result<ExitCode> {
-    let store = named.map(PathBuf::from).or_else(default_store_path);
-    let credentials = default_credentials_path();
-    for (what, path) in [(STORE_FILE, store), (CREDENTIALS_FILE, credentials)] {
-        match path {
-            Some(path) => {
-                let state = if path.exists() { "present" } else { "not written yet" };
-                println!("{what}: {} ({state})", path.display());
-            }
-            None => println!("{what}: this platform has no user directory for it"),
+    match named.map(PathBuf::from).or_else(default_store_path) {
+        Some(path) => {
+            let state = if path.exists() { "present" } else { "not written yet" };
+            println!("{} ({state})", path.display());
         }
+        None => println!("this platform has no user directory for the store"),
     }
     Ok(ExitCode::SUCCESS)
 }
 
 fn lookup(store: Store, args: LookupArgs) -> Result<ExitCode> {
-    let remote = if args.remote || args.refresh {
-        Some(wavelog(args.url.as_deref())?)
-    } else {
-        None
-    };
-    let mut directory = Directory::new(store, remote);
-    let answer = directory.look_up(&args.callsign, args.refresh)?;
-
-    if let Some(error) = &answer.remote_error {
-        eprintln!("gl-qso: the lookup failed, answering from the store alone: {error}");
-    }
+    let answer = Directory::new(store).look_up(&args.callsign)?;
     if !answer.known {
         eprintln!("gl-qso: nothing is filed under {}", answer.record.callsign());
         return Ok(ExitCode::from(NOT_FOUND_EXIT_CODE));
@@ -225,22 +176,6 @@ fn lookup(store: Store, args: LookupArgs) -> Result<ExitCode> {
         Format::Json => println!("{}", render_json(&answer.record)),
     }
     Ok(ExitCode::SUCCESS)
-}
-
-/// Builds a client out of what the command line, the environment and the
-/// credentials file say, in that order.
-fn wavelog(url: Option<&str>) -> Result<Wavelog> {
-    let credentials = match default_credentials_path() {
-        Some(path) => Credentials::read(&path)?.with_environment(),
-        None => Credentials::default().with_environment(),
-    };
-    let url = url.map(str::to_owned).or(credentials.url).with_context(|| {
-        format!("no Wavelog URL is configured; pass --url, set {URL_VARIABLE}, or run `gl-qso credential set`")
-    })?;
-    let key = credentials.key.with_context(|| {
-        format!("no Wavelog API key is configured; set {KEY_VARIABLE} or run `gl-qso credential set`")
-    })?;
-    Wavelog::new(&url, &key, DEFAULT_TIMEOUT).map_err(Into::into)
 }
 
 fn set(mut store: Store, args: SetArgs) -> Result<ExitCode> {
@@ -319,35 +254,6 @@ fn import_logs(mut store: Store, args: ImportArgs) -> Result<ExitCode> {
         }
     }
     store.checkpoint()?;
-    Ok(ExitCode::SUCCESS)
-}
-
-fn credential(command: CredentialCommand) -> Result<ExitCode> {
-    let path = default_credentials_path().context("this platform has no user directory for a credentials file")?;
-    match command {
-        CredentialCommand::Set(args) => {
-            // Read from standard input rather than from an argument: an
-            // argument lands in the shell history and in the process list.
-            eprintln!("Paste the Wavelog API key and press Enter.");
-            eprintln!("A v2 token (wl2_…) needs the lookup:read scope; a v1 key needs read access.");
-            let mut key = String::new();
-            io::stdin()
-                .lock()
-                .read_line(&mut key)
-                .context("failed to read the key")?;
-            let key = key.trim();
-            if key.is_empty() {
-                bail!("no key was given");
-            }
-            Credentials::write(&path, args.url.as_deref(), key)?;
-            println!("written to {}", path.display());
-        }
-        CredentialCommand::Clear => match fs::remove_file(&path) {
-            Ok(()) => println!("{} was removed", path.display()),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => println!("there was no {}", path.display()),
-            Err(error) => return Err(error).with_context(|| format!("failed to remove {}", path.display())),
-        },
-    }
     Ok(ExitCode::SUCCESS)
 }
 

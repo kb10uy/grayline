@@ -39,7 +39,7 @@ pub enum AppError {
     /// that are not themselves cloneable.
     #[error("{0}")]
     Template(Arc<TemplateError>),
-    /// A contact lookup failed.
+    /// The contact directory failed.
     ///
     /// Behind an [`Arc`] for the same reason: it carries a store failure that
     /// is not cloneable, and the snapshot holding it is cloned every frame.

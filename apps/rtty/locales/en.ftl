@@ -106,23 +106,18 @@ custom-add = Add field
 custom-invalid = A name may hold letters, digits, and underscores, in dot-separated parts starting with a letter
 custom-note = A field named here is written in a macro as ${ "{" }custom.name{ "}" }. Its value goes on the air, so it has to be sendable.
 
-menu-contact = Contact Directory
-action-contact-lookup = Look Up Contacts
-action-contact-write-credentials = Write credentials.toml
 action-logger-send = Link with Logger
 logger-synced = Following the logger's entry form
 error-logger = The contact could not be sent to the logger
 
 contact-title = Contact
 contact-open = What the directory has filed under this station
-contact-note-keys = A macro reads these as ${ "{" }contact.name{ "}" }. Anything you type here is yours; no lookup will overwrite it.
+contact-note-keys = A macro reads these as ${ "{" }contact.name{ "}" }. Anything you type here is yours; no import will overwrite it.
 contact-other = Other Fields
 contact-add = Add
-contact-refresh = Look Up Again
 contact-state-looking = Looking up…
 contact-state-unknown = Nothing is filed under { $callsign }.
-contact-state-failed = The lookup failed: { $detail }
-contact-credentials-written = Wrote { $path }
+contact-state-failed = The contact directory failed: { $detail }
 contact-name = Name
 contact-name-latin = Name (Latin)
 contact-qth = QTH
@@ -141,7 +136,6 @@ contact-qsl-manager = QSL Via
 contact-email = Email
 contact-note = Note
 
-error-credentials = The credentials file could not be written
 
 rig-state-disconnected = Not connected
 rig-state-connecting = Connecting…

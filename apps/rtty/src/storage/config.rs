@@ -123,7 +123,6 @@ fn default_contact() -> ContactSettings {
             .chain(["!latin"])
             .map(str::to_owned)
             .collect(),
-        ..ContactSettings::default()
     }
 }
 
@@ -462,8 +461,6 @@ mod tests {
             },
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95".to_owned())]),
             contact: ContactSettings {
-                lookup: false,
-                wavelog_url: "https://log.example/".to_owned(),
                 fields: vec!["!ja".to_owned(), "note".to_owned()],
             },
             logger: LoggerSettings {
@@ -746,19 +743,6 @@ grid = \"PM95UQ\"
         let (_, settings) = Config::load(path);
 
         assert!(settings.contact.fields.is_empty());
-    }
-
-    #[test]
-    fn the_logger_address_is_written_out_even_while_it_is_empty() {
-        let root = TempDir::new().unwrap();
-        let path = root.path().join("config.toml");
-        let (mut config, settings) = Config::load(path.clone());
-
-        config.save(&settings);
-
-        let written = fs::read_to_string(&path).unwrap();
-        assert!(written.contains("[qso.wavelog]"), "{written}");
-        assert!(written.contains("url = \"\""), "{written}");
     }
 
     #[test]

@@ -1,12 +1,11 @@
-use std::sync::mpsc;
+use std::{sync::mpsc, time::Duration};
 
 use tempfile::TempDir;
 
 use super::{ContactPaths, ContactState, ContactWorker, Request, collapse_lookups};
-use crate::{
-    Directory, QsoError, Record, Store,
-    test_util::{FakeWavelog, TEST_TIMEOUT},
-};
+use crate::{QsoError, Record, Store};
+
+const TEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn record(callsign: &str, name: &str) -> Record {
     let mut record = Record::new(callsign).unwrap();
@@ -21,18 +20,12 @@ fn collapsing_keeps_the_last_lookup_and_every_save_in_order() {
             record: record("JA1AAA", "First"),
             dropped: vec!["qth".to_owned()],
         },
-        Request::LookUp {
-            callsign: "JA1AAA".to_owned(),
-            refresh: false,
-        },
+        Request::LookUp("JA1AAA".to_owned()),
         Request::Save {
             record: record("JA1BBB", "Second"),
             dropped: vec![],
         },
-        Request::LookUp {
-            callsign: "JA1BBB".to_owned(),
-            refresh: true,
-        },
+        Request::LookUp("JA1BBB".to_owned()),
         Request::Save {
             record: record("JA1CCC", "Third"),
             dropped: vec![],
@@ -50,7 +43,7 @@ fn collapsing_keeps_the_last_lookup_and_every_save_in_order() {
         .collect();
     assert_eq!(saved, ["JA1AAA", "JA1BBB", "JA1CCC"]);
     assert!(matches!(&requests[0], Request::Save { dropped, .. } if dropped == &["qth"]));
-    assert!(matches!(&requests[2], Request::LookUp { callsign, refresh: true } if callsign == "JA1BBB"));
+    assert!(matches!(&requests[2], Request::LookUp(callsign) if callsign == "JA1BBB"));
     requests.remove(2);
     collapse_lookups(&mut requests);
     assert_eq!(requests.len(), 3);
@@ -61,10 +54,9 @@ fn saves_publish_changes_and_drop_drains_writes_to_disk() {
     let root = TempDir::new().unwrap();
     let paths = ContactPaths {
         store: Some(root.path().join(crate::STORE_FILE)),
-        credentials: None,
     };
     let (sent, received) = mpsc::channel();
-    let worker = ContactWorker::spawn(paths.open(false, ""), "contact-test".to_owned(), move || {
+    let worker = ContactWorker::spawn(paths.open(), "contact-test".to_owned(), move || {
         sent.send(()).unwrap();
     });
     worker.look_up("JA1AAA");
@@ -87,51 +79,6 @@ fn saves_publish_changes_and_drop_drains_writes_to_disk() {
 }
 
 #[test]
-fn a_remote_failure_is_published_beside_the_local_answer() {
-    let server = FakeWavelog::spawn(&[(503, "")]);
-    let mut directory = Directory::new(Store::in_memory().unwrap(), Some(server.client()));
-    directory.save(&record("JA1AAA", "Filed")).unwrap();
-    let (sent, received) = mpsc::channel();
-    let worker = ContactWorker::spawn(Ok(directory), "contact-test".to_owned(), move || {
-        sent.send(()).unwrap();
-    });
-    worker.refresh("JA1AAA");
-    received.recv_timeout(TEST_TIMEOUT).unwrap();
-    let snapshot = worker.latest();
-    assert_eq!(snapshot.state, ContactState::Known);
-    assert_eq!(snapshot.fields["name"], "Filed");
-    assert!(matches!(snapshot.error.as_deref(), Some(QsoError::Refused(503))));
-}
-
-#[test]
-fn a_logger_handed_over_to_a_running_worker_is_asked_from_then_on() {
-    let server = FakeWavelog::spawn(&[(503, "")]);
-    let (sent, received) = mpsc::channel();
-    let worker = ContactWorker::spawn(
-        Ok(Directory::new(Store::in_memory().unwrap(), None)),
-        "contact-test".to_owned(),
-        move || {
-            sent.send(()).unwrap();
-        },
-    );
-    worker.save(record("JA1AAA", "Filed"), vec![]);
-    received.recv_timeout(TEST_TIMEOUT).unwrap();
-    worker.use_remote(Some(server.client()));
-    worker.refresh("JA1AAA");
-    let snapshot = loop {
-        received.recv_timeout(TEST_TIMEOUT).unwrap();
-        let snapshot = worker.latest();
-        if snapshot.state != ContactState::Looking {
-            break snapshot;
-        }
-    };
-
-    assert_eq!(snapshot.fields["name"], "Filed");
-    assert!(matches!(snapshot.error.as_deref(), Some(QsoError::Refused(503))));
-    assert!(worker.is_running());
-}
-
-#[test]
 fn an_open_failure_is_kept_in_the_snapshot() {
     let mut worker = ContactWorker::spawn(
         Err(QsoError::Store("cannot open".to_owned())),
@@ -142,10 +89,4 @@ fn an_open_failure_is_kept_in_the_snapshot() {
     let snapshot = worker.latest();
     assert_eq!(snapshot.state, ContactState::Failed);
     assert!(matches!(snapshot.error.as_deref(), Some(QsoError::Store(message)) if message == "cannot open"));
-}
-
-#[test]
-fn absent_paths_keep_a_lookup_offline_even_with_a_url() {
-    let mut directory = ContactPaths::default().open(true, "http://127.0.0.1:1").unwrap();
-    assert!(directory.look_up("JA1AAA", true).unwrap().remote_error.is_none());
 }

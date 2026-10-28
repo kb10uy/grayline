@@ -254,62 +254,16 @@ fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
     assert_eq!(settled(&app).callsign, "JA1ABC");
 }
 
-/// A headless interface must reach neither the operator's own store nor the
-/// key sitting beside it.
+/// A headless interface must not reach the operator's own store.
 ///
-/// Both were discovered rather than named once, which meant the suite wrote a
-/// credentials file into the operator's configuration directory and would have
-/// put questions to whatever logger the key named. Naming them is what stops
+/// It was discovered rather than named once, which meant the suite wrote into
+/// the directory the operator's applications share. Naming it is what stops
 /// that, so it is what is checked.
 #[test]
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
     assert_eq!(app.directory.paths().store, None);
-    assert_eq!(app.directory.paths().credentials, None);
-}
-
-/// The menu offers to write a credentials file, and a test that applies every
-/// action must not thereby write one.
-///
-/// What is checked is that nothing was written, not that the operator's own
-/// directory is empty: they are entitled to have written a credentials file
-/// themselves, and a test that failed because they had would be reporting on
-/// the machine it ran on rather than on this code.
-#[test]
-fn writing_the_credentials_file_does_nothing_without_one_to_write() {
-    let mut app = App::headless();
-
-    app.write_contact_credentials();
-
-    assert!(app.notice.is_none());
-    assert!(app.error.is_none());
-}
-
-#[test]
-fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = TempDir::new().unwrap();
-    let credentials = root.path().join("credentials.toml");
-    let mut app = App::from_parts(
-        AudioState::disconnected(rx_settings(&Settings::default())),
-        AppPaths::from_roots(Roots::under(root.path())),
-        Stored {
-            config: Config::detached(),
-            common: CommonConfig::detached(),
-        },
-        &Settings::default(),
-        ContactPaths {
-            store: None,
-            credentials: Some(credentials.clone()),
-        },
-        Waker::default(),
-        Box::new(grayline_shell::platform::QuietPlatform),
-    );
-
-    app.write_contact_credentials();
-
-    assert!(credentials.is_file(), "{}", credentials.display());
-    assert!(app.notice.is_some());
 }
 
 #[rstest]

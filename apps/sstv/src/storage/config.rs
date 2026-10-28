@@ -417,8 +417,6 @@ mod tests {
                 tail_seconds: 0.1,
             },
             contact: ContactSettings {
-                lookup: false,
-                wavelog_url: "https://log.example.org".to_owned(),
                 fields: vec!["!ja".to_owned(), "dxcc".to_owned()],
             },
             logger: LoggerSettings {
@@ -492,17 +490,6 @@ fields = []
         for key in grayline_qso::WELL_KNOWN_KEYS {
             assert!(valid_variable_name(&format!("contact.{key}")), "{key}");
         }
-    }
-
-    #[test]
-    fn the_qso_section_names_its_instance_even_while_it_is_empty() {
-        let root = TempDir::new().unwrap();
-        let mut config = Config::load(&config_path(&root));
-        config.store(&Settings::default());
-
-        let written = fs::read_to_string(config_path(&root)).expect("a written file");
-        assert!(written.contains("[qso.wavelog]"), "{written}");
-        assert!(written.contains("url"), "{written}");
     }
 
     #[test]

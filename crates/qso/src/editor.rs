@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use crate::{
-    ContactSettings,
     record::{Record, expand_fields, normalize_callsign, valid_key},
     worker::{ContactPaths, ContactSnapshot, ContactWorker},
 };
@@ -41,8 +38,6 @@ pub struct ContactEditor {
     /// The files the worker is opened over, named rather than discovered so
     /// that a test never reaches the operator's own store or key.
     paths: ContactPaths,
-    thread_name: String,
-    wake: Arc<dyn Fn() + Send + Sync>,
     /// The callsign last asked about.
     ///
     /// Leaving a field is what commits it, and the operator leaves the field
@@ -52,23 +47,15 @@ pub struct ContactEditor {
 }
 
 impl ContactEditor {
-    /// Opens the directory `settings` describe over `paths`, on a thread
-    /// called `thread_name` that calls `wake` when it has something new.
-    pub fn new(
-        settings: &ContactSettings,
-        paths: ContactPaths,
-        thread_name: String,
-        wake: impl Fn() + Send + Sync + 'static,
-    ) -> Self {
-        let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(wake);
+    /// Opens the directory over `paths`, on a thread called `thread_name`
+    /// that calls `wake` when it has something new.
+    pub fn new(paths: ContactPaths, thread_name: String, wake: impl Fn() + Send + 'static) -> Self {
         Self {
-            worker: spawn(settings, &paths, &thread_name, &wake),
+            worker: ContactWorker::spawn(paths.open(), thread_name, wake),
             snapshot: ContactSnapshot::default(),
             dialog_open: false,
             draft: Vec::new(),
             paths,
-            thread_name,
-            wake,
             requested: String::new(),
         }
     }
@@ -85,9 +72,9 @@ impl ContactEditor {
 
     /// Asks the directory about `typed`, unless it was the last thing asked.
     ///
-    /// Text that is not a callsign asks nobody: a half-typed field and a
+    /// Text that is not a callsign asks nothing: a half-typed field and a
     /// garbled identifier both arrive here, and neither is a station worth
-    /// putting a question to somebody's logger about.
+    /// looking up.
     pub fn look_up(&mut self, typed: &str) {
         let Some(callsign) = normalize_callsign(typed) else {
             self.requested.clear();
@@ -104,23 +91,6 @@ impl ContactEditor {
     /// again the next time it is typed.
     pub fn forget_request(&mut self) {
         self.requested.clear();
-    }
-
-    /// Asks the logger about `typed` again, whatever the store holds.
-    pub fn refresh(&mut self, typed: &str) {
-        let Some(callsign) = normalize_callsign(typed) else {
-            return;
-        };
-        self.worker.refresh(&callsign);
-        self.requested = callsign;
-    }
-
-    /// Whether asking the logger again is something this station can do.
-    ///
-    /// A control that would do nothing is not offered: with the lookup off, or
-    /// with no callsign to ask about, there is nobody to ask again.
-    pub fn can_refresh(settings: &ContactSettings, typed: &str) -> bool {
-        settings.lookup && normalize_callsign(typed).is_some()
     }
 
     /// Opens the dialog on what is filed under the station last answered for.
@@ -164,7 +134,7 @@ impl ContactEditor {
     ///
     /// A row the operator emptied is dropped rather than left alone: clearing
     /// a value is how a wrong one is taken back, and a write that only ever
-    /// added would hand it straight back on the next lookup. A row whose name
+    /// added would leave it filed. A row whose name
     /// no `${...}` expression could hold is kept in the dialog to be corrected
     /// and left out of the store. Nothing is written when nothing changed.
     pub fn commit(&mut self, typed: &str) {
@@ -197,25 +167,6 @@ impl ContactEditor {
         self.worker.save(record, dropped);
     }
 
-    /// Asks the logger `settings` now name, or nobody.
-    ///
-    /// The running worker is told rather than replaced, behind whatever it was
-    /// already asked: replacing it would wait in this frame for a lookup that
-    /// can be waiting on the network, and would let a save queued on the old
-    /// one land after the new one had already read the store. A worker that
-    /// could not open its directory has stopped, and is opened again. What it
-    /// last answered is set aside either way, and the next lookup asks again.
-    pub fn reconfigure(&mut self, settings: &ContactSettings) {
-        if self.worker.is_running() {
-            self.worker
-                .use_remote(self.paths.remote(settings.lookup, &settings.wavelog_url));
-        } else {
-            self.worker = spawn(settings, &self.paths, &self.thread_name, &self.wake);
-        }
-        self.snapshot = ContactSnapshot::default();
-        self.requested.clear();
-    }
-
     /// Reads what the worker published, returning whether the fields changed.
     pub fn poll(&mut self) -> bool {
         let latest = self.worker.latest();
@@ -223,20 +174,6 @@ impl ContactEditor {
         self.snapshot = latest;
         changed
     }
-}
-
-fn spawn(
-    settings: &ContactSettings,
-    paths: &ContactPaths,
-    thread_name: &str,
-    wake: &Arc<dyn Fn() + Send + Sync>,
-) -> ContactWorker {
-    let wake = Arc::clone(wake);
-    ContactWorker::spawn(
-        paths.open(settings.lookup, &settings.wavelog_url),
-        thread_name.to_owned(),
-        move || wake(),
-    )
 }
 
 impl core::fmt::Debug for ContactEditor {

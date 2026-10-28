@@ -505,30 +505,3 @@ fn a_field_no_catalogue_knows_stands_under_its_own_name() {
 
     harness.get_by_label("club");
 }
-
-#[test]
-fn the_settings_menu_carries_the_directory() {
-    let app = App::headless();
-    let model = menu::model(&app);
-    let items = grayline_shell::menu::flatten(&model);
-    assert!(
-        items.iter().any(|item| matches!(
-            item,
-            menu::Item::Check {
-                action: menu::Action::ToggleContactLookup,
-                ..
-            }
-        )),
-        "the lookup switch is not on the menu"
-    );
-    assert!(
-        items.iter().any(|item| matches!(
-            item,
-            menu::Item::Command {
-                action: menu::Action::WriteContactCredentials,
-                ..
-            }
-        )),
-        "writing the credentials file is not on the menu"
-    );
-}

@@ -28,7 +28,7 @@ pub enum AppError {
     },
     #[error("reception could not be restarted after a capture overrun")]
     CaptureRestartFailed,
-    /// A contact lookup failed.
+    /// The contact directory failed.
     ///
     /// Behind an [`Arc`] because it carries a store failure that is not
     /// cloneable, and the snapshot holding it is cloned every frame.

@@ -368,7 +368,6 @@ impl App {
             &settings,
             ContactPaths {
                 store: grayline_qso::default_store_path(),
-                credentials: grayline_qso::default_credentials_path(),
             },
             waker,
             platform::host(),
@@ -408,10 +407,8 @@ impl App {
                 common: CommonConfig::detached(),
             },
             &settings,
-            // Nothing named, so the store is held in memory and no logger is
-            // reached: the suite must neither write into the directory the
-            // operator's applications share nor put a question to the logger
-            // whose key sits beside it.
+            // Nothing named, so the store is held in memory: the suite must not
+            // write into the directory the operator's applications share.
             ContactPaths::default(),
             Waker::default(),
             platform,
@@ -465,7 +462,7 @@ impl App {
             tx_error: None,
             device_fault: None,
             ui_scale: shared.ui_scale,
-            directory: ContactEditor::new(&settings.contact, contact_paths, "grayline-sstv-contact".to_owned(), {
+            directory: ContactEditor::new(contact_paths, "grayline-sstv-contact".to_owned(), {
                 let waker = waker.clone();
                 move || waker.wake()
             }),
@@ -710,14 +707,6 @@ impl App {
         self.directory.look_up(&self.qso.call);
     }
 
-    pub fn refresh_contact(&mut self) {
-        self.directory.refresh(&self.qso.call);
-    }
-
-    pub fn can_refresh_contact(&self) -> bool {
-        ContactEditor::can_refresh(&self.settings.contact, &self.qso.call)
-    }
-
     pub fn open_contact(&mut self) {
         self.directory.open(&self.settings.contact.fields);
     }
@@ -728,34 +717,6 @@ impl App {
 
     pub fn commit_contact(&mut self) {
         self.directory.commit(&self.qso.call);
-    }
-
-    /// Turns asking the operator's own logger on or off, and asks again.
-    pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.settings.contact.lookup == lookup {
-            return;
-        }
-        self.settings.contact.lookup = lookup;
-        self.directory.reconfigure(&self.settings.contact);
-        self.look_up_contact();
-    }
-
-    /// Writes the credentials file out for the operator to edit.
-    ///
-    /// Refuses to write over one that is already there, the way the rig script
-    /// does: the file only exists because someone put a key in it.
-    pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.directory.paths().credentials.clone() else {
-            return;
-        };
-        let written = if path.exists() {
-            Ok(path)
-        } else {
-            grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
-                .map(|()| path)
-                .map_err(|error| io::Error::other(error.to_string()))
-        };
-        self.report_written(written);
     }
 
     fn poll_contact(&mut self) {

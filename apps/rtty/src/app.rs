@@ -167,7 +167,6 @@ impl App {
             &settings,
             ContactPaths {
                 store: grayline_qso::default_store_path(),
-                credentials: grayline_qso::default_credentials_path(),
             },
             waker,
             grayline_shell::platform::host(),
@@ -211,7 +210,7 @@ impl App {
             contact: Contact::default(),
             macros: library.macros,
             templates: library.templates,
-            directory: ContactEditor::new(&settings.contact, contact_paths, "grayline-rtty-contact".to_owned(), {
+            directory: ContactEditor::new(contact_paths, "grayline-rtty-contact".to_owned(), {
                 let waker = waker.clone();
                 move || waker.wake()
             }),
@@ -676,14 +675,6 @@ impl App {
         self.directory.look_up(&self.contact.callsign);
     }
 
-    pub fn refresh_contact(&mut self) {
-        self.directory.refresh(&self.contact.callsign);
-    }
-
-    pub fn can_refresh_contact(&self) -> bool {
-        ContactEditor::can_refresh(&self.settings.contact, &self.contact.callsign)
-    }
-
     pub fn open_contact(&mut self) {
         self.directory.open(&self.settings.contact.fields);
     }
@@ -694,46 +685,6 @@ impl App {
 
     pub fn commit_contact(&mut self) {
         self.directory.commit(&self.contact.callsign);
-    }
-
-    /// Turns asking the operator's own logger on or off, and asks again.
-    pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.settings.contact.lookup == lookup {
-            return;
-        }
-        self.settings.contact.lookup = lookup;
-        self.directory.reconfigure(&self.settings.contact);
-        self.look_up_contact();
-    }
-
-    /// Writes the credentials file out for the operator to edit.
-    ///
-    /// Refuses to write over one that is already there: the file only exists
-    /// because someone put a key in it.
-    pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.directory.paths().credentials.clone() else {
-            return;
-        };
-        if !path.exists()
-            && let Err(error) = grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
-        {
-            let message = self.i18n.text("error-credentials");
-            self.notice = Some(format!("{message}: {error}"));
-            return;
-        }
-        self.notice = Some(self.i18n.text_with(
-            "contact-credentials-written",
-            &[("path", grayline_shell::i18n::owned(path.display().to_string()))],
-        ));
-        // The file sits in the directory the whole family shares rather than
-        // in this application's own, so the folder it is in is opened rather
-        // than the one the File menu offers.
-        if let Some(directory) = path.parent()
-            && let Err(error) = self.platform.open_path(directory)
-        {
-            let message = self.i18n.text("error-open-folder");
-            self.notice = Some(format!("{message}: {error}"));
-        }
     }
 
     fn poll_contact(&mut self) {
