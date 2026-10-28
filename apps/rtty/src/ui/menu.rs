@@ -18,6 +18,7 @@ pub enum Action {
     ShowStation,
     ToggleContactLookup,
     WriteContactCredentials,
+    ToggleLoggerSend,
     SelectDevice(String),
     SelectOutputDevice(String),
     SelectLocale(Locale),
@@ -87,6 +88,11 @@ pub fn model(app: &App) -> Vec<Menu> {
                             action: Action::WriteContactCredentials,
                         },
                     ],
+                },
+                Item::Check {
+                    label: text("action-logger-send"),
+                    checked: app.settings.logger.enabled,
+                    action: Action::ToggleLoggerSend,
                 },
                 Item::Separator,
                 Item::Submenu {
@@ -162,6 +168,7 @@ pub fn apply(app: &mut App, action: Action) -> bool {
         Action::ShowStation => app.open_station(),
         Action::ToggleContactLookup => app.set_contact_lookup(!app.settings.contact.lookup),
         Action::WriteContactCredentials => app.write_contact_credentials(),
+        Action::ToggleLoggerSend => app.set_logger_enabled(!app.settings.logger.enabled),
         Action::SelectDevice(name) => app.select_device_named(&name),
         Action::SelectOutputDevice(name) => app.select_output_device_named(&name),
         Action::SelectLocale(locale) => app.select_locale(locale),

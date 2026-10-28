@@ -6,6 +6,7 @@ use std::{
     time::Instant,
 };
 
+use grayline_logger_link::set_message;
 use grayline_qso::{ContactRow, ContactSnapshot, ContactState};
 use grayline_rtty::{ToneSet, rx::ChannelLevels};
 use grayline_shell::{
@@ -16,7 +17,7 @@ use rstest::rstest;
 
 use super::*;
 use crate::{
-    test_util::{FakeKeyer, refused_port},
+    test_util::{FakeKeyer, FakeLogger, refused_port},
     worker::transmit::{OutputSnapshot, TxPhase},
 };
 
@@ -1086,4 +1087,94 @@ fn a_field_the_operator_emptied_is_dropped() {
     app.poll_contact();
 
     assert_eq!(app.directory.snapshot.fields.get("grid"), None);
+}
+
+fn logged(app: &mut App) -> FakeLogger {
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger
+}
+
+#[test]
+fn switching_the_logger_on_sends_what_the_panel_already_holds() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+
+    let logger = logged(&mut app);
+
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("CALL", "JA1ABC"), ("RST_SENT", macros::DEFAULT_RST)]))
+    );
+}
+
+#[test]
+fn settled_contact_fields_are_sent_to_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.name = "TARO".to_owned();
+    app.contact.qth = "TOKYO".to_owned();
+    app.contact.rst_received = "579".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[
+            ("CALL", "JA1ABC"),
+            ("NAME", "TARO"),
+            ("QTH", "TOKYO"),
+            ("RST_RCVD", "579"),
+        ]))
+    );
+
+    app.finish_contact_edit();
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_callsign_taken_from_the_text_reaches_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.set_contact_callsign("ja1abc");
+
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+}
+
+#[test]
+fn clearing_the_contact_clears_what_was_sent_to_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.rst_sent = "559".to_owned();
+    app.finish_contact_edit();
+    logger.received();
+
+    app.clear_contact();
+
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("CALL", ""), ("RST_SENT", macros::DEFAULT_RST)]))
+    );
+}
+
+#[test]
+fn an_address_the_logger_cannot_be_at_is_reported() {
+    let mut app = App::headless();
+    app.settings.logger.address = "logger.invalid".to_owned();
+
+    app.set_logger_enabled(true);
+
+    assert!(
+        app.notice
+            .as_deref()
+            .is_some_and(|notice| notice.contains("logger.invalid")),
+        "{:?}",
+        app.notice
+    );
 }

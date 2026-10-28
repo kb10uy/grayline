@@ -6,6 +6,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use grayline_logger_link::LoggerLink;
 use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_rig_control::{Keying, RigControlError, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
@@ -93,6 +94,9 @@ pub struct App {
     pub templates: Vec<Template>,
     /// The contact directory, what it last answered, and the dialog editing it.
     pub directory: ContactEditor,
+    /// Where the contact fields are sent for the operator's logger to fill its
+    /// entry form from.
+    logger: LoggerLink,
     /// Whether the window naming this station is open.
     pub station_dialog_open: bool,
     /// The rows the window is editing.
@@ -168,6 +172,7 @@ impl App {
             waker,
             grayline_shell::platform::host(),
         );
+        app.open_logger();
         // Either file can be the unreadable one, and the first of them the
         // operator is told about is the one worth reporting: a second notice
         // would only replace the first before it had been read.
@@ -212,6 +217,7 @@ impl App {
                 "grayline-rtty-contact".to_owned(),
                 move || waker.wake(),
             ),
+            logger: LoggerLink::default(),
             station_dialog_open: false,
             variables_draft: Vec::new(),
             scope,
@@ -237,7 +243,10 @@ impl App {
 
     #[cfg(test)]
     pub fn headless_on(platform: Box<dyn Platform>) -> Self {
-        let settings = Settings::default();
+        let settings = Settings {
+            logger: crate::test_util::logger_sink(),
+            ..Settings::default()
+        };
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
             AudioState::disconnected(worker_settings(&settings)),
@@ -627,6 +636,7 @@ impl App {
     pub fn set_contact_callsign(&mut self, callsign: &str) {
         self.contact.callsign = text::normalize(callsign);
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     /// Takes up the contact fields once the operator has left one.
@@ -650,6 +660,7 @@ impl App {
         // anything was trimmed, and the request guards itself against being
         // made twice for one station.
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     /// Empties the contact fields, ready for the next station.
@@ -659,6 +670,7 @@ impl App {
     pub fn clear_contact(&mut self) {
         self.contact.clear();
         self.directory.forget_request();
+        self.reflect_to_logger();
     }
 
     fn look_up_contact(&mut self) {
@@ -728,7 +740,52 @@ impl App {
     fn poll_contact(&mut self) {
         if self.directory.poll() {
             self.adopt_contact_fields();
+            self.reflect_to_logger();
         }
+    }
+
+    /// Turns sending the contact fields to the operator's logger on or off,
+    /// and sends them at once when it was turned on.
+    pub fn set_logger_enabled(&mut self, enabled: bool) {
+        if self.settings.logger.enabled == enabled {
+            return;
+        }
+        self.settings.logger.enabled = enabled;
+        self.open_logger();
+        self.reflect_to_logger();
+    }
+
+    fn open_logger(&mut self) {
+        self.logger = match LoggerLink::open(&self.settings.logger) {
+            Ok(link) => link,
+            Err(error) => {
+                self.report_logger_error(&error);
+                LoggerLink::default()
+            }
+        };
+    }
+
+    /// Fills the logger's entry form in from the contact fields.
+    ///
+    /// The frequency and the mode are left to the logger, which reads them
+    /// from the rig itself. Called where a field is settled rather than on
+    /// every keystroke, so the logger is not handed half a callsign.
+    fn reflect_to_logger(&mut self) {
+        let fields = [
+            ("CALL", self.contact.callsign.as_str()),
+            ("NAME", self.contact.name.as_str()),
+            ("QTH", self.contact.qth.as_str()),
+            ("RST_SENT", self.contact.rst_sent.as_str()),
+            ("RST_RCVD", self.contact.rst_received.as_str()),
+        ];
+        if let Err(error) = self.logger.reflect(fields) {
+            self.report_logger_error(&error);
+        }
+    }
+
+    fn report_logger_error(&mut self, error: &grayline_logger_link::LinkError) {
+        let message = self.i18n.text("error-logger");
+        self.notice = Some(format!("{message}: {error}"));
     }
 
     /// Writes what the directory answered into the fields left empty.

@@ -1,12 +1,14 @@
+use grayline_logger_link::LoggerSettings;
 use grayline_rig_control::{DEFAULT_PORT_NAME, RigControlError, RigError, script::ScriptError};
 
 use std::{
     env, fs,
     io::{BufRead, BufReader, BufWriter, Write},
-    net::TcpListener,
+    net::{TcpListener, UdpSocket},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     thread,
+    time::Duration,
 };
 
 /// A directory shared by every headless application in the suite.
@@ -80,5 +82,48 @@ impl FakeKeyer {
 
     pub fn received(&self) -> Vec<String> {
         self.received.lock().unwrap().clone()
+    }
+}
+
+/// Where a headless application sends the contact to the logger.
+///
+/// A socket of the suite's own, held open for the whole run so its port is
+/// never handed to anything else, and never read. The default address is the
+/// logger's own, and a test that switches the sending on — applying every menu
+/// action does — would otherwise fill in the entry form of a logger the
+/// operator has running.
+pub(crate) fn logger_sink() -> LoggerSettings {
+    static SINK: LazyLock<UdpSocket> = LazyLock::new(|| UdpSocket::bind("127.0.0.1:0").unwrap());
+    LoggerSettings {
+        enabled: false,
+        address: SINK.local_addr().unwrap().to_string(),
+    }
+}
+
+/// A stand-in for the logger, receiving what an application sends it.
+pub(crate) struct FakeLogger {
+    socket: UdpSocket,
+}
+
+impl FakeLogger {
+    pub(crate) fn listen() -> Self {
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+        Self { socket }
+    }
+
+    /// The settings that send to this logger, switched off.
+    pub(crate) fn settings(&self) -> LoggerSettings {
+        LoggerSettings {
+            enabled: false,
+            address: self.socket.local_addr().unwrap().to_string(),
+        }
+    }
+
+    /// The next datagram, or `None` once nothing has arrived for a while.
+    pub(crate) fn received(&self) -> Option<String> {
+        let mut buffer = [0; 4096];
+        let (length, _) = self.socket.recv_from(&mut buffer).ok()?;
+        Some(String::from_utf8(buffer[..length].to_vec()).unwrap())
     }
 }

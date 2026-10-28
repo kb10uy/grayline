@@ -407,7 +407,7 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-rig` | None |
 | `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |
-| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
+| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-logger-link`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
 | `grayline-rtty-cli` | `grayline-rtty`, `grayline-wav` |
 | `grayline-keyer-protocol` | `grayline-rig`, `grayline-rtty` |
 | `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
