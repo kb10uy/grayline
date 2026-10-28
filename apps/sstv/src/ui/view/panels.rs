@@ -381,9 +381,19 @@ fn followed_qso_panel(ui: &mut Ui, app: &mut App) {
     let mut opening = false;
     ui.horizontal(|ui| {
         field_label(ui, &call_label);
-        let details_width = ui.spacing().interact_size.y;
-        let mut call = app.qso.call.as_str();
-        ui.add(egui::TextEdit::singleline(&mut call).desired_width(fields - details_width - gap));
+        let height = ui.spacing().interact_size.y;
+        ui.allocate_ui_with_layout(
+            egui::vec2(fields - height - gap, height),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.set_min_size(egui::vec2(fields - height - gap, height));
+                ui.add(
+                    egui::Label::new(RichText::new(app.qso.call.as_str()).strong())
+                        .selectable(true)
+                        .truncate(),
+                );
+            },
+        );
         let usable = grayline_qso::normalize_callsign(&app.qso.call).is_some();
         opening = ui
             .add_enabled(usable, egui::Button::new("\u{2026}"))

@@ -483,15 +483,24 @@ fn the_contact_fields_give_way_to_the_loggers_form() {
     logger.share(&[("CALL", "JA1ABC")]);
     app.await_logger(|app| app.contact.callsign == "JA1ABC");
     let synced = app.i18n.text("logger-synced");
+    let call = app.i18n.text("label-his-call");
     let name = app.i18n.text("label-his-name");
     let clear = app.i18n.text("action-clear-contact");
 
-    let harness = render(&mut app);
+    let mut harness = Harness::new_ui(|ui| {
+        let model = menu::model(&app);
+        view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
+    });
+    grayline_shell::fonts::install(&harness.ctx);
+    harness.run();
 
     harness.get_by_label(&synced);
     harness.get_by_label("…");
     assert!(harness.query_by_label(&name).is_none());
     assert!(harness.query_by_label(&clear).is_none());
+    let label = harness.get_by_label(&call).rect().center().y;
+    let followed = harness.get_by_label("JA1ABC").rect().center().y;
+    assert!((label - followed).abs() < 0.5, "{label} against {followed}");
 }
 
 #[test]

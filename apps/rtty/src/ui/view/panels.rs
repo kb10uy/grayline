@@ -317,10 +317,17 @@ fn followed_contact_panel(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         field_label(ui, &label);
         let height = ui.spacing().interact_size.y;
-        let mut callsign = app.contact.callsign.as_str();
-        ui.add_sized(
-            [fields - height - gap, height],
-            egui::TextEdit::singleline(&mut callsign),
+        ui.allocate_ui_with_layout(
+            egui::vec2(fields - height - gap, height),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.set_min_size(egui::vec2(fields - height - gap, height));
+                ui.add(
+                    egui::Label::new(RichText::new(app.contact.callsign.as_str()).strong())
+                        .selectable(true)
+                        .truncate(),
+                );
+            },
         );
         let known = grayline_qso::normalize_callsign(&app.contact.callsign).is_some();
         opening = ui
