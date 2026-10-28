@@ -25,8 +25,8 @@ A record is a callsign and a table of fields under it. A callsign is trimmed and
 uppercased on the way in, and text that is not a callsign is refused rather than
 stored — three to sixteen characters of `[A-Z0-9/]` holding at least one digit
 and at least one letter. Refusing rather than accepting whatever arrived is what
-keeps a half-typed field and a garbled FSK identifier from becoming a question
-put to somebody's logger.
+keeps a half-typed field and a garbled FSK identifier from being filed as a
+station.
 
 A key is one identifier segment: a letter or underscore, then letters, digits
 and underscores. The rule is not arbitrary. A key is read from a template as
@@ -43,31 +43,31 @@ outright, so a record can never shadow the field the operator typed.
 Naming a key, filling it in, and putting a field on screen for it are three
 different questions, and running them together is what produced a dialog of
 fourteen rows nobody wanted. The keys are named here so that the same fact
-arrives under the same name whichever source it came from. Which of them an
+arrives under the same name whether it was typed or imported. Which of them an
 application shows is settled separately, by the operator; see
 [the fields a station uses](#the-fields-a-station-uses).
 
-| Key | Wavelog field | ADIF field |
-| --- | --- | --- |
-| `name` | `name` | `NAME` |
-| `name_latin` | — | — |
-| `qth` | `location` | `QTH` |
-| `qth_latin` | — | — |
-| `grid` | `gridsquare` | `GRIDSQUARE` |
-| `jcc` | — | — |
-| `dxcc` | `dxcc` (the entity name) | `COUNTRY` |
-| `dxcc_id` | `dxcc_id` | `DXCC` |
-| `cq_zone` | `dxcc_cqz` | `CQZ` |
-| `itu_zone` | — | `ITUZ` |
-| `continent` | `cont` | `CONT` |
-| `state` | `state` | `STATE` |
-| `county` | `us_county` | `CNTY` |
-| `iota` | `iota_ref` | `IOTA` |
-| `qsl_manager` | `qsl_manager` | `QSL_VIA` |
-| `email` | — | `EMAIL` |
-| `note` | — | `COMMENT`, else `NOTES` |
+| Key | ADIF field |
+| --- | --- |
+| `name` | `NAME` |
+| `name_latin` | — |
+| `qth` | `QTH` |
+| `qth_latin` | — |
+| `grid` | `GRIDSQUARE` |
+| `jcc` | — |
+| `dxcc` | `COUNTRY` |
+| `dxcc_id` | `DXCC` |
+| `cq_zone` | `CQZ` |
+| `itu_zone` | `ITUZ` |
+| `continent` | `CONT` |
+| `state` | `STATE` |
+| `county` | `CNTY` |
+| `iota` | `IOTA` |
+| `qsl_manager` | `QSL_VIA` |
+| `email` | `EMAIL` |
+| `note` | `COMMENT`, else `NOTES` |
 
-Four of them no source fills in, and they are named anyway because a key that
+Three of them no import fills in, and they are named anyway because a key that
 is only ever typed still has to be spelled the same way by everyone who reads
 it. `name_latin` and `qth_latin` exist because **ITA2 carries no kanji**: a
 station keeping a contact's name in its own script has nothing RTTY can send,
@@ -80,14 +80,9 @@ A record is not limited to these. Whatever else the operator files keeps its own
 name and is read back under it, which is what makes `${contact.rig}` printable
 without anything here changing.
 
-Everything an upstream source says about *contacts* is dropped on the way in.
-From Wavelog that is `call_worked`, `call_confirmed`, `dxcc_confirmed` and
-`lotw_member`, and v2's `workedBefore`; from ADIF it is `BAND`, `MODE`, `FREQ`,
-the reports and the QSL fields. `bearing`, `dxcc_lat` and `dxcc_long` are
-dropped for a different reason: the bearing is computed from the asking station's own grid rather than
-being a property of the station asked about, and the latitude and longitude give
-the DXCC entity's centroid, which would contradict a real QTH printed beside
-them. The operator's own side of a logged contact — `OPERATOR`,
+Everything an ADIF log says about *contacts* is dropped on the way in: `BAND`,
+`MODE`, `FREQ`, the reports and the QSL fields. The operator's own side of a
+logged contact — `OPERATOR`,
 `STATION_CALLSIGN`, everything under `MY_` — describes the station reading the
 file rather than the one it is filed under.
 
@@ -117,7 +112,7 @@ the shorthand cannot drift from what it stands for.
 
 Groups expand where they are written, so the order is the operator's own, and a
 key named twice appears once and where it first appeared. `["!core"]` is the
-default: three fields, which is what a contact is worth looking up for at all.
+default: three fields, which is what a contact is worth filing at all.
 An empty list is taken as written — an operator who asked for no fields wants a
 dialog holding only what the station already has, and handing the default back
 would be arguing with them.
@@ -155,9 +150,10 @@ CREATE TABLE station_field (
 ```
 
 A key and value table rather than a wide one, because the model is a map and the
-key set is open. `station` carries the lookup history rather than a field,
-because a station a lookup found nothing for is still one the store has to
-remember asking about. Timestamps are RFC 3339 UTC text written with `jiff`,
+key set is open. `station` still carries `looked_up_at` and `found`, the history
+of the Wavelog lookup an earlier build kept. Nothing reads or writes them now,
+and they stay rather than costing every store a migration for two columns that
+take no room. Timestamps are RFC 3339 UTC text written with `jiff`,
 which is what the rest of this project describes time with.
 
 The shape is held in SQLite's own `PRAGMA user_version` rather than in a table
@@ -177,143 +173,55 @@ self-contained file.
 
 ### Origins, and why the operator always wins
 
-Every field records where it came from, and the three sources are ordered:
+Every field records where it came from, and the sources are ordered:
 `adif` < `wavelog` < `manual`. A write happens only when the origin doing the
 writing is at least as strong as the one that wrote what is there. So an import
-or a lookup fills in what is missing and refreshes what another import or lookup
-put there, and neither can displace a value the operator typed. An origin the
+fills in what is missing and refreshes what another import put there, and
+cannot displace a value the operator typed. Nothing writes `wavelog` any more;
+it is what the lookup an earlier build made filed, and it is still read so that
+what the operator types displaces it rather than the field reading as an
+origin this build does not know. An origin the
 file holds that the build does not recognize is read as the strongest there is:
 a newer build wrote it, and guessing it weaker would be a way to lose it.
 
 Dropping a field is its own operation rather than re-filing the record that is
 left, because re-filing would stamp every surviving field with the origin doing
-it and quietly turn a fetched value into one no later lookup will ever refresh.
+it and quietly turn an imported value into one no later import will ever refresh.
 
-## The lookup
+## No lookup
 
-The store first. The logger only when the store has nothing recent enough to
-say: a callsign that has never been asked about and has nothing filed under it,
-or one whose last answer is older than thirty days, or whose last answer of
-"nothing" is older than a day. Thirty days because what this keeps is what a
-station *is* — a name does not change and a QTH changes on the scale of house
-moves; a day for a miss because a station absent from the callbook last week may
-be in it today, and a new licensee is exactly the operator whose details are
-worth having.
+Earlier builds asked the operator's own Wavelog about a station the store had
+nothing recent to say about, over its API, with a key kept in a
+`credentials.toml` of the family's. That went once the applications came to
+follow jl1his-logger's entry form ([logger-link.md](logger-link.md)). The
+logger is where the contact is typed and logged, and a second source for the
+station's name and QTH beside it was a second answer that could disagree, at
+the price of an HTTP client, a TLS stack, a credential on disk, and a request
+to a server on every new station.
 
-A logger that refuses is reported beside what the store knew rather than instead
-of it: a Wavelog that is down is no reason to forget what is already filed, and
-the operator with no network is the one who most needs the cached answer. A
-failure is also not recorded as having asked, because nothing was learned and
-the next attempt should not be held off.
+What stays is the store, as the data the templates and the macros read:
+filled by hand in the contact dialog or with `gl-qso set`, and by importing an
+ADIF log. A `credentials.toml` an earlier build read is no longer read, and can
+be deleted.
 
-### Wavelog
-
-Wavelog has two APIs, and both are spoken. Which one a request uses is not a
-setting: the key already says, and a version the operator had to name as well
-would only be a second place to get it wrong — one whose wrong answer looks
-exactly like a bad key.
-
-| | v1 | v2 |
-| --- | --- | --- |
-| Wavelog | 1.8.6 on | 3.1.0 on |
-| Request | `POST /api/private_lookup` | `GET /api/v2/lookup?callsign=…&detail=basic` |
-| Key | `key` in the JSON body | `Authorization: Bearer …` |
-| Key form | any | prefixed `wl2_` |
-| Permission | a read key | the `lookup:read` scope |
-| Answer | the fields themselves | `{"data": …, "meta": …}` |
-| Refusal | as the endpoint sees fit | `{"error": {"code", "message", "details"}}` |
-
-Wavelog refuses a v1 key on the v2 endpoints and a v2 token on the v1 ones, so
-the prefix is not a guess that a mistake could leave undetected: a key sorted
-wrongly could only be a key that would not have worked either way.
-
-Installations differ on whether `index.php` is in the path, so the client tries
-the direct path for its API, retries once on a 404 with the `index.php` one, and
-remembers which answered.
-
-`band` and `mode` are left out of both requests. They decide only the worked and
-confirmed flags, and this reads none of them. So is the callbook, which both
-APIs answer in a nested `callbook` object this does not read and which sets the
-instance off on an external lookup of its own to fill. For the same reason v2 is
-asked for `detail=basic` rather than `full`: everything `full` adds is a fact
-about a contact, and it is the per-band confirmation queries that produce it.
-
-Both APIs spell the fields the same, so one table maps them; v2's answer is
-taken out of the `data` envelope first, and a 200 arriving without one is
-reported as unreadable rather than read as a station the instance knows nothing
-about. The answer is read field by field out of a `serde_json::Value` rather
-than into a derived type. The rule this project actually keeps is that *its own* persisted
-formats are hand-mapped so a hand-edited file survives a save, which is why the
-settings walk a `toml_edit` document key by key. Wavelog's answer is a foreign
-document, read once, never written back, and with its unknown keys deliberately
-discarded; reading it a field at a time is the same house style applied to a
-second format rather than a departure from it. A field that is absent, null, or
-empty is dropped rather than filed, because a stored empty value would read back
-as an answer and would occupy the place a later real one should fill. An
-instance that does not know a callsign answers with a success whose fields are
-empty, so "found" means the mapped record holds something rather than that the
-request succeeded.
-
-An error carries the status and the host and never the request or the body: the
-key rides in the body on v1 and in a header on v2, and an error quoting the
-exchange would put it wherever the interface prints errors. It is kept out of
-the v2 query string for the same reason — a URL is what a proxy and an access
-log keep.
-
-### Cloudlog is not supported, and that is a decision
-
-Cloudlog's rich `lookup()` endpoint authenticates with a session cookie rather
-than with an API key, so it cannot be reached by a program that is not a browser
-someone has logged into. The one endpoint an API key does open,
-`logbook_check_callsign`, answers `{"callsign": …, "result": "Found"}` and
-nothing else: no name, no grid, no QTH, nothing a template could print. What it
-does answer is whether the station has been worked before, which is a fact about
-a contact and precisely the kind of thing this directory exists not to keep.
-Offering a source that can only answer a question the feature does not ask would
-be worse than offering none.
-
-### Where the key lives
-
-Not in the application's settings file. That file is rewritten at the end of any
-frame that changed a setting, by code that has no idea it is handling a
-credential; it sits beside the rig script and the band plan; the File menu
-offers to open it; and it is the first thing anyone pastes into a bug report. A
-secret in a file whose whole design is "open this and read it" is a secret that
-leaks through the routine action the project encourages.
-
-It lives in `<config_dir>/Grayline/credentials.toml`, shared by the family,
-created with mode `0600` where the platform has one, read and never written
-back. `GRAYLINE_WAVELOG_KEY` overrides it, and `GRAYLINE_WAVELOG_URL` overrides
-the address, which is what a station run from a script or a container uses —
-the same arrangement `grayline_shell`'s manual URL already has. The settings
-file carries the switch and the instance's address only:
+## Settings
 
 ```toml
 [qso]
-lookup = true
-
-[qso.wavelog]
-url = "https://log.example.org"
+fields = ["!core"]
 ```
-
-Under `[qso]` rather than a section of its own, beside the serial number that
-panel already counts: the callsign in it is what a lookup is about, and
-separating the two halves of one thing would only make the file harder to read.
-
-The address is written even while it is empty, for the same reason the rig ports
-are: this file is where it is edited, and an operator who has to invent the key
-before they can change it has no way to learn it exists.
 
 `grayline-qso::ContactSettings` is what the section holds, and its `read` and
 `write` are the only code that parses or writes it: each application finds the
 `[qso]` table in its own file, hands it over with the defaults it starts on,
 and leaves its own keys in that table, such as SSTV's serial number, alone.
+The `lookup` switch and the `[qso.wavelog]` address an earlier build wrote are
+taken out on the next save, because a file that still offered them would be
+offering a switch that does nothing.
 
-Both paths are named by whoever builds the worker rather than discovered inside
-it. A discovered path is one a test cannot escape: the suite would otherwise
-write its store into the operator's own directory and read the operator's own
-API key, and a headless application putting questions to a live logger is not
-something a test run should be able to do.
+The store's path is named by whoever builds the worker rather than discovered
+inside it. A discovered path is one a test cannot escape: the suite would
+otherwise write its store into the operator's own directory.
 
 ## ADIF import
 
@@ -358,43 +266,32 @@ and inspected while there is no operator-facing import.
 ```text
 gl-qso [--store <PATH>] <COMMAND>
 
-  path                      where the store and the credentials file are
+  path                      where the store is
   keys                      the keys this build names, and the groups
-  lookup <CALLSIGN>         [--remote] [--refresh] [--url <URL>] [--format table|json]
+  lookup <CALLSIGN>         [--format table|json]
   set <CALLSIGN> <K=V>...   writes at Origin::Manual
   unset <CALLSIGN> <KEY>...
   remove <CALLSIGN>         [--yes]
   list                      [--prefix <TEXT>] [--limit <N>]
   import <FILE.adi>...      [--encoding <utf-8|shift_jis|…>] [--dry-run]
-  credential set            [--url <URL>]
-  credential clear
 ```
 
-`credential set` reads the key from standard input and never from an argument:
-an argument lands in the shell history and in the process list. It writes with
-`create_new` and refuses to replace a file that is there, the way the SSTV
-application refuses to replace a rig script it did not write. A lookup that
-finds nothing exits 3, which clap's own 2 for a misused command line leaves
+A lookup that finds nothing exits 3, which clap's own 2 for a misused command line leaves
 free.
 
 ## In the SSTV application
 
 `grayline-qso::ContactWorker` owns the request channel, directory and published
-snapshot for both desktop applications. `ContactPaths::open` selects the named
-store and optional logger; absent paths keep tests in memory and offline. The
-worker accepts the opened directory, a thread name and a notification callback,
-without depending on egui or application error types. Snapshot errors are shared
-`QsoError` values. `ContactEditor` wraps it for an interface; each application
-hands that its settings and a wake function.
+snapshot for both desktop applications. `ContactPaths::open` opens the named
+store; an absent path keeps tests in memory. The worker accepts the opened
+directory, a thread name and a notification callback, without depending on
+egui or application error types. Snapshot errors are shared `QsoError` values.
+`ContactEditor` wraps it for an interface; each application hands that a wake
+function.
 
-The worker is kept for the session, works with the network switched off, and
-writes corrected records. Turning lookup on or off sends the worker the logger
-to ask from then on, queued behind whatever it was already asked, rather than
-replacing it: a replacement would wait in the frame for a lookup that can be
-waiting on the network, and a save queued on the old worker could land after
-the new one had read the store. Only a worker that could not open its
-directory, and so has stopped, is opened again. Dropping it drains queued
-requests and checkpoints the store before joining the thread.
+The worker is kept for the session and writes corrected records off the thread
+that draws the interface. Dropping it drains queued requests and checkpoints
+the store before joining the thread.
 
 A lookup is asked for when the callsign is **committed**, which is leaving the
 field, and again when an FSK identifier arrives — the identifier path writes the
@@ -402,18 +299,13 @@ field directly and does not pass through the commit. Both go through one guard
 that remembers the callsign last asked about, because the operator leaves the
 field whether or not they changed anything and tabbing through the panel would
 otherwise ask about the same station on every pass. Requests already queued
-behind a slow round trip are collapsed to the last one: every answer but the
+behind a slow write are collapsed to the last one: every answer but the
 last would be about a station the operator has moved on from. A save is never
 collapsed away, because it is what they asked to have written.
 
-Four things together keep the traffic down to about one request per new station
-per month: text that is not a callsign never leaves the process, only a change
-of callsign asks, the store's own lookup history answers for the TTL, and the
-queue collapses.
-
 A failure goes to the status line rather than in front of the interface. Losing
-the audio device stops reception outright and is worth a modal; a lookup that
-failed loses nothing — the callsign is still typed, the template still composes,
+the audio device stops reception outright and is worth a modal; a store that could
+not be read loses nothing — the callsign is still typed, the template still composes,
 and the transmission still goes out.
 
 The dialog opens from a button beside the callsign in the QSO panel rather than
@@ -427,14 +319,13 @@ name laid open for editing. A field the settings named that the build has no
 label for stands under its own name, because a key the operator invented is one
 no catalogue was ever going to know. A field the operator empties is dropped
 rather than left alone: clearing a value is how a wrong one is taken back, and a
-write that only ever added would hand it straight back on the next lookup.
+write that only ever added would leave it filed.
 
 ## In the RTTY application
 
 RTTY uses the same `grayline-qso::ContactWorker` and `ContactSettings` as
 SSTV, and the same `ContactEditor` around them: the lookup that does not ask
-twice, the dialog's rows, what a commit files and drops, and reopening the
-worker when the lookup is switched. Each application hands it the callsign
+twice, the dialog's rows, and what a commit files and drops. Each application hands it the callsign
 field it has. The dialog's widgets and the defaults remain application-owned,
 including the field list a first run offers.
 What differs downstream of the answer follows from ITA2 having no kanji.
@@ -452,7 +343,10 @@ into the fields they left empty, and only those: what is in the panel is what
 they heard on the air. `name_latin` is preferred to `name` and `qth_latin` to
 `qth`, and a value the transmitter has no code for is passed over rather than
 written into a field that would then hold the send button down — the record
-keeps it, and the SSTV application still prints it.
+keeps it, and the SSTV application still prints it. While the logger's entry
+form is followed, what is written goes to the logger as well, so a name the
+store knows fills the logger's empty field rather than being typed there
+([logger-link.md](logger-link.md)).
 
 **The dialog runs no keyboard filter**, unlike every other field here whose
 contents can reach the air. The store is the family's rather than this
@@ -471,12 +365,11 @@ are all as above.
 **Portable callsigns.** `JA1ABC/1` is a different key from `JA1ABC` today.
 [../mmsstv/jasta.md](../mmsstv/jasta.md) records MMJASTA's `ClipCC()` — reduce a
 callsign to the segment carrying a digit, falling back to the one that is
-neither `Q`-initial nor `MM` — and Wavelog answers a `suffix_slash` for the same
-reason. Whether the two should be one entry changes what a key means, so it
+neither `Q`-initial nor `MM`. Whether the two should be one entry changes what a key means, so it
 should be settled deliberately rather than patched in.
 
 **Getting a log in without the tool.** `gl-qso` is not shipped, so an operator
-who does not build from source fills the directory by lookup and by hand. A
+who does not build from source fills the directory by hand. A
 File menu entry would be the follow-up, and it would be the first native file
 dialog in any of these applications.
 

@@ -380,7 +380,7 @@ The workspace currently contains twenty-six packages:
 | `grayline-wav` | Mono WAV reading and writing for the tools and file sources | Implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
 | `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
-| `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
+| `grayline-qso` | Contact directory: shared store, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
 | `grayline-qso-cli` | Contact directory command line, as `gl-qso` | Implemented |
 | `grayline-logger-link` | The contact being worked, sent to jl1his-logger's entry form, and the form followed back | Implemented; described in [logger-link.md](logger-link.md) |
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
@@ -632,8 +632,7 @@ that did not touch it.
 
 The language and the UI scale are not in it. They are the same answer in every
 application of the family, so they live once in `common.toml`, beside the
-per-application directories and beside the shared contact store's credentials,
-under the keys `language` and `ui-scale`. Every application reads it at startup
+per-application directories, under the keys `language` and `ui-scale`. Every application reads it at startup
 and writes it back only when one of the two changes, so a language chosen in
 one is the language the next one opens in. `grayline_shell::common` is the only
 code that touches the file, and comments and unknown keys survive a save there
