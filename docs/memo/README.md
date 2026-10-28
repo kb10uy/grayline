@@ -102,7 +102,8 @@ The Rust implementation: what it is meant to be, and what it currently is.
   stations a template looks a callsign up in, the store behind it, and why it
   is not a log.
 - [grayline/logger-link.md](grayline/logger-link.md): the contact being worked,
-  sent to jl1his-logger's entry form over UDP, and what is left to the logger.
+  sent to jl1his-logger's entry form over UDP, the form followed back while the
+  logger shares it, and what is left to the logger.
 - [grayline/template-design.md](grayline/template-design.md): the portable transmit
   overlay format.
 - [grayline/web-demo.md](grayline/web-demo.md): the browser build of the receive

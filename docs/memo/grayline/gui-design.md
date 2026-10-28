@@ -803,6 +803,11 @@ always a serial: counting pads back to three digits and is allowed to grow past
 them, and a value that is not a number is left as it was typed. The serial
 survives a restart, because a contest outlives a session.
 
+While the operator's logger shares its entry form, the panel gives way to it:
+only the callsign is left, read-only, with the contact-details button beside
+it, and the logger's form fills the fields the templates read. The contact is
+typed into the logger then, as described in [logger-link.md](logger-link.md).
+
 Contest mode, under Settings, is the whole of the decision to give out numbers:
 it enables the serial field and its two buttons, and it is what appends the
 number to the identifier a transmission ends with. The report beside it stays

@@ -353,7 +353,8 @@ The following concerns belong outside the portable DSP and SSTV core:
   [qso-directory.md](qso-directory.md). It is a directory rather than a log,
   and it deliberately keeps nothing about a contact. `grayline-logger-link`
   is the second: it hands the contact being worked to the operator's own
-  logger, described in [logger-link.md](logger-link.md).
+  logger, and follows the logger's entry form back while the logger shares
+  it, described in [logger-link.md](logger-link.md).
 - History, template editing, settings persistence, and application file
   management.
 - Thread scheduling and application-level queue policy.
@@ -381,7 +382,7 @@ The workspace currently contains twenty-six packages:
 | `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
 | `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
 | `grayline-qso-cli` | Contact directory command line, as `gl-qso` | Implemented |
-| `grayline-logger-link` | The contact being worked, sent to jl1his-logger's entry form | Implemented; described in [logger-link.md](logger-link.md) |
+| `grayline-logger-link` | The contact being worked, sent to jl1his-logger's entry form, and the form followed back | Implemented; described in [logger-link.md](logger-link.md) |
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
