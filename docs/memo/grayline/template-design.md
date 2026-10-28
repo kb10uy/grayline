@@ -360,12 +360,10 @@ updates and everybody eventually distrusts. But a template that prints the other
 operator's name is asking for something that station *is* rather than something
 a contact *was*, and that is a different question with an answer worth keeping.
 So what the application keeps is a table from a callsign to what is filed under
-it, filled in by hand, by importing an ADIF the operator already has, or by
-asking their own Wavelog, and read back the next time the same station is
-worked. It is a directory of stations you look things up in, not a log of
+it, filled in by hand or by importing an ADIF the operator already has, and
+read back the next time the same station is worked. It is a directory of stations you look things up in, not a log of
 contacts you keep, and nothing in it records that a contact took place.
-[qso-directory.md](qso-directory.md) describes the store, the lookup, and the
-import.
+[qso-directory.md](qso-directory.md) describes the store and the import.
 
 The evaluation context supplies typed values, including the image used by an
 `rximage` layer. Text interpolation converts only values used in text; images

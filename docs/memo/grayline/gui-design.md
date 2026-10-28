@@ -608,12 +608,9 @@ the settings ask for, whether or not this station has any of them, so it says
 what this operator files rather than only what this contact happens to have —
 and which fields those are is the operator's to write, because a station in
 Japan wants a JCC code and a name RTTY can send where a station elsewhere wants
-neither. Where the directory finds
-what it knows — a store of the operator's own, or their own logger asked over
-the network — is settled in files rather than in a dialog, exactly as the rig's
-address is: an API key belongs in neither the settings file the menu offers to
-open nor a field the interface rewrites. [qso-directory.md](qso-directory.md)
-describes both.
+neither. What the directory knows is a store of the operator's own, filled
+there and by importing an ADIF log; [qso-directory.md](qso-directory.md)
+describes it.
 
 Leaving a field is also what trims it, in that dialog and in the QSO panel
 alike. Every field in both is a value rather than text — a callsign, a report,
@@ -644,10 +641,10 @@ Settings that are chosen once and then left alone live in the menu rather than
 beside the image: whether a transmission ends with the station identifier,
 whether a VIS header may start a reception over, whether a VIS detection
 requires the header's leader tone as well, whether the FSKID carries a contest
-number, whether a callsign is looked up in the contact directory, whether
-receptions are kept, and in what format. Each is a check entry under Settings,
-grouped by what it affects. Beside them sit the commands that write out the
-contact credentials file, `rigcontrol.lua`, and `bands.toml`, and a View menu
+number, whether the contact is linked with the logger, whether receptions are
+kept, and in what format. Each is a check entry under Settings, grouped by what
+it affects. Beside them sit the commands that write out `rigcontrol.lua` and
+`bands.toml`, and a View menu
 zooms the interface in and out through the family-shared `ui-scale`.
 
 The tab selector sits on top of the side panel's first box rather than in a bar
@@ -802,6 +799,11 @@ take it back to `001`. Both are plain text fields, because an exchange is not
 always a serial: counting pads back to three digits and is allowed to grow past
 them, and a value that is not a number is left as it was typed. The serial
 survives a restart, because a contest outlives a session.
+
+While the operator's logger shares its entry form, the panel gives way to it:
+only the callsign is left, read-only, with the contact-details button beside
+it, and the logger's form fills the fields the templates read. The contact is
+typed into the logger then, as described in [logger-link.md](logger-link.md).
 
 Contest mode, under Settings, is the whole of the decision to give out numbers:
 it enables the serial field and its two buttons, and it is what appends the

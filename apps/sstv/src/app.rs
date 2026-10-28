@@ -16,6 +16,7 @@ use grayline_sstv_fskid::{FskId, FskNumber};
 use grayline_sstv_template::valid_variable_name;
 use jiff::{Timestamp, Zoned};
 
+use grayline_logger_link::{FormUpdate, LoggerLink};
 use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_sstv_rx::SyncStart;
 
@@ -164,9 +165,10 @@ pub struct App {
     /// The panels and the menus edit this directly. The station, the serial
     /// number, the library selection, and the devices are kept where they are
     /// worked with and copied in when the settings are persisted. Only whether
-    /// to connect the rig and whether to look a contact up are the interface's
-    /// to change: the rest of those two sections belongs to the station and is
-    /// edited in the configuration file.
+    /// to connect the rig, whether to look a contact up, and whether to send
+    /// it to the logger are the interface's to change: the rest of those
+    /// sections belongs to the station and is edited in the configuration
+    /// file.
     pub settings: Settings,
     pub rx_modes: Vec<Mode>,
     pub tx_modes: Vec<Mode>,
@@ -209,6 +211,16 @@ pub struct App {
     pub ui_scale: f32,
     /// The contact directory, what it last answered, and the dialog editing it.
     pub directory: ContactEditor,
+    /// Where the QSO panel is sent for the operator's logger to fill its entry
+    /// form from, and where that form comes back from.
+    logger: LoggerLink,
+    /// The received report and exchange as the logger last held them.
+    ///
+    /// The panel holds them as one field, and splitting it again reads an
+    /// exchange the logger holds without a report, `012`, as a report. While
+    /// the field still says what the logger said, the logger's own pair is
+    /// what is sent.
+    logger_received: Option<(String, String)>,
     /// What rig control last reported, read once per frame.
     pub rig_snapshot: RigSnapshot,
     /// Where each band is, and what the script does on it.
@@ -356,11 +368,11 @@ impl App {
             &settings,
             ContactPaths {
                 store: grayline_qso::default_store_path(),
-                credentials: grayline_qso::default_credentials_path(),
             },
             waker,
             platform::host(),
         );
+        app.open_logger();
         app.refresh_library();
         app.restore_selection(&settings);
         app.request_composition();
@@ -383,18 +395,20 @@ impl App {
     #[cfg(test)]
     pub(crate) fn headless_on(platform: Box<dyn Platform>) -> Self {
         let scratch = crate::test_util::scratch_dir();
+        let settings = Settings {
+            logger: crate::test_util::logger_sink(),
+            ..Settings::default()
+        };
         Self::from_parts(
-            AudioState::disconnected(rx_settings(&Settings::default())),
+            AudioState::disconnected(rx_settings(&settings)),
             AppPaths::from_roots(grayline_shell::paths::Roots::under(scratch)),
             Stored {
                 config: Config::detached(),
                 common: CommonConfig::detached(),
             },
-            &Settings::default(),
-            // Nothing named, so the store is held in memory and no logger is
-            // reached: the suite must neither write into the directory the
-            // operator's applications share nor put a question to the logger
-            // whose key sits beside it.
+            &settings,
+            // Nothing named, so the store is held in memory: the suite must not
+            // write into the directory the operator's applications share.
             ContactPaths::default(),
             Waker::default(),
             platform,
@@ -448,12 +462,12 @@ impl App {
             tx_error: None,
             device_fault: None,
             ui_scale: shared.ui_scale,
-            directory: ContactEditor::new(
-                &settings.contact,
-                contact_paths,
-                "grayline-sstv-contact".to_owned(),
-                move || waker.wake(),
-            ),
+            directory: ContactEditor::new(contact_paths, "grayline-sstv-contact".to_owned(), {
+                let waker = waker.clone();
+                move || waker.wake()
+            }),
+            logger: LoggerLink::new("grayline-sstv-logger", move || waker.wake()),
+            logger_received: None,
             rig_snapshot: RigSnapshot::default(),
             bands: Arc::new(bands),
             paths,
@@ -686,18 +700,11 @@ impl App {
         // the callsign whether or not trimming changed anything, and the
         // request guards itself against being made twice for one station.
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     fn look_up_contact(&mut self) {
         self.directory.look_up(&self.qso.call);
-    }
-
-    pub fn refresh_contact(&mut self) {
-        self.directory.refresh(&self.qso.call);
-    }
-
-    pub fn can_refresh_contact(&self) -> bool {
-        ContactEditor::can_refresh(&self.settings.contact, &self.qso.call)
     }
 
     pub fn open_contact(&mut self) {
@@ -712,38 +719,113 @@ impl App {
         self.directory.commit(&self.qso.call);
     }
 
-    /// Turns asking the operator's own logger on or off, and asks again.
-    pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.settings.contact.lookup == lookup {
-            return;
-        }
-        self.settings.contact.lookup = lookup;
-        self.directory.reconfigure(&self.settings.contact);
-        self.look_up_contact();
-    }
-
-    /// Writes the credentials file out for the operator to edit.
-    ///
-    /// Refuses to write over one that is already there, the way the rig script
-    /// does: the file only exists because someone put a key in it.
-    pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.directory.paths().credentials.clone() else {
-            return;
-        };
-        let written = if path.exists() {
-            Ok(path)
-        } else {
-            grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
-                .map(|()| path)
-                .map_err(|error| io::Error::other(error.to_string()))
-        };
-        self.report_written(written);
-    }
-
     fn poll_contact(&mut self) {
         if self.directory.poll() {
             self.request_composition();
         }
+    }
+
+    /// Turns sending the QSO panel to the operator's logger on or off, and
+    /// sends it at once when it was turned on.
+    pub fn set_logger_enabled(&mut self, enabled: bool) {
+        if self.settings.logger.enabled == enabled {
+            return;
+        }
+        self.settings.logger.enabled = enabled;
+        self.open_logger();
+        self.reflect_to_logger();
+    }
+
+    fn open_logger(&mut self) {
+        if let Err(error) = self.logger.reconfigure(&self.settings.logger) {
+            self.report_logger_error(&error);
+        }
+    }
+
+    /// Whether the logger is sharing its entry form, which the QSO panel then
+    /// follows instead of being edited.
+    pub fn logger_synced(&self) -> bool {
+        self.logger.is_synced()
+    }
+
+    /// Takes the logger's entry form into the QSO panel.
+    ///
+    /// The logger's form is the one the contact is logged from, so it wins.
+    /// Only when the logger has just been found again does a field it has
+    /// nothing for keep what the panel holds, which is then sent to it: the
+    /// panel was the form while the logger was away. The serial number being
+    /// sent is the logger's whenever it counts one.
+    fn poll_logger(&mut self) {
+        let Some(FormUpdate { form, resumed }) = self.logger.take_form() else {
+            return;
+        };
+        let pick = |theirs: &str, own: &str| if resumed && theirs.is_empty() { own } else { theirs }.to_owned();
+        let (own_report, own_number) = received_fields(&self.qso.rsv_received, self.logger_received.as_ref());
+        let report = pick(form.get("RST_RCVD"), own_report);
+        let number = pick(form.get("SRX_STRING"), own_number);
+        let call = pick(form.get("CALL"), &self.qso.call);
+        let rsv = pick(form.get("RST_SENT"), &self.qso.rsv);
+        let serial = match form.get("STX_STRING") {
+            "" => self.qso.number.clone(),
+            serial => serial.to_owned(),
+        };
+        let received = format!("{report}{number}");
+        let new_call = call != self.qso.call;
+        let changed = new_call || rsv != self.qso.rsv || received != self.qso.rsv_received || serial != self.qso.number;
+        self.qso = Qso {
+            call,
+            rsv_received: received,
+            rsv,
+            number: serial,
+        };
+        self.logger_received = Some((report, number));
+        if changed {
+            self.qso_changed();
+        }
+        if new_call {
+            self.look_up_contact();
+        }
+        self.reflect_to_logger();
+    }
+
+    /// Takes the logger's form in until `done` holds, for a test whose fake
+    /// logger answers on its own thread.
+    #[cfg(test)]
+    pub(crate) fn await_logger(&mut self, done: impl Fn(&Self) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            self.poll_logger();
+            if done(self) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "the logger's form never arrived");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// Fills the logger's entry form in from the QSO panel.
+    ///
+    /// The frequency and the mode are left to the logger, which reads them
+    /// from the rig itself, and so is the serial number being sent, which the
+    /// logger counts for its own contest. Called where a field is settled
+    /// rather than on every keystroke, so the logger is not handed half a
+    /// callsign.
+    fn reflect_to_logger(&mut self) {
+        let (report, number) = received_fields(&self.qso.rsv_received, self.logger_received.as_ref());
+        let fields = [
+            ("CALL", self.qso.call.as_str()),
+            ("RST_SENT", self.qso.rsv.as_str()),
+            ("RST_RCVD", report),
+            ("SRX_STRING", number),
+        ];
+        if let Err(error) = self.logger.reflect(fields) {
+            self.report_logger_error(&error);
+        }
+    }
+
+    fn report_logger_error(&mut self, error: &grayline_logger_link::LinkError) {
+        let message = self.i18n.text("error-logger");
+        self.error = Some(format!("{message}: {error}"));
     }
 
     pub fn normalize_station(&mut self) {
@@ -971,6 +1053,7 @@ impl App {
         }
         self.history_writers.retain(|writer| !writer.is_finished());
         self.poll_library_scan();
+        self.poll_logger();
         if self.audio.session() != self.adopted_session {
             self.adopted_session = self.audio.session();
             self.adopted_callsigns = 0;
@@ -1171,6 +1254,7 @@ impl App {
         // The identifier path does not go through `finish_qso_edit`, so the
         // lookup a typed callsign gets has to be asked for here too.
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     /// Puts a newly decoded contest number in the received report field.
@@ -1201,6 +1285,7 @@ impl App {
         }
         self.qso.rsv_received = report;
         self.qso_changed();
+        self.reflect_to_logger();
     }
 
     /// Keeps a finished reception as the image `rximage` layers show.
@@ -1631,6 +1716,28 @@ fn rx_settings(settings: &Settings) -> RxSettings {
         } else {
             SyncStart::Only(settings.rx_mode)
         },
+    }
+}
+
+/// The received report and exchange `received` holds, read as the logger's
+/// pair while it still says what `logger` said.
+fn received_fields<'a>(received: &'a str, logger: Option<&'a (String, String)>) -> (&'a str, &'a str) {
+    match logger {
+        Some((report, number)) if received.strip_prefix(report.as_str()) == Some(number.as_str()) => (report, number),
+        _ => split_received_report(received),
+    }
+}
+
+/// Splits the received report into the RSV and the contest number after it.
+///
+/// The panel holds the two as one field, `595012`, the way MMSSTV writes them
+/// and the way an identifier's number is filled in. An RSV is always three
+/// digits, so a field that does not start with three is taken as a report
+/// alone.
+fn split_received_report(received: &str) -> (&str, &str) {
+    match received.get(..3) {
+        Some(report) if report.bytes().all(|byte| byte.is_ascii_digit()) => (report, received[3..].trim()),
+        _ => (received, ""),
     }
 }
 

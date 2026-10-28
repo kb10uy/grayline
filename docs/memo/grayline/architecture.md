@@ -351,7 +351,10 @@ The following concerns belong outside the portable DSP and SSTV core:
 - Logging services and external logger integrations. `grayline-qso` is the
   first of these: a directory of stations read by callsign, described in
   [qso-directory.md](qso-directory.md). It is a directory rather than a log,
-  and it deliberately keeps nothing about a contact.
+  and it deliberately keeps nothing about a contact. `grayline-logger-link`
+  is the second: it hands the contact being worked to the operator's own
+  logger, and follows the logger's entry form back while the logger shares
+  it, described in [logger-link.md](logger-link.md).
 - History, template editing, settings persistence, and application file
   management.
 - Thread scheduling and application-level queue policy.
@@ -361,7 +364,7 @@ types must not appear in reusable core APIs.
 
 ## Current Crate Structure
 
-The workspace currently contains twenty-five packages:
+The workspace currently contains twenty-six packages:
 
 | Package | Architectural role | Current status |
 | --- | --- | --- |
@@ -377,8 +380,9 @@ The workspace currently contains twenty-five packages:
 | `grayline-wav` | Mono WAV reading and writing for the tools and file sources | Implemented |
 | `grayline-rig` | Rig transports | `rigctld` client implemented |
 | `grayline-rig-control` | Keying worker, script host, and band plan | Implemented; described in [rig-control.md](rig-control.md) |
-| `grayline-qso` | Contact directory: shared store, Wavelog lookup, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
+| `grayline-qso` | Contact directory: shared store, ADIF import | Implemented; described in [qso-directory.md](qso-directory.md) |
 | `grayline-qso-cli` | Contact directory command line, as `gl-qso` | Implemented |
+| `grayline-logger-link` | The contact being worked, sent to jl1his-logger's entry form, and the form followed back | Implemented; described in [logger-link.md](logger-link.md) |
 | `grayline-shell` | Platform integration, localization, and the log | Implemented |
 | `grayline-wefax` | WEFAX protocol model, receive front end, and decoder | Receive implemented; described in [wefax.md](wefax.md) |
 | `grayline-wefax-cli` | Offline WEFAX receive integration, as `gl-wefax` | Implemented |
@@ -400,16 +404,17 @@ packages it uses. External and development-only dependencies are omitted.
 | `grayline-dsp` | None |
 | `grayline-qso` | None |
 | `grayline-qso-cli` | `grayline-qso` |
+| `grayline-logger-link` | None |
 | `grayline-rig` | None |
 | `grayline-rig-control` | `grayline-rig` |
 | `grayline-rtty` | `grayline-dsp` |
-| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
+| `grayline-rtty-app` | `grayline-audio`, `grayline-dsp`, `grayline-keyer-protocol`, `grayline-logger-link`, `grayline-qso`, `grayline-rig-control`, `grayline-rtty`, `grayline-shell`, `grayline-variables` |
 | `grayline-rtty-cli` | `grayline-rtty`, `grayline-wav` |
 | `grayline-keyer-protocol` | `grayline-rig`, `grayline-rtty` |
 | `grayline-keyer` | `grayline-keyer-protocol`, `grayline-rtty` |
 | `grayline-shell` | None |
 | `grayline-sstv` | `grayline-dsp`, `grayline-sstv-fskid` |
-| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
+| `grayline-sstv-app` | `grayline-audio`, `grayline-dsp`, `grayline-logger-link`, `grayline-qso`, `grayline-rig-control`, `grayline-shell`, `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx` |
 | `grayline-sstv-cli` | `grayline-sstv`, `grayline-sstv-fskid`, `grayline-sstv-rx`, `grayline-sstv-template`, `grayline-tone-tx`, `grayline-wav` |
 | `grayline-sstv-fskid` | None |
 | `grayline-sstv-rx` | `grayline-dsp`, `grayline-sstv`, `grayline-sstv-fskid` |
@@ -627,8 +632,7 @@ that did not touch it.
 
 The language and the UI scale are not in it. They are the same answer in every
 application of the family, so they live once in `common.toml`, beside the
-per-application directories and beside the shared contact store's credentials,
-under the keys `language` and `ui-scale`. Every application reads it at startup
+per-application directories, under the keys `language` and `ui-scale`. Every application reads it at startup
 and writes it back only when one of the two changes, so a language chosen in
 one is the language the next one opens in. `grayline_shell::common` is the only
 code that touches the file, and comments and unknown keys survive a save there

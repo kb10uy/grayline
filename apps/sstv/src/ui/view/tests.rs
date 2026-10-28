@@ -11,7 +11,7 @@ use super::*;
 use grayline_shell::i18n::Locale;
 
 use crate::app::{App, FIRST_QSO_NUMBER, outgoing::Kind};
-use crate::test_util::refused_port;
+use crate::test_util::{FakeLogger, refused_port};
 
 use super::panels::decibels;
 
@@ -159,6 +159,35 @@ fn the_qso_panel_offers_the_contact_details_button() {
     let harness = render(&mut app);
 
     harness.get_by_label("…");
+}
+
+#[test]
+fn the_qso_panel_gives_way_to_the_loggers_form() {
+    let mut app = App::headless();
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger.share(&[("CALL", "JA1ABC")]);
+    app.await_logger(|app| app.qso.call == "JA1ABC");
+    let synced = app.i18n.text("logger-synced");
+    let call = app.i18n.text("qso-call");
+    let received = app.i18n.text("qso-rsv-received");
+    let increment = app.i18n.text("qso-nr-increment");
+
+    let mut harness = Harness::new_ui(|ui| {
+        let model = menu::model(&app);
+        view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
+    });
+    grayline_shell::fonts::install(&harness.ctx);
+    harness.run();
+
+    harness.get_by_label(&synced);
+    harness.get_by_label("…");
+    assert!(harness.query_by_label(&received).is_none());
+    assert!(harness.query_by_label(&increment).is_none());
+    let label = harness.get_by_label(&call).rect().center().y;
+    let followed = harness.get_by_label("JA1ABC").rect().center().y;
+    assert!((label - followed).abs() < 0.5, "{label} against {followed}");
 }
 
 #[test]

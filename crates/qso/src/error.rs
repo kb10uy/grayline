@@ -33,38 +33,6 @@ pub enum QsoError {
         /// The `user_version` this build writes.
         known: i64,
     },
-    /// The configured base URL named no host a lookup could reach.
-    #[error("`{0}` is not an address a lookup can reach")]
-    Address(String),
-    /// Nothing was listening, or the connection could not be established.
-    ///
-    /// The host is named and the rest of the address is not: the request body
-    /// carries the API key, and an error that quoted the whole exchange would
-    /// put it on the status line.
-    #[error("the lookup could not reach {host}: {detail}")]
-    Connect {
-        /// The host that was tried.
-        host: String,
-        /// What the transport said about the attempt.
-        detail: String,
-    },
-    /// The lookup reached the server and the server refused it.
-    #[error("the lookup was refused with status {0}")]
-    Refused(u16),
-    /// The answer was not JSON, or was JSON this crate could not read.
-    #[error("the lookup answered with nothing this crate could read")]
-    Unreadable,
-    /// A remote lookup was asked for with no API key configured.
-    #[error("no API key is configured for the lookup")]
-    NoKey,
-    /// The credentials file could not be read or written.
-    #[error("{path}: {detail}")]
-    Credentials {
-        /// The file, as the caller named it.
-        path: String,
-        /// What was wrong with it.
-        detail: String,
-    },
     /// The named character encoding is not one this build knows.
     #[error("`{0}` is not a character encoding this build knows")]
     Encoding(String),

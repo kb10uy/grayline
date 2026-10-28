@@ -475,6 +475,35 @@ fn the_contact_window_shows_the_fields_the_settings_ask_for(#[case] locale: Loca
 }
 
 #[test]
+fn the_contact_fields_give_way_to_the_loggers_form() {
+    let mut app = App::headless();
+    let logger = crate::test_util::FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger.share(&[("CALL", "JA1ABC")]);
+    app.await_logger(|app| app.contact.callsign == "JA1ABC");
+    let synced = app.i18n.text("logger-synced");
+    let call = app.i18n.text("label-his-call");
+    let name = app.i18n.text("label-his-name");
+    let clear = app.i18n.text("action-clear-contact");
+
+    let mut harness = Harness::new_ui(|ui| {
+        let model = menu::model(&app);
+        view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
+    });
+    grayline_shell::fonts::install(&harness.ctx);
+    harness.run();
+
+    harness.get_by_label(&synced);
+    harness.get_by_label("…");
+    assert!(harness.query_by_label(&name).is_none());
+    assert!(harness.query_by_label(&clear).is_none());
+    let label = harness.get_by_label(&call).rect().center().y;
+    let followed = harness.get_by_label("JA1ABC").rect().center().y;
+    assert!((label - followed).abs() < 0.5, "{label} against {followed}");
+}
+
+#[test]
 fn a_field_no_catalogue_knows_stands_under_its_own_name() {
     let mut app = App::headless();
     app.settings.contact.fields = vec!["club".to_owned()];
@@ -484,31 +513,4 @@ fn a_field_no_catalogue_knows_stands_under_its_own_name() {
     let harness = render(&mut app);
 
     harness.get_by_label("club");
-}
-
-#[test]
-fn the_settings_menu_carries_the_directory() {
-    let app = App::headless();
-    let model = menu::model(&app);
-    let items = grayline_shell::menu::flatten(&model);
-    assert!(
-        items.iter().any(|item| matches!(
-            item,
-            menu::Item::Check {
-                action: menu::Action::ToggleContactLookup,
-                ..
-            }
-        )),
-        "the lookup switch is not on the menu"
-    );
-    assert!(
-        items.iter().any(|item| matches!(
-            item,
-            menu::Item::Command {
-                action: menu::Action::WriteContactCredentials,
-                ..
-            }
-        )),
-        "writing the credentials file is not on the menu"
-    );
 }

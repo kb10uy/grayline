@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use grayline_logger_link::set_message;
 use grayline_qso::{ContactPaths, ContactSnapshot, ContactState};
 use grayline_shell::paths::Roots;
 use grayline_sstv::image::Rgb8;
@@ -16,7 +17,7 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::{
-    test_util::refused_port,
+    test_util::{FakeLogger, refused_port},
     worker::{
         receive::{Frame, HistoryCandidate, RxSnapshot},
         transmit::TxPhase,
@@ -253,62 +254,16 @@ fn a_decoded_identifier_is_asked_about_like_a_typed_one() {
     assert_eq!(settled(&app).callsign, "JA1ABC");
 }
 
-/// A headless interface must reach neither the operator's own store nor the
-/// key sitting beside it.
+/// A headless interface must not reach the operator's own store.
 ///
-/// Both were discovered rather than named once, which meant the suite wrote a
-/// credentials file into the operator's configuration directory and would have
-/// put questions to whatever logger the key named. Naming them is what stops
+/// It was discovered rather than named once, which meant the suite wrote into
+/// the directory the operator's applications share. Naming it is what stops
 /// that, so it is what is checked.
 #[test]
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
     assert_eq!(app.directory.paths().store, None);
-    assert_eq!(app.directory.paths().credentials, None);
-}
-
-/// The menu offers to write a credentials file, and a test that applies every
-/// action must not thereby write one.
-///
-/// What is checked is that nothing was written, not that the operator's own
-/// directory is empty: they are entitled to have written a credentials file
-/// themselves, and a test that failed because they had would be reporting on
-/// the machine it ran on rather than on this code.
-#[test]
-fn writing_the_credentials_file_does_nothing_without_one_to_write() {
-    let mut app = App::headless();
-
-    app.write_contact_credentials();
-
-    assert!(app.notice.is_none());
-    assert!(app.error.is_none());
-}
-
-#[test]
-fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = TempDir::new().unwrap();
-    let credentials = root.path().join("credentials.toml");
-    let mut app = App::from_parts(
-        AudioState::disconnected(rx_settings(&Settings::default())),
-        AppPaths::from_roots(Roots::under(root.path())),
-        Stored {
-            config: Config::detached(),
-            common: CommonConfig::detached(),
-        },
-        &Settings::default(),
-        ContactPaths {
-            store: None,
-            credentials: Some(credentials.clone()),
-        },
-        Waker::default(),
-        Box::new(grayline_shell::platform::QuietPlatform),
-    );
-
-    app.write_contact_credentials();
-
-    assert!(credentials.is_file(), "{}", credentials.display());
-    assert!(app.notice.is_some());
 }
 
 #[rstest]
@@ -1322,4 +1277,190 @@ fn a_written_file_reports_as_a_notice_rather_than_a_failure() {
     app.report_written(Err(std::io::Error::other("disk full")));
     assert!(app.notice.is_none());
     assert_eq!(app.error.as_deref(), Some("disk full"));
+}
+
+fn logged(app: &mut App) -> FakeLogger {
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger
+}
+
+#[test]
+fn switching_the_logger_on_sends_what_the_panel_already_holds() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+
+    let logger = logged(&mut app);
+
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("CALL", "JA1ABC"), ("RST_SENT", DEFAULT_RSV)]))
+    );
+}
+
+#[test]
+fn a_settled_field_is_sent_to_the_logger_and_nothing_else_is() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+
+    app.finish_qso_edit();
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_decoded_identifier_and_number_reach_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.audio.set_snapshot(identified(&["JA1ABC"]));
+    app.poll_workers();
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+
+    app.audio.set_snapshot(RxSnapshot {
+        callsigns: vec!["JA1ABC".to_owned()],
+        ..numbered(&["012"])
+    });
+    app.poll_workers();
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("RST_RCVD", "595"), ("SRX_STRING", "012")]))
+    );
+}
+
+const SHARED_FORM: [(&str, &str); 7] = [
+    ("CALL", "JA1ABC"),
+    ("NAME", ""),
+    ("QTH", ""),
+    ("RST_RCVD", "595"),
+    ("RST_SENT", "577"),
+    ("SRX_STRING", "012"),
+    ("STX_STRING", "013"),
+];
+
+fn following(app: &mut App, fields: &[(&str, &str)]) -> FakeLogger {
+    let logger = logged(app);
+    logger.share(fields);
+    app.await_logger(App::logger_synced);
+    app.poll_logger();
+    logger
+}
+
+#[test]
+fn the_loggers_form_fills_the_panel_and_nothing_goes_back() {
+    let mut app = App::headless();
+
+    let logger = following(&mut app, &SHARED_FORM);
+
+    assert!(app.logger_synced());
+    assert_eq!(app.qso.call, "JA1ABC");
+    assert_eq!(app.qso.rsv, "577");
+    assert_eq!(app.qso.rsv_received, "595012");
+    assert_eq!(app.qso.number, "013");
+    assert_eq!(logger.received(), Some(set_message(&[("RST_SENT", DEFAULT_RSV)])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_logger_found_again_is_handed_what_it_lacks() {
+    let mut app = App::headless();
+    app.qso.call = "JA1ABC".to_owned();
+    app.qso.number = "007".to_owned();
+
+    let logger = following(
+        &mut app,
+        &[
+            ("CALL", ""),
+            ("RST_RCVD", ""),
+            ("RST_SENT", "599"),
+            ("SRX_STRING", ""),
+            ("STX_STRING", ""),
+        ],
+    );
+    logger.received();
+
+    assert_eq!(app.qso.call, "JA1ABC");
+    assert_eq!(app.qso.rsv, "599");
+    assert_eq!(app.qso.number, "007");
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn an_identifier_heard_while_following_is_all_that_is_sent() {
+    let mut app = App::headless();
+    let logger = following(
+        &mut app,
+        &[
+            ("CALL", ""),
+            ("RST_RCVD", ""),
+            ("RST_SENT", DEFAULT_RSV),
+            ("SRX_STRING", "012"),
+        ],
+    );
+    logger.received();
+    assert_eq!(app.qso.rsv_received, "012");
+
+    app.audio.set_snapshot(identified(&["JA1XYZ"]));
+    app.poll_workers();
+
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1XYZ")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn the_panel_keeps_the_loggers_contact_once_it_says_goodbye() {
+    let mut app = App::headless();
+    let logger = following(&mut app, &SHARED_FORM);
+
+    logger.bye();
+    app.await_logger(|app| !app.logger_synced());
+
+    assert_eq!(app.qso.call, "JA1ABC");
+    assert_eq!(app.qso.rsv_received, "595012");
+}
+
+#[rstest]
+#[case::with_number("595012", ("595", "012"))]
+#[case::spaced("599 012", ("599", "012"))]
+#[case::report_alone("595", ("595", ""))]
+#[case::short_report("59", ("59", ""))]
+#[case::not_a_report("OK", ("OK", ""))]
+#[case::empty("", ("", ""))]
+fn a_received_report_is_split_into_the_rsv_and_the_number(#[case] received: &str, #[case] split: (&str, &str)) {
+    assert_eq!(split_received_report(received), split);
+}
+
+#[test]
+fn nothing_reaches_the_logger_while_it_is_switched_off() {
+    let mut app = App::headless();
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+
+    app.qso.call = "JA1ABC".to_owned();
+    app.finish_qso_edit();
+
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn an_address_the_logger_cannot_be_at_is_reported() {
+    let mut app = App::headless();
+    app.settings.logger.address = "logger.invalid".to_owned();
+
+    app.set_logger_enabled(true);
+
+    assert!(
+        app.error
+            .as_deref()
+            .is_some_and(|error| error.contains("logger.invalid")),
+        "{:?}",
+        app.error
+    );
 }

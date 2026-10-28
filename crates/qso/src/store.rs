@@ -38,13 +38,17 @@ CREATE TABLE IF NOT EXISTS station_field (
 /// Where a stored field came from, and so what may replace it.
 ///
 /// The order is the rule: a field is overwritten only by a source at least as
-/// strong as the one that wrote it, so nothing an import or a lookup does can
-/// displace what the operator typed.
+/// strong as the one that wrote it, so nothing an import does can displace
+/// what the operator typed.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Origin {
     /// Read out of an ADIF log the operator already had.
     Adif,
-    /// Answered by the operator's own logger.
+    /// Answered by Wavelog, in a build that still asked it.
+    ///
+    /// Nothing writes it any more. It is still read, so that a field a lookup
+    /// filed is displaced by what the operator types rather than read as an
+    /// origin this build does not know, which would outrank everything.
     Wavelog,
     /// Entered by the operator.
     Manual,
@@ -222,7 +226,7 @@ impl Store {
         Ok(dropped > 0)
     }
 
-    /// Forgets a station outright, fields and lookup history alike.
+    /// Forgets a station outright, every field with it.
     pub fn remove(&mut self, callsign: &str) -> Result<bool, QsoError> {
         let callsign = normalized(callsign)?;
         let removed = self
@@ -245,41 +249,6 @@ impl Store {
             .query_map(params![pattern, limit as i64], |row| row.get::<_, String>(0))
             .map_err(store_error)?;
         rows.collect::<Result<_, _>>().map_err(store_error)
-    }
-
-    /// When a remote lookup for `callsign` last completed, and whether it found
-    /// anything. Nothing when one never has.
-    pub fn last_lookup(&self, callsign: &str) -> Result<Option<(Timestamp, bool)>, QsoError> {
-        let callsign = normalized(callsign)?;
-        let row: Option<(Option<String>, i64)> = self
-            .connection
-            .query_row(
-                "SELECT looked_up_at, found FROM station WHERE callsign = ?1",
-                params![callsign],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()
-            .map_err(store_error)?;
-        let Some((Some(at), found)) = row else {
-            return Ok(None);
-        };
-        // A timestamp the file holds that will not parse is read as no lookup
-        // at all, which asks again rather than refusing to answer.
-        Ok(at.parse::<Timestamp>().ok().map(|at| (at, found != 0)))
-    }
-
-    /// Notes that a remote lookup for `callsign` has just completed.
-    pub fn record_lookup(&mut self, callsign: &str, found: bool) -> Result<(), QsoError> {
-        let callsign = normalized(callsign)?;
-        let now = Timestamp::now().to_string();
-        self.connection
-            .execute(
-                "INSERT INTO station (callsign, looked_up_at, found) VALUES (?1, ?2, ?3)
-                 ON CONFLICT (callsign) DO UPDATE SET looked_up_at = excluded.looked_up_at, found = excluded.found",
-                params![callsign, now, i64::from(found)],
-            )
-            .map_err(store_error)?;
-        Ok(())
     }
 
     /// Folds the write-ahead log back into the file.
@@ -396,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lookup_does_not_displace_what_the_operator_typed() {
+    fn a_fetched_field_does_not_displace_what_the_operator_typed() {
         let mut store = Store::in_memory().expect("a store");
         store
             .merge(&record("JA1ABC", &[("name", "Taro")]), Origin::Manual)
@@ -415,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn the_operator_displaces_what_a_lookup_wrote() {
+    fn the_operator_displaces_what_was_fetched() {
         let mut store = Store::in_memory().expect("a store");
         store
             .merge(&record("JA1ABC", &[("name", "TARO Y")]), Origin::Wavelog)
@@ -510,29 +479,6 @@ mod tests {
             .expect("a write");
 
         assert!(store.list("%", 10).expect("a listing").is_empty());
-    }
-
-    #[test]
-    fn a_lookup_is_noted_against_the_station_it_was_for() {
-        let mut store = Store::in_memory().expect("a store");
-        assert_eq!(store.last_lookup("JA1ABC").expect("a read"), None);
-
-        store.record_lookup("JA1ABC", false).expect("a note");
-        let (_, found) = store.last_lookup("JA1ABC").expect("a read").expect("it was noted");
-        assert!(!found);
-
-        store.record_lookup("JA1ABC", true).expect("a second note");
-        let (_, found) = store.last_lookup("JA1ABC").expect("a read").expect("it was noted");
-        assert!(found);
-    }
-
-    #[test]
-    fn a_fruitless_lookup_files_a_station_with_no_fields() {
-        let mut store = Store::in_memory().expect("a store");
-        store.record_lookup("JA1ABC", false).expect("a note");
-
-        let read = store.get("JA1ABC").expect("a read").expect("it was noted");
-        assert!(read.is_empty());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use grayline_keyer_protocol::DEFAULT_ADDRESS as DEFAULT_KEYER_ADDRESS;
+use grayline_logger_link::LoggerSettings;
 use grayline_qso::{ContactSettings, DEFAULT_FIELDS};
 use grayline_shell::config::{self, Document};
 use toml_edit::{Item, Table, value};
@@ -93,6 +94,8 @@ pub struct Settings {
     pub custom_variables: BTreeMap<String, String>,
     /// Where the contact directory looks a callsign up.
     pub contact: ContactSettings,
+    /// Whether, and where, the contact being worked is sent to the logger.
+    pub logger: LoggerSettings,
     /// How the station's rig is keyed, if it is keyed at all.
     pub rig: RigSettings,
     /// Whether a transmission keys the rig's FSK input through `gl-keyer`
@@ -120,7 +123,6 @@ fn default_contact() -> ContactSettings {
             .chain(["!latin"])
             .map(str::to_owned)
             .collect(),
-        ..ContactSettings::default()
     }
 }
 
@@ -176,6 +178,7 @@ impl Default for Settings {
             station: Station::default(),
             custom_variables: BTreeMap::new(),
             contact: default_contact(),
+            logger: LoggerSettings::default(),
             rig: RigSettings {
                 // Nothing here reads a frequency back yet, so the poll starts
                 // off rather than at the interval the SSTV application uses.
@@ -283,6 +286,13 @@ impl Config {
             {
                 settings.contact.write(qso);
             }
+            if let Some(logger) = table
+                .entry("logger")
+                .or_insert_with(|| Item::Table(Table::new()))
+                .as_table_mut()
+            {
+                settings.logger.write(logger);
+            }
             if let Some(rig) = table
                 .entry("rig")
                 .or_insert_with(|| Item::Table(Table::new()))
@@ -356,6 +366,7 @@ fn read(table: &Table) -> Settings {
     }
     settings.custom_variables = config::read_strings(table, "variables", valid_variable_name);
     settings.contact = ContactSettings::read(table.get("qso").and_then(Item::as_table), Settings::default().contact);
+    settings.logger = LoggerSettings::read(table.get("logger").and_then(Item::as_table), Settings::default().logger);
     settings.rig = RigSettings::read(table.get("rig").and_then(Item::as_table), Settings::default().rig);
     settings.keyer = read_keyer(table);
     settings.clamped()
@@ -450,9 +461,11 @@ mod tests {
             },
             custom_variables: BTreeMap::from([("grid".to_owned(), "PM95".to_owned())]),
             contact: ContactSettings {
-                lookup: false,
-                wavelog_url: "https://log.example/".to_owned(),
                 fields: vec!["!ja".to_owned(), "note".to_owned()],
+            },
+            logger: LoggerSettings {
+                enabled: true,
+                address: "127.0.0.1:2237".to_owned(),
             },
             rig: RigSettings {
                 enabled: true,
@@ -730,19 +743,6 @@ grid = \"PM95UQ\"
         let (_, settings) = Config::load(path);
 
         assert!(settings.contact.fields.is_empty());
-    }
-
-    #[test]
-    fn the_logger_address_is_written_out_even_while_it_is_empty() {
-        let root = TempDir::new().unwrap();
-        let path = root.path().join("config.toml");
-        let (mut config, settings) = Config::load(path.clone());
-
-        config.save(&settings);
-
-        let written = fs::read_to_string(&path).unwrap();
-        assert!(written.contains("[qso.wavelog]"), "{written}");
-        assert!(written.contains("url = \"\""), "{written}");
     }
 
     #[test]

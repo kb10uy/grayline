@@ -6,6 +6,7 @@
 
 use std::{collections::BTreeMap, path::Path};
 
+use grayline_logger_link::LoggerSettings;
 use grayline_qso::ContactSettings;
 use grayline_shell::config::{self, Document};
 use grayline_sstv::mode::Mode;
@@ -130,6 +131,7 @@ pub struct Settings {
     pub history_format: HistoryFormat,
     pub rig: RigSettings,
     pub contact: ContactSettings,
+    pub logger: LoggerSettings,
 }
 
 impl Default for Settings {
@@ -159,6 +161,7 @@ impl Default for Settings {
             history_format: HistoryFormat::default(),
             rig: RigSettings::default(),
             contact: ContactSettings::default(),
+            logger: LoggerSettings::default(),
         }
     }
 }
@@ -232,6 +235,10 @@ impl Config {
                 .unwrap_or(defaults.history_format),
             rig: RigSettings::read(document.get("rig").and_then(Item::as_table), RigSettings::default()),
             contact: ContactSettings::read(document.get("qso").and_then(Item::as_table), ContactSettings::default()),
+            logger: LoggerSettings::read(
+                document.get("logger").and_then(Item::as_table),
+                LoggerSettings::default(),
+            ),
         }
     }
 
@@ -282,6 +289,7 @@ impl Config {
             set(document, TRANSMIT_MODE, Some(value(settings.tx_mode.spec().name())));
             settings.rig.write(table_mut(document, "rig"));
             settings.contact.write(table_mut(document, "qso"));
+            settings.logger.write(table_mut(document, "logger"));
         });
     }
 }
@@ -409,9 +417,11 @@ mod tests {
                 tail_seconds: 0.1,
             },
             contact: ContactSettings {
-                lookup: false,
-                wavelog_url: "https://log.example.org".to_owned(),
                 fields: vec!["!ja".to_owned(), "dxcc".to_owned()],
+            },
+            logger: LoggerSettings {
+                enabled: true,
+                address: "127.0.0.1:2237".to_owned(),
             },
         }
     }
@@ -480,17 +490,6 @@ fields = []
         for key in grayline_qso::WELL_KNOWN_KEYS {
             assert!(valid_variable_name(&format!("contact.{key}")), "{key}");
         }
-    }
-
-    #[test]
-    fn the_qso_section_names_its_instance_even_while_it_is_empty() {
-        let root = TempDir::new().unwrap();
-        let mut config = Config::load(&config_path(&root));
-        config.store(&Settings::default());
-
-        let written = fs::read_to_string(config_path(&root)).expect("a written file");
-        assert!(written.contains("[qso.wavelog]"), "{written}");
-        assert!(written.contains("url"), "{written}");
     }
 
     #[test]

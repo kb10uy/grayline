@@ -6,6 +6,7 @@ use std::{
     time::Instant,
 };
 
+use grayline_logger_link::set_message;
 use grayline_qso::{ContactRow, ContactSnapshot, ContactState};
 use grayline_rtty::{ToneSet, rx::ChannelLevels};
 use grayline_shell::{
@@ -16,7 +17,7 @@ use rstest::rstest;
 
 use super::*;
 use crate::{
-    test_util::{FakeKeyer, refused_port},
+    test_util::{FakeKeyer, FakeLogger, refused_port},
     worker::transmit::{OutputSnapshot, TxPhase},
 };
 
@@ -960,54 +961,14 @@ fn text_that_is_not_a_callsign_asks_nobody(#[case] typed: &str) {
     assert_eq!(app.directory.worker().latest().state, ContactState::Idle);
 }
 
-/// A headless interface must reach neither the operator's own store nor the
-/// key sitting beside it: a test that discovered them would write into their
-/// configuration directory and put questions to whatever logger the key names.
+/// A headless interface must not reach the operator's own store: a test that
+/// discovered it would write into the directory the operator's applications
+/// share.
 #[test]
 fn a_headless_interface_names_none_of_the_operators_own_files() {
     let app = App::headless();
 
     assert_eq!(app.directory.paths().store, None);
-    assert_eq!(app.directory.paths().credentials, None);
-}
-
-/// The menu offers to write a credentials file, and a test that applies every
-/// action must not thereby write one.
-#[test]
-fn writing_the_credentials_file_does_nothing_without_one_to_write() {
-    let mut app = App::headless();
-
-    app.write_contact_credentials();
-
-    assert!(app.notice.is_none());
-}
-
-#[test]
-fn the_credentials_file_is_written_where_the_paths_name_it() {
-    let root = tempfile::TempDir::new().unwrap();
-    let credentials = root.path().join("credentials.toml");
-    let settings = Settings::default();
-    let mut app = App::from_parts(
-        AudioState::disconnected(worker_settings(&settings)),
-        AppPaths::from_roots(grayline_shell::paths::Roots::under(root.path())),
-        Stored {
-            config: Config::detached(),
-            common: CommonConfig::detached(),
-            library: Library::default(),
-        },
-        &settings,
-        ContactPaths {
-            store: None,
-            credentials: Some(credentials.clone()),
-        },
-        Waker::default(),
-        Box::new(grayline_shell::platform::QuietPlatform),
-    );
-
-    app.write_contact_credentials();
-
-    assert!(credentials.is_file(), "{}", credentials.display());
-    assert!(app.notice.is_some());
 }
 
 #[test]
@@ -1086,4 +1047,172 @@ fn a_field_the_operator_emptied_is_dropped() {
     app.poll_contact();
 
     assert_eq!(app.directory.snapshot.fields.get("grid"), None);
+}
+
+fn logged(app: &mut App) -> FakeLogger {
+    let logger = FakeLogger::listen();
+    app.settings.logger = logger.settings();
+    app.set_logger_enabled(true);
+    logger
+}
+
+#[test]
+fn switching_the_logger_on_sends_what_the_panel_already_holds() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+
+    let logger = logged(&mut app);
+
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("CALL", "JA1ABC"), ("RST_SENT", macros::DEFAULT_RST)]))
+    );
+}
+
+#[test]
+fn settled_contact_fields_are_sent_to_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.name = "TARO".to_owned();
+    app.contact.qth = "TOKYO".to_owned();
+    app.contact.rst_received = "579".to_owned();
+    app.finish_contact_edit();
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[
+            ("CALL", "JA1ABC"),
+            ("NAME", "TARO"),
+            ("QTH", "TOKYO"),
+            ("RST_RCVD", "579"),
+        ]))
+    );
+
+    app.finish_contact_edit();
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_callsign_taken_from_the_text_reaches_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+
+    app.set_contact_callsign("ja1abc");
+
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+}
+
+#[test]
+fn clearing_the_contact_clears_what_was_sent_to_the_logger() {
+    let mut app = App::headless();
+    let logger = logged(&mut app);
+    logger.received();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.rst_sent = "559".to_owned();
+    app.finish_contact_edit();
+    logger.received();
+
+    app.clear_contact();
+
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("CALL", ""), ("RST_SENT", macros::DEFAULT_RST)]))
+    );
+}
+
+fn following(app: &mut App, fields: &[(&str, &str)]) -> FakeLogger {
+    let logger = logged(app);
+    logger.share(fields);
+    app.await_logger(App::logger_synced);
+    app.poll_logger();
+    logger
+}
+
+#[test]
+fn the_loggers_form_fills_the_contact_and_nothing_goes_back() {
+    let mut app = App::headless();
+
+    let logger = following(
+        &mut app,
+        &[
+            ("CALL", "JA1ABC"),
+            ("NAME", "TARO"),
+            ("QTH", "TOKYO"),
+            ("RST_RCVD", "579"),
+            ("RST_SENT", "559"),
+            ("SRX_STRING", ""),
+            ("STX_STRING", ""),
+        ],
+    );
+
+    assert!(app.logger_synced());
+    assert_eq!(app.contact.callsign, "JA1ABC");
+    assert_eq!(app.contact.name, "TARO");
+    assert_eq!(app.contact.qth, "TOKYO");
+    assert_eq!(app.contact.rst_sent, "559");
+    assert_eq!(app.contact.rst_received, "579");
+    assert_eq!(
+        logger.received(),
+        Some(set_message(&[("RST_SENT", macros::DEFAULT_RST)]))
+    );
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_logger_found_again_is_handed_what_it_lacks() {
+    let mut app = App::headless();
+    app.contact.callsign = "JA1ABC".to_owned();
+    app.contact.name = "TARO".to_owned();
+
+    let logger = following(&mut app, &[("CALL", ""), ("NAME", "JIRO"), ("RST_SENT", "599")]);
+    logger.received();
+
+    assert_eq!(app.contact.callsign, "JA1ABC");
+    assert_eq!(app.contact.name, "JIRO");
+    assert_eq!(app.contact.rst_sent, "599");
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1ABC")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn a_callsign_taken_from_the_text_while_following_is_all_that_is_sent() {
+    let mut app = App::headless();
+    let logger = following(&mut app, &[("CALL", ""), ("NAME", "TARO"), ("RST_SENT", "599")]);
+    logger.received();
+
+    app.set_contact_callsign("ja1xyz");
+
+    assert_eq!(logger.received(), Some(set_message(&[("CALL", "JA1XYZ")])));
+    assert_eq!(logger.received(), None);
+}
+
+#[test]
+fn the_contact_keeps_the_loggers_values_once_it_says_goodbye() {
+    let mut app = App::headless();
+    let logger = following(&mut app, &[("CALL", "JA1ABC"), ("NAME", "TARO")]);
+
+    logger.bye();
+    app.await_logger(|app| !app.logger_synced());
+
+    assert_eq!(app.contact.callsign, "JA1ABC");
+    assert_eq!(app.contact.name, "TARO");
+}
+
+#[test]
+fn an_address_the_logger_cannot_be_at_is_reported() {
+    let mut app = App::headless();
+    app.settings.logger.address = "logger.invalid".to_owned();
+
+    app.set_logger_enabled(true);
+
+    assert!(
+        app.notice
+            .as_deref()
+            .is_some_and(|notice| notice.contains("logger.invalid")),
+        "{:?}",
+        app.notice
+    );
 }

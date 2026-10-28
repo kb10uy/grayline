@@ -1,0 +1,16 @@
+[package]
+name = "grayline-logger-link"
+description = "Filling the entry form of the operator's logger over UDP"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+thiserror = { workspace = true, features = ["std"] }
+toml_edit.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

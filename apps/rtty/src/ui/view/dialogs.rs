@@ -152,7 +152,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let invalid = app.i18n.text("custom-invalid");
     let other = app.i18n.text("contact-other");
     let add = app.i18n.text("contact-add");
-    let refresh = app.i18n.text("contact-refresh");
     let close = app.i18n.text("station-close");
     let callsign = app.directory.snapshot.callsign.clone();
     let state = contact_state(app);
@@ -171,12 +170,10 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
                 .unwrap_or_else(|| row.key.clone())
         })
         .collect();
-    let refreshable = app.can_refresh_contact();
 
     let mut changed = false;
     let mut removed = None;
     let mut adding = false;
-    let mut refreshing = false;
     let mut done = false;
     let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
@@ -243,9 +240,6 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             adding = ui.button(add).clicked();
-            if refreshable {
-                refreshing = ui.button(refresh).clicked();
-            }
         });
         ui.add_space(4.0);
         ui.label(RichText::new(note).size(LABEL).weak());
@@ -264,13 +258,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     if changed || closing {
         app.commit_contact();
     }
-    // Looking the station up again answers with what the logger says, so the
-    // rows being edited here stop being what is filed; the window closes rather
-    // than showing a draft the answer has moved past.
-    if refreshing {
-        app.refresh_contact();
-    }
-    if closing || refreshing {
+    if closing {
         app.directory.dialog_open = false;
     }
 }

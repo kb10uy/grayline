@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 /// The keys this crate names.
 ///
 /// Naming a key is not the same as filling it in and not the same as showing
-/// it: an import and a lookup normalize onto some of these so that the same
-/// fact arrives under the same name whichever source it came from, while
-/// others are only ever typed. Which of them an application puts a field on
+/// it: an import normalizes onto some of these so that a fact arrives under
+/// the name it would have been typed under, while others are only ever
+/// typed. Which of them an application puts a field on
 /// screen for is a third question, and the operator's — see [`FIELD_GROUPS`].
 ///
 /// A record is not limited to these. Whatever the operator files under a

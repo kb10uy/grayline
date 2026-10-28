@@ -1,24 +1,14 @@
-use toml_edit::{Array, Item, Table, value};
+use toml_edit::{Array, Item, Table};
 
 use crate::record::DEFAULT_FIELDS;
 
-/// Where the contact directory looks a callsign up.
+/// What the contact dialog offers.
 ///
 /// Written under `[qso]` by every application that keeps a contact directory:
-/// one operator's applications ask the same logger about the same stations,
+/// one operator's applications file the same fields about the same stations,
 /// and a station set up once should not have to be set up again.
-///
-/// The API key is deliberately absent, and is read from the family's own
-/// credentials file instead. The settings file is the one the operator is
-/// invited to open from the menu and the one an application rewrites at the
-/// end of any frame that changed a setting; a credential belongs in neither.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactSettings {
-    /// Whether the operator's own logger is asked about a callsign the store
-    /// has nothing recent to say about.
-    pub lookup: bool,
-    /// The base URL of that logger.
-    pub wavelog_url: String,
     /// Which fields the contact dialog offers, as written: keys, and groups
     /// spelled `!name`.
     ///
@@ -36,15 +26,8 @@ impl Default for ContactSettings {
 
 impl ContactSettings {
     /// The settings a first run starts on, offering `fields`.
-    ///
-    /// The lookup starts on: with no instance and no key there is nobody to
-    /// ask and the store answers alone, so a switch that started off would
-    /// only leave an operator who wrote a credentials file wondering why
-    /// nothing happened.
     pub fn offering(fields: &[&str]) -> Self {
         Self {
-            lookup: true,
-            wavelog_url: String::new(),
             fields: fields.iter().map(|field| (*field).to_owned()).collect(),
         }
     }
@@ -60,13 +43,6 @@ impl ContactSettings {
             return defaults;
         };
         Self {
-            lookup: section.get("lookup").and_then(Item::as_bool).unwrap_or(defaults.lookup),
-            wavelog_url: section
-                .get("wavelog")
-                .and_then(Item::as_table)
-                .and_then(|wavelog| wavelog.get("url"))
-                .and_then(Item::as_str)
-                .map_or(defaults.wavelog_url, |url| url.trim().to_owned()),
             fields: section
                 .get("fields")
                 .and_then(Item::as_array)
@@ -79,22 +55,19 @@ impl ContactSettings {
         }
     }
 
-    /// Writes these into a `[qso]` section, the instance's address included.
+    /// Writes these into a `[qso]` section.
     ///
-    /// The address is written even while it is empty: the file is where it is
-    /// edited, and an operator who has to invent the key before they can
-    /// change it has no way to learn it exists. Keys this does not own, such
-    /// as an application's serial number, are left where they are.
+    /// Keys this does not own, such as an application's serial number, are
+    /// left where they are. The Wavelog lookup's switch and address, which
+    /// earlier builds wrote here, are taken out: nothing reads them, and a
+    /// file that still offered them would be offering a switch that does
+    /// nothing.
     pub fn write(&self, section: &mut Table) {
-        section["lookup"] = value(self.lookup);
+        section.remove("lookup");
+        section.remove("wavelog");
         let mut fields = Array::new();
         fields.extend(self.fields.iter().map(String::as_str));
         section["fields"] = Item::Value(fields.into());
-        let wavelog = section.entry("wavelog").or_insert(Item::Table(Table::new()));
-        if !wavelog.is_table() {
-            *wavelog = Item::Table(Table::new());
-        }
-        wavelog["url"] = value(self.wavelog_url.as_str());
     }
 }
 
@@ -117,8 +90,6 @@ mod tests {
     #[test]
     fn a_written_section_reads_back_beside_keys_it_does_not_own() {
         let wanted = ContactSettings {
-            lookup: false,
-            wavelog_url: "https://log.example".to_owned(),
             fields: vec!["name".to_owned(), "!latin".to_owned()],
         };
         let mut document: DocumentMut = "[qso]\nnumber = \"042\"\n".parse().unwrap();
@@ -127,6 +98,18 @@ mod tests {
         let written = document.to_string();
         assert!(written.contains("number = \"042\""), "{written}");
         assert_eq!(read(&written), wanted);
+    }
+
+    #[test]
+    fn the_lookup_an_earlier_build_wrote_is_taken_out() {
+        let mut document: DocumentMut = "[qso]\nlookup = true\n\n[qso.wavelog]\nurl = \"https://log.example\"\n"
+            .parse()
+            .unwrap();
+        ContactSettings::default().write(document["qso"].as_table_mut().unwrap());
+
+        let written = document.to_string();
+        assert!(!written.contains("lookup"), "{written}");
+        assert!(!written.contains("wavelog"), "{written}");
     }
 
     #[test]

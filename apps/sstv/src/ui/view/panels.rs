@@ -286,6 +286,10 @@ pub(super) fn dsp_panel(ui: &mut Ui, app: &mut App) {
 }
 
 pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
+    if app.logger_synced() {
+        followed_qso_panel(ui, app);
+        return;
+    }
     // Text fields default to a width far wider than this panel, so every one
     // of them is sized from the space actually available.
     let gap = ui.spacing().item_spacing.x;
@@ -358,6 +362,45 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
     if finished {
         app.finish_qso_edit();
     }
+    if opening {
+        app.open_contact();
+    }
+}
+
+/// The QSO panel while the logger shares its entry form.
+///
+/// The contact is typed into the logger then, and two forms for one contact
+/// would be two places to type it. What is left is the callsign the templates
+/// are working from, which can be read and copied but not edited, and the
+/// contact directory beside it.
+fn followed_qso_panel(ui: &mut Ui, app: &mut App) {
+    let gap = ui.spacing().item_spacing.x;
+    let fields = ui.available_width() - FIELD_LABEL_WIDTH - gap;
+    let call_label = app.i18n.text("qso-call");
+    let details_hint = app.i18n.text("contact-open");
+    let mut opening = false;
+    ui.horizontal(|ui| {
+        field_label(ui, &call_label);
+        let height = ui.spacing().interact_size.y;
+        ui.allocate_ui_with_layout(
+            egui::vec2(fields - height - gap, height),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.set_min_size(egui::vec2(fields - height - gap, height));
+                ui.add(
+                    egui::Label::new(RichText::new(app.qso.call.as_str()).strong())
+                        .selectable(true)
+                        .truncate(),
+                );
+            },
+        );
+        let usable = grayline_qso::normalize_callsign(&app.qso.call).is_some();
+        opening = ui
+            .add_enabled(usable, egui::Button::new("\u{2026}"))
+            .on_hover_text(details_hint.as_str())
+            .clicked();
+    });
+    ui.label(RichText::new(app.i18n.text("logger-synced")).size(SMALL).weak());
     if opening {
         app.open_contact();
     }

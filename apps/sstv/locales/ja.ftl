@@ -135,19 +135,18 @@ device-lost-reception-stopped = 受信は停止しています。デバイスを
 device-lost-retry = 再試行
 device-lost-dismiss = 閉じる
 
-menu-contact = 相手局ディレクトリ
-action-contact-lookup = 相手局を照会する
-action-contact-write-credentials = credentials.toml を書き出す
+action-logger-send = ロガーと連携する
+logger-synced = ロガーの入力フォームと同期中
+error-logger = 相手局情報をロガーへ送れませんでした
 
 contact-title = 相手局
 contact-open = この局についてディレクトリが持っている情報
-contact-note-keys = テンプレートからは ${ "{" }contact.name{ "}" } で参照します。ここで入力した値は照会で上書きされません。
+contact-note-keys = テンプレートからは ${ "{" }contact.name{ "}" } で参照します。ここで入力した値は取り込みで上書きされません。
 contact-other = その他の項目
 contact-add = 追加
-contact-refresh = 再照会
 contact-state-looking = 照会中…
 contact-state-unknown = { $callsign } の情報はありません。
-contact-state-failed = 照会に失敗しました: { $detail }
+contact-state-failed = 相手局ディレクトリを読めませんでした: { $detail }
 contact-name = 名前
 contact-name-latin = 名前 (ローマ字)
 contact-qth = QTH

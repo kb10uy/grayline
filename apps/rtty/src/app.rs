@@ -6,6 +6,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use grayline_logger_link::{FormUpdate, LoggerLink};
 use grayline_qso::{ContactEditor, ContactPaths};
 use grayline_rig_control::{Keying, RigControlError, RigSnapshot, RigState, RigWorker, bands::BandPlan};
 use grayline_rtty::{BaudRate, ToneSet, TxConfig, TxFraming, TxSchedule, encode_text};
@@ -93,6 +94,9 @@ pub struct App {
     pub templates: Vec<Template>,
     /// The contact directory, what it last answered, and the dialog editing it.
     pub directory: ContactEditor,
+    /// Where the contact fields are sent for the operator's logger to fill its
+    /// entry form from, and where that form comes back from.
+    logger: LoggerLink,
     /// Whether the window naming this station is open.
     pub station_dialog_open: bool,
     /// The rows the window is editing.
@@ -163,11 +167,11 @@ impl App {
             &settings,
             ContactPaths {
                 store: grayline_qso::default_store_path(),
-                credentials: grayline_qso::default_credentials_path(),
             },
             waker,
             grayline_shell::platform::host(),
         );
+        app.open_logger();
         // Either file can be the unreadable one, and the first of them the
         // operator is told about is the one worth reporting: a second notice
         // would only replace the first before it had been read.
@@ -206,12 +210,11 @@ impl App {
             contact: Contact::default(),
             macros: library.macros,
             templates: library.templates,
-            directory: ContactEditor::new(
-                &settings.contact,
-                contact_paths,
-                "grayline-rtty-contact".to_owned(),
-                move || waker.wake(),
-            ),
+            directory: ContactEditor::new(contact_paths, "grayline-rtty-contact".to_owned(), {
+                let waker = waker.clone();
+                move || waker.wake()
+            }),
+            logger: LoggerLink::new("grayline-rtty-logger", move || waker.wake()),
             station_dialog_open: false,
             variables_draft: Vec::new(),
             scope,
@@ -237,7 +240,10 @@ impl App {
 
     #[cfg(test)]
     pub fn headless_on(platform: Box<dyn Platform>) -> Self {
-        let settings = Settings::default();
+        let settings = Settings {
+            logger: crate::test_util::logger_sink(),
+            ..Settings::default()
+        };
         let scratch = crate::test_util::scratch_dir();
         Self::from_parts(
             AudioState::disconnected(worker_settings(&settings)),
@@ -317,6 +323,7 @@ impl App {
 
         self.poll_rig();
         self.poll_transmit();
+        self.poll_logger();
         self.poll_contact();
 
         let activity = if self.is_transmitting() {
@@ -627,6 +634,7 @@ impl App {
     pub fn set_contact_callsign(&mut self, callsign: &str) {
         self.contact.callsign = text::normalize(callsign);
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     /// Takes up the contact fields once the operator has left one.
@@ -650,6 +658,7 @@ impl App {
         // anything was trimmed, and the request guards itself against being
         // made twice for one station.
         self.look_up_contact();
+        self.reflect_to_logger();
     }
 
     /// Empties the contact fields, ready for the next station.
@@ -659,18 +668,11 @@ impl App {
     pub fn clear_contact(&mut self) {
         self.contact.clear();
         self.directory.forget_request();
+        self.reflect_to_logger();
     }
 
     fn look_up_contact(&mut self) {
         self.directory.look_up(&self.contact.callsign);
-    }
-
-    pub fn refresh_contact(&mut self) {
-        self.directory.refresh(&self.contact.callsign);
-    }
-
-    pub fn can_refresh_contact(&self) -> bool {
-        ContactEditor::can_refresh(&self.settings.contact, &self.contact.callsign)
     }
 
     pub fn open_contact(&mut self) {
@@ -685,50 +687,98 @@ impl App {
         self.directory.commit(&self.contact.callsign);
     }
 
-    /// Turns asking the operator's own logger on or off, and asks again.
-    pub fn set_contact_lookup(&mut self, lookup: bool) {
-        if self.settings.contact.lookup == lookup {
-            return;
-        }
-        self.settings.contact.lookup = lookup;
-        self.directory.reconfigure(&self.settings.contact);
-        self.look_up_contact();
-    }
-
-    /// Writes the credentials file out for the operator to edit.
-    ///
-    /// Refuses to write over one that is already there: the file only exists
-    /// because someone put a key in it.
-    pub fn write_contact_credentials(&mut self) {
-        let Some(path) = self.directory.paths().credentials.clone() else {
-            return;
-        };
-        if !path.exists()
-            && let Err(error) = grayline_qso::Credentials::write(&path, Some(&self.settings.contact.wavelog_url), "")
-        {
-            let message = self.i18n.text("error-credentials");
-            self.notice = Some(format!("{message}: {error}"));
-            return;
-        }
-        self.notice = Some(self.i18n.text_with(
-            "contact-credentials-written",
-            &[("path", grayline_shell::i18n::owned(path.display().to_string()))],
-        ));
-        // The file sits in the directory the whole family shares rather than
-        // in this application's own, so the folder it is in is opened rather
-        // than the one the File menu offers.
-        if let Some(directory) = path.parent()
-            && let Err(error) = self.platform.open_path(directory)
-        {
-            let message = self.i18n.text("error-open-folder");
-            self.notice = Some(format!("{message}: {error}"));
-        }
-    }
-
     fn poll_contact(&mut self) {
         if self.directory.poll() {
             self.adopt_contact_fields();
+            self.reflect_to_logger();
         }
+    }
+
+    /// Turns sending the contact fields to the operator's logger on or off,
+    /// and sends them at once when it was turned on.
+    pub fn set_logger_enabled(&mut self, enabled: bool) {
+        if self.settings.logger.enabled == enabled {
+            return;
+        }
+        self.settings.logger.enabled = enabled;
+        self.open_logger();
+        self.reflect_to_logger();
+    }
+
+    fn open_logger(&mut self) {
+        if let Err(error) = self.logger.reconfigure(&self.settings.logger) {
+            self.report_logger_error(&error);
+        }
+    }
+
+    /// Whether the logger is sharing its entry form, which the contact fields
+    /// then follow instead of being edited.
+    pub fn logger_synced(&self) -> bool {
+        self.logger.is_synced()
+    }
+
+    /// Takes the logger's entry form into the contact fields.
+    ///
+    /// The logger's form is the one the contact is logged from, so it wins.
+    /// Only when the logger has just been found again does a field it has
+    /// nothing for keep what the panel holds, which is then sent to it: the
+    /// panel was the form while the logger was away.
+    fn poll_logger(&mut self) {
+        let Some(FormUpdate { form, resumed }) = self.logger.take_form() else {
+            return;
+        };
+        let pick = |theirs: &str, own: &str| if resumed && theirs.is_empty() { own } else { theirs }.to_owned();
+        let contact = Contact {
+            callsign: pick(form.get("CALL"), &self.contact.callsign),
+            name: pick(form.get("NAME"), &self.contact.name),
+            qth: pick(form.get("QTH"), &self.contact.qth),
+            rst_sent: pick(form.get("RST_SENT"), &self.contact.rst_sent),
+            rst_received: pick(form.get("RST_RCVD"), &self.contact.rst_received),
+        };
+        let new_call = contact.callsign != self.contact.callsign;
+        self.contact = contact;
+        if new_call {
+            self.look_up_contact();
+        }
+        self.reflect_to_logger();
+    }
+
+    /// Takes the logger's form in until `done` holds, for a test whose fake
+    /// logger answers on its own thread.
+    #[cfg(test)]
+    pub(crate) fn await_logger(&mut self, done: impl Fn(&Self) -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            self.poll_logger();
+            if done(self) {
+                return;
+            }
+            assert!(std::time::Instant::now() < deadline, "the logger's form never arrived");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// Fills the logger's entry form in from the contact fields.
+    ///
+    /// The frequency and the mode are left to the logger, which reads them
+    /// from the rig itself. Called where a field is settled rather than on
+    /// every keystroke, so the logger is not handed half a callsign.
+    fn reflect_to_logger(&mut self) {
+        let fields = [
+            ("CALL", self.contact.callsign.as_str()),
+            ("NAME", self.contact.name.as_str()),
+            ("QTH", self.contact.qth.as_str()),
+            ("RST_SENT", self.contact.rst_sent.as_str()),
+            ("RST_RCVD", self.contact.rst_received.as_str()),
+        ];
+        if let Err(error) = self.logger.reflect(fields) {
+            self.report_logger_error(&error);
+        }
+    }
+
+    fn report_logger_error(&mut self, error: &grayline_logger_link::LinkError) {
+        let message = self.i18n.text("error-logger");
+        self.notice = Some(format!("{message}: {error}"));
     }
 
     /// Writes what the directory answered into the fields left empty.
