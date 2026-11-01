@@ -22,7 +22,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -31,11 +31,11 @@ jobs:
       # directory that also holds its Clippy build, so its copy is the fuller
       # one. Both workflows answer the same push, so what this restores is what
       # the previous push left rather than what is being built beside it.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           shared-key: wasm
           save-if: false
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.88.1
         with:
           tool: wasm-pack
 
@@ -45,7 +45,7 @@ jobs:
         run: wasm-pack build apps/web-demo --target web --out-dir www/pkg --release
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v4
+        uses: cloudflare/wrangler-action@v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/web-demo
