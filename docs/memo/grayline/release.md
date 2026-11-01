@@ -99,6 +99,11 @@ pinned by the lockfile, which does not cover reusable workflows; they name a
 workflow in this repository, and `release-app.yml` is locked as a workflow of
 its own.
 
+`.github/dependabot.yml` has Dependabot propose action updates weekly, and
+Dependabot regenerates the matching lockfile entries in the same pull request.
+A seven-day cooldown keeps it from proposing a release until it has been out
+for a week.
+
 ## Deploying the demo
 
 `deploy.yml` runs on pushes to `master`, builds the WebAssembly module into
