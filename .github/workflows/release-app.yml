@@ -40,7 +40,7 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           ref: ${{ inputs.ref }}
       - uses: dtolnay/rust-toolchain@stable
@@ -89,7 +89,7 @@ jobs:
       # bundle script reads as "leave this out".
       TEMPLATES: ${{ inputs.templates && 'assets/templates' || '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           ref: ${{ inputs.ref }}
 
@@ -107,7 +107,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.88.1
         with:
           tool: cargo-about
 
@@ -184,7 +184,7 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path "staging/${env:ARCHIVE}" -DestinationPath "${env:ARCHIVE}.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ env.ARCHIVE }}
           path: ${{ env.ARCHIVE }}.*
@@ -204,11 +204,11 @@ jobs:
       NOTES: ${{ inputs.notes }}
       PREFIX: grayline-${{ inputs.app }}-v${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           ref: ${{ inputs.ref }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4.3.0
         with:
           path: artifacts
           pattern: grayline-${{ inputs.app }}-*

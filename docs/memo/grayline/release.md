@@ -7,14 +7,19 @@ publish what a tag names by calling the shared `release-app.yml`, and
 
 ## CI
 
-`ci.yml` runs on pushes to `master` and on pull requests, with five job
-definitions (seven jobs after expanding the application matrix) that run the
+`ci.yml` runs on pushes to `master` and on pull requests, with six job
+definitions (eight jobs after expanding the application matrix) that run the
 commands `AGENTS.md` requires before a change is complete. The jobs are split along the lines the work actually divides on,
 which is what lets them run at the same time rather than one after another.
 
 `format` runs `cargo fmt --all --check` and nothing else. It needs neither the
 system packages nor the compiled dependencies the other jobs wait for, so a
 misformatted change is reported in under a minute instead of behind a build.
+
+`lockfile` runs `gh actions-lock --verify` against
+`.github/workflows/actions.lock`, described under
+[Pinned actions](#pinned-actions). It needs no build either, only a checkout
+and the extension, installed at a pinned version.
 
 `core` runs Clippy with warnings denied, the tests, and a build over the
 workspace with the applications excluded, followed by the `no_std` builds,
@@ -69,6 +74,30 @@ reason the no-std steps are: the host build compiles the JavaScript bindings to
 stubs nothing calls, so it proves nothing about the target the demo ships to.
 Building the page rather than only the crate is what keeps a broken deploy from
 reaching `master`.
+
+## Pinned actions
+
+Every workflow is onboarded to GitHub Actions' workflow dependency lockfile,
+`.github/workflows/actions.lock`. The `uses:` lines keep readable tags, and
+GitHub runs the commit the lockfile records for each action and for the
+actions it calls in turn, so a tag that moves upstream changes nothing here
+until the lockfile does. An onboarded workflow that uses an action the
+lockfile does not list is refused at run time, so a change that adds or
+changes a `uses:` line has to run `gh actions-lock` from the repository root
+and commit the regenerated lockfile with it; the `lockfile` CI job fails
+otherwise. The file is generated and is not edited by hand.
+
+On first pinning, the extension narrowed partial version tags such as `v5` to
+the full release they resolved to, which is why the workflows name versions
+like `actions/checkout@v5.1.0`. `dtolnay/rust-toolchain@stable` is a branch
+and is not narrowed: the lockfile holds it at the commit it had when locked,
+and it only advances when `gh actions-lock --relock` is run after reviewing
+what changed upstream.
+
+The calls from the three release workflows to `release-app.yml` are not
+pinned by the lockfile, which does not cover reusable workflows; they name a
+workflow in this repository, and `release-app.yml` is locked as a workflow of
+its own.
 
 ## Deploying the demo
 
