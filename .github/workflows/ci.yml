@@ -30,7 +30,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -44,7 +44,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Install gh-actions-lock
         run: gh extension install github/gh-actions-lock --pin v0.4.0
@@ -64,7 +64,7 @@ jobs:
       SCOPE: --workspace --exclude grayline-sstv-app --exclude grayline-wefax-app --exclude grayline-rtty-app
     steps:
       # The submodule is reference material and nothing builds against it.
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       # alsa-sys links against ALSA, which cpal keeps as the fallback host.
       # Everything else the window and the graphics context need is opened at
@@ -122,7 +122,7 @@ jobs:
           - name: RTTY
             package: grayline-rtty-app
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       # ALSA for the same reason as the core job.
       - name: Install the Linux build dependencies
@@ -160,7 +160,7 @@ jobs:
     name: WebAssembly
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -189,7 +189,7 @@ jobs:
     name: Licenses
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
 
       # Nothing here is compiled, so the entry holds no target directory: what

@@ -40,7 +40,7 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.version }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.ref }}
       - uses: dtolnay/rust-toolchain@stable
@@ -89,7 +89,7 @@ jobs:
       # bundle script reads as "leave this out".
       TEMPLATES: ${{ inputs.templates && 'assets/templates' || '' }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.ref }}
 
@@ -204,7 +204,7 @@ jobs:
       NOTES: ${{ inputs.notes }}
       PREFIX: grayline-${{ inputs.app }}-v${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.ref }}
 
