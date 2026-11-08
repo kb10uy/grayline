@@ -173,7 +173,7 @@ jobs:
         with:
           shared-key: wasm
           save-if: ${{ env.SAVE_CACHE }}
-      - uses: taiki-e/install-action@v2.88.1
+      - uses: taiki-e/install-action@v2.89.0
         with:
           tool: wasm-pack
 
@@ -205,7 +205,7 @@ jobs:
           cache-directories: ~/.cargo/advisory-dbs
           save-if: ${{ env.SAVE_CACHE }}
 
-      - uses: taiki-e/install-action@v2.88.1
+      - uses: taiki-e/install-action@v2.89.0
         with:
           tool: cargo-deny,cargo-about
 
