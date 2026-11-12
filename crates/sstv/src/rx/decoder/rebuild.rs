@@ -152,7 +152,7 @@ impl RxDecoder {
     }
     /// Redraws the decoded raster under `refit` and resumes decoding.
     ///
-    /// Returns the number of units redrawn, which may be fewer than `units`
+    /// Returns the unit the redraw reached, which may be short of `units`
     /// when the refit reaches past the samples received so far.
     pub(super) fn rebuild_live(
         &mut self,
@@ -162,11 +162,12 @@ impl RxDecoder {
         refit: RasterClock,
         units: usize,
     ) -> Result<usize, SstvError> {
-        let units = self.covered_units(staged, refit, units);
-        if units == 0 {
+        let first = self.units_before(staged.first(), refit)?;
+        let units = self.covered_units(staged, refit, first..units);
+        if units <= first {
             return Err(SstvError::InsufficientStagedSync);
         }
-        let mut candidate = self.redraw(staged, refit, 0..units)?;
+        let mut candidate = self.redraw(staged, refit, first..units)?;
         // Decoding continues from the refitted clock, so the working window is
         // taken again from the retained samples rather than from the window
         // that was trimmed against the old one.
@@ -211,16 +212,17 @@ impl RxDecoder {
         }
         Ok(candidate)
     }
-    /// Returns how many leading raster units `staged` covers under `clock`.
+    /// Returns the unit at which `staged` stops covering `units` under `clock`.
     ///
     /// A refit that runs faster than the current estimate places already
     /// decoded units later in the stream, sometimes past the samples received
     /// so far. Those units are redrawn as the audio arrives, so the correction
     /// applies to what is covered instead of being rejected outright.
-    pub(super) fn covered_units(&self, staged: &SampleBuffer, clock: RasterClock, units: usize) -> usize {
-        (0..units)
-            .take_while(|unit| self.unit_is_covered(staged, clock, *unit))
-            .count()
+    pub(super) fn covered_units(&self, staged: &SampleBuffer, clock: RasterClock, units: Range<usize>) -> usize {
+        units.start
+            + units
+                .take_while(|unit| self.unit_is_covered(staged, clock, *unit))
+                .count()
     }
     pub(super) fn unit_is_covered(&self, staged: &SampleBuffer, clock: RasterClock, unit: usize) -> bool {
         let width = self.raster.width;

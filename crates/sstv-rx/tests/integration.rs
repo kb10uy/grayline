@@ -372,6 +372,30 @@ fn a_matched_transmission_is_not_adjusted_while_it_decodes(#[case] mode: Mode, #
     assert_eq!(adjustments, [], "{mode:?} @{rate}");
 }
 
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn live_tracking_follows_a_mistimed_transmission(#[case] mode: Mode, #[case] rate: u32) {
+    let offset_ppm = 300.0;
+    let samples = transmission(mode, rate, gradient_image(mode), offset_ppm);
+    let (adjustments, outcome) = receive(&samples, rate, true);
+    assert!(
+        adjustments
+            .first()
+            .is_some_and(|(unit, ppm)| *unit <= 16 && (ppm - offset_ppm).abs() < 100.0),
+        "{mode:?} @{rate}: live tracking adjusted at {adjustments:?}"
+    );
+    let fitted = fitted_ppm(&outcome, rate);
+    assert!(
+        (fitted - offset_ppm).abs() < 20.0,
+        "{mode:?} @{rate}: the raster was refitted {fitted} ppm away"
+    );
+}
+
 #[test]
 fn detects_parity_inclusive_vis() {
     let samples = vis_signal(Mode::Scottie2, 8_000, 0.0);
