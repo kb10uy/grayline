@@ -396,6 +396,53 @@ fn live_tracking_follows_a_mistimed_transmission(#[case] mode: Mode, #[case] rat
     );
 }
 
+#[rstest]
+#[case(Mode::Robot36, 8_000, 0.0)]
+#[case(Mode::Robot36, 48_000, 0.0)]
+#[case(Mode::Martin2, 8_000, 300.0)]
+#[case(Mode::Martin2, 48_000, 300.0)]
+#[case(Mode::Pd50, 48_000, 300.0)]
+fn a_header_reception_corrects_its_phase_while_it_decodes(
+    #[case] mode: Mode,
+    #[case] rate: u32,
+    #[case] offset_ppm: f64,
+) {
+    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+    let image = RgbImage::new(size, Rgb8::new(200, 60, 30));
+    let samples = transmission(mode, rate, image, offset_ppm);
+    let leading_ps = mode
+        .scan()
+        .leading()
+        .iter()
+        .map(|segment| segment.duration().as_picos())
+        .sum::<u64>();
+    let stop_ps = 910_000_000_000 + leading_ps + mode.spec().period().as_picos() * 12;
+    let stop_sample = SstvDuration::from_picos(stop_ps).to_samples(rate) as usize;
+
+    let mut pipeline = ReceivePipeline::new(
+        rate,
+        PipelineOptions {
+            live_slant: false,
+            staging_max_samples: samples.len(),
+        },
+    )
+    .unwrap();
+    let mut corrections = 0;
+    for packet in samples[..stop_sample].chunks(1_024) {
+        pipeline
+            .process(packet, |event| {
+                if matches!(event, RxEvent::PhaseAdjusted { .. }) {
+                    corrections += 1;
+                }
+            })
+            .unwrap();
+    }
+    assert!(
+        corrections > 0,
+        "{mode:?} @{rate}: the header's phase was never corrected"
+    );
+}
+
 #[test]
 fn detects_parity_inclusive_vis() {
     let samples = vis_signal(Mode::Scottie2, 8_000, 0.0);

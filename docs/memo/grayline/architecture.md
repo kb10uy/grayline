@@ -240,7 +240,13 @@ and reports typed events and errors. Its responsibilities include:
 - Family-specific RGB and luminance/chroma reconstruction.
 - Stable live raster-phase correction. A correction may move the raster
   backwards, so the working window keeps one raster period behind the unit being
-  decoded rather than trimming to its start.
+  decoded rather than trimming to its start. A correction waits for three
+  consecutive units to agree, and how far they may disagree is a time, 250 µs,
+  rather than a count of samples: two samples at 8 kHz, twelve at 48 kHz. As a
+  count it was six times tighter at 48 kHz, where a transmitter 300 ppm off
+  drifts further than that from one line to the next, and where Robot 36's
+  alternating chrominance lines alone move the measured center by three samples
+  on a coloured picture, so neither was ever corrected.
 - Optional automatic stop based on synchronization history, and `RxDecoder::stop`
   for a caller that can see a reception is over for a reason the decoder cannot
   observe. A signal that stops arriving altogether is one: no further input
