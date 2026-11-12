@@ -9,7 +9,7 @@ use grayline_sstv::{
     RxDecoder, TxEncoder,
     image::{ImageSize, Rgb8, RgbImage},
     mode::Mode,
-    rx::{DemodulatedBlock, RxConfig, RxEvent},
+    rx::{DemodulatedBlock, RxConfig, RxEvent, RxOutcome},
     time::SstvDuration,
 };
 use grayline_sstv_rx::{
@@ -250,6 +250,55 @@ fn a_header_reception_decodes_its_first_row_without_buffering_periods(#[case] mo
     assert!(
         first_row_end.is_some_and(|end| end < header_end + 2 * period),
         "{mode:?} @{rate}: row 0 arrived by sample {first_row_end:?}, header ends at {header_end}, period {period}"
+    );
+}
+
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn a_whole_transmission_refines_after_its_header(#[case] mode: Mode, #[case] rate: u32) {
+    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+    let image = RgbImage::new(size, Rgb8::new(128, 128, 128));
+    let mut samples = Vec::new();
+    let mut phase = 0.0_f64;
+    for timed in TxEncoder::new(mode, image).unwrap() {
+        let deadline = timed.until().to_samples(rate) as usize;
+        while samples.len() < deadline {
+            samples.push((phase.sin() * 0.8) as f32);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
+        }
+    }
+    tone(&mut samples, rate, 1_500.0, 0.5, &mut phase);
+
+    let mut pipeline = ReceivePipeline::new(
+        rate,
+        PipelineOptions {
+            live_slant: false,
+            staging_max_samples: samples.len(),
+        },
+    )
+    .unwrap();
+    for packet in samples.chunks(1_024) {
+        pipeline.process(packet, |_| {}).unwrap();
+    }
+    let outcome = pipeline.finish().unwrap();
+    assert_eq!(outcome.mode, mode);
+    let fitted = outcome.effective_sample_rate_hz.unwrap();
+    assert!(
+        (fitted / f64::from(rate) - 1.0).abs() < 50.0e-6,
+        "{mode:?} @{rate}: the raster was refitted to {fitted} Hz"
+    );
+    let RxOutcome::Complete(decoded) = outcome.outcome else {
+        panic!("{mode:?} @{rate}: the reception did not complete");
+    };
+    let green = decoded.row(size.height() / 2).unwrap()[size.width() / 2].g;
+    assert!(
+        green.abs_diff(128) <= 16,
+        "{mode:?} @{rate}: mid-grey decoded with a green of {green}"
     );
 }
 

@@ -516,6 +516,16 @@ impl RxDecoder {
     /// what MMSSTV shows as well, rather than failing the whole reception on
     /// samples that were never received.
     fn skip_units_before_input(&mut self, first: u64, clock: RasterClock) -> Result<(), SstvError> {
+        let unit = self.units_before(first, clock)?;
+        if unit == self.raster.units() {
+            return Err(SstvError::RasterNotAcquired);
+        }
+        self.decode.raster_unit = unit;
+        self.decode.delivered_rows = unit * self.raster.mode.spec().rows_per_raster_unit() as usize;
+        Ok(())
+    }
+
+    fn units_before(&self, first: u64, clock: RasterClock) -> Result<usize, SstvError> {
         let Some(segment) = self.raster.profile.pixels().iter().next() else {
             return Err(SstvError::UnsupportedRxMode(self.raster.mode));
         };
@@ -524,12 +534,7 @@ impl RxDecoder {
         while unit < units && self.raster.pixel_window(clock, unit, segment, 0)?.0 < first {
             unit += 1;
         }
-        if unit == units {
-            return Err(SstvError::RasterNotAcquired);
-        }
-        self.decode.raster_unit = unit;
-        self.decode.delivered_rows = unit * self.raster.mode.spec().rows_per_raster_unit() as usize;
-        Ok(())
+        Ok(unit)
     }
 
     /// Takes `count` samples of `block` from `offset` into the working window,

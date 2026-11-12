@@ -220,7 +220,13 @@ and reports typed events and errors. Its responsibilities include:
 - Skipping the leading raster units whose picture arrived before mode detection
   finished. Those rows stay blank and count as delivered, which is what the
   operator sees in MMSSTV too, instead of failing a reception over samples that
-  were never received.
+  were never received. Staged refinement skips the same units under the clock
+  it refits. A header-started Martin reception always has one: detection ends
+  about 7.5 ms after the raster epoch, the first pixel of a Martin line begins
+  5.4 ms after it, and the refit puts the raster back where that line began,
+  ahead of the first sample retained. Live slant tracking does not skip them:
+  it redraws from unit zero or not at all, so it leaves such a reception to the
+  staged pass.
 - Family-specific RGB and luminance/chroma reconstruction.
 - Stable live raster-phase correction. A correction may move the raster
   backwards, so the working window keeps one raster period behind the unit being

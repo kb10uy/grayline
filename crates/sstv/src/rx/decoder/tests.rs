@@ -936,6 +936,63 @@ fn partial_staged_rebuild_is_typed_and_preserves_image_and_state() {
     assert_eq!(decoder.image_revision, revision);
 }
 
+const HEADER_LAG: usize = 75;
+const ENVELOPE_LAG: usize = 60;
+
+fn drive_late_header(mode: Mode, frequency: &[f32], sync: &[f32]) -> RxDecoder {
+    let absolute_start = 40_000_u64;
+    let mut delayed = vec![0.0; ENVELOPE_LAG];
+    delayed.extend_from_slice(&sync[..sync.len() - ENVELOPE_LAG]);
+    let sync = &delayed;
+    let mut decoder = RxDecoder::with_config(
+        mode,
+        SAMPLE_RATE,
+        RxConfig {
+            raster_start: RasterStart::AfterHeader,
+            sync_detector_delay: SstvDuration::from_picos(6_000_000_000),
+            ..config(false, frequency.len())
+        },
+    )
+    .unwrap();
+    let mut offset = HEADER_LAG;
+    while decoder.state() != RxState::Complete {
+        let result = decoder
+            .process(DemodulatedBlock::new(
+                absolute_start + offset as u64,
+                &frequency[offset..],
+                &sync[offset..],
+            ))
+            .unwrap();
+        offset += result.consumed();
+        assert!(result.consumed() != 0 || result.event().is_some());
+    }
+    decoder
+        .stage_for_refinement(DemodulatedBlock::new(
+            absolute_start + offset as u64,
+            &frequency[offset..],
+            &sync[offset..],
+        ))
+        .unwrap();
+    decoder
+}
+
+#[rstest]
+#[case(Mode::Martin1)]
+#[case(Mode::Martin2)]
+fn staged_rebuild_leaves_a_unit_the_header_cut_into_blank(#[case] mode: Mode) {
+    let expected = source_image(mode);
+    let (frequency, sync) = sampled_image_body(mode, expected.clone(), 0);
+    let mut decoder = drive_late_header(mode, &frequency, &sync);
+
+    decoder.refine_staged().unwrap();
+    assert_eq!(decoder.state(), RxState::Complete);
+    let image = decoder.image();
+    assert!(image.row(0).unwrap().iter().all(|pixel| *pixel == Rgb8::default()));
+    for row in 1..image.size().height() {
+        assert_eq!(image.row(row), expected.row(row), "row {row}");
+    }
+}
+
 #[test]
 fn robot36_tcs_classification_overrides_parity_and_initial_selector() {
     let (mut frequency, sync) = sampled_body(Mode::Robot36, 0);

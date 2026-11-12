@@ -80,8 +80,9 @@ impl RxDecoder {
             .estimate(&observations)
             .ok_or(SstvError::InsufficientStagedSync)?;
         let clock = RasterClock::from_estimate(slant.source_epoch, slant.effective_sample_rate_hz)?;
-        self.validate_staged_coverage(staged, clock, self.raster.units())?;
-        let mut candidate = self.redraw(staged, clock, self.raster.units())?;
+        let units = self.units_before(staged.first(), clock)?..self.raster.units();
+        self.validate_staged_coverage(staged, clock, units.clone())?;
+        let mut candidate = self.redraw(staged, clock, units)?;
         candidate.delivered_rows = self.raster.mode.spec().active_rows() as usize;
         candidate.state = Progress::Complete;
         self.decode = candidate;
@@ -165,7 +166,7 @@ impl RxDecoder {
         if units == 0 {
             return Err(SstvError::InsufficientStagedSync);
         }
-        let mut candidate = self.redraw(staged, refit, units)?;
+        let mut candidate = self.redraw(staged, refit, 0..units)?;
         // Decoding continues from the refitted clock, so the working window is
         // taken again from the retained samples rather than from the window
         // that was trimmed against the old one.
@@ -196,15 +197,16 @@ impl RxDecoder {
         self.image_revision = self.image_revision.saturating_add(1);
         Ok(units)
     }
-    fn redraw(&self, staged: &SampleBuffer, clock: RasterClock, units: usize) -> Result<DecodeState, SstvError> {
+    fn redraw(&self, staged: &SampleBuffer, clock: RasterClock, units: Range<usize>) -> Result<DecodeState, SstvError> {
         let mut candidate = DecodeState::new(self.decode.image.size());
+        candidate.raster_unit = units.start;
         let scan = Scan {
             raster: &self.raster,
             input: staged,
             clock,
             source: Source::Staged,
         };
-        while candidate.raster_unit < units {
+        while candidate.raster_unit < units.end {
             scan.draw(&mut candidate)?;
         }
         Ok(candidate)
@@ -248,7 +250,7 @@ impl RxDecoder {
         &self,
         staged: &SampleBuffer,
         clock: RasterClock,
-        units: usize,
+        units: Range<usize>,
     ) -> Result<(), SstvError> {
         let width = self.raster.width;
         let require = |sample: u64| -> Result<(), SstvError> {
@@ -260,7 +262,7 @@ impl RxDecoder {
                 })
             }
         };
-        for unit in 0..units {
+        for unit in units {
             // Sampling positions increase monotonically, so covering the first
             // and last sample of every segment covers everything between them.
             for segment in self.raster.profile.pixels().iter() {
