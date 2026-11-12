@@ -554,6 +554,80 @@ fn aligns_causal_sync_with_frequency_output(#[case] mode: Mode, #[case] rate: u3
     );
 }
 
+fn settled_afc_offset_hz(mode: Mode, rate: u32, offset_hz: f64) -> f64 {
+    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+    let mut image = RgbImage::new(size, Rgb8::new(0, 0, 0));
+    for row in 0..size.height() {
+        for x in 0..size.width() {
+            let level = (x * 255 / size.width()) as u8;
+            *image.row_mut(row).unwrap().get_mut(x).unwrap() = Rgb8::new(level, 255 - level, level / 2);
+        }
+    }
+    let leading_ps = mode
+        .scan()
+        .leading()
+        .iter()
+        .map(|segment| segment.duration().as_picos())
+        .sum::<u64>();
+    let stop_ps = 910_000_000_000 + leading_ps + mode.spec().period().as_picos() * 30;
+    let stop_sample = SstvDuration::from_picos(stop_ps).to_samples(rate);
+    let mut samples = Vec::new();
+    let mut phase = 0.0_f64;
+    let mut written = 0_u64;
+    for timed in TxEncoder::new(mode, image).unwrap() {
+        let deadline = timed.until().to_samples(rate);
+        let frequency = f64::from(timed.frequency().as_hz()) + offset_hz;
+        while written < deadline && written < stop_sample {
+            samples.push((phase.sin() * 0.8) as f32);
+            phase = (phase + TAU * frequency / f64::from(rate)).rem_euclid(TAU);
+            written += 1;
+        }
+        if written >= stop_sample {
+            break;
+        }
+    }
+    demodulate(&samples, rate).unwrap().frequency_offset_hz()
+}
+
+#[rstest]
+#[case(Mode::Martin1, 48_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie1, 48_000)]
+#[case(Mode::Scottie2, 48_000)]
+#[case(Mode::ScottieDx, 48_000)]
+#[case(Mode::Robot36, 48_000)]
+#[case(Mode::Robot72, 48_000)]
+#[case(Mode::Pd50, 48_000)]
+#[case(Mode::Pd120, 48_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn afc_reports_no_offset_on_a_signal_that_has_none(#[case] mode: Mode, #[case] rate: u32) {
+    let measured = settled_afc_offset_hz(mode, rate, 0.0);
+    assert!(
+        measured.abs() <= 1.0,
+        "{mode:?} @{rate}: a signal on frequency was measured {measured} Hz off"
+    );
+}
+
+#[rstest]
+#[case(Mode::Scottie1, 48_000)]
+#[case(Mode::Scottie2, 48_000)]
+#[case(Mode::Robot36, 48_000)]
+#[case(Mode::Robot72, 48_000)]
+#[case(Mode::Pd50, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn afc_follows_a_mistuned_sync_tone(#[case] mode: Mode, #[case] rate: u32, #[values(25.0, -25.0)] offset_hz: f64) {
+    let measured = settled_afc_offset_hz(mode, rate, offset_hz);
+    assert!(
+        (measured - offset_hz).abs() <= 1.0,
+        "{mode:?} @{rate}: a {offset_hz} Hz offset was measured as {measured} Hz"
+    );
+}
+
 #[test]
 fn rejects_low_sample_rate() {
     assert!(matches!(

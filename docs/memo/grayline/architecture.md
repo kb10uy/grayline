@@ -526,12 +526,46 @@ front end performs band-pass filtering, level normalization, VIS/FSK tone
 detection, conventional VIS decoding, zero-crossing AFC measurement, and
 Hilbert frequency discrimination.
 
+AFC measures the sync tone once per pulse and subtracts the smoothed offset
+from every demodulated frequency, so an error in it shifts every picture level
+alike: a direct-color mode comes out darker or lighter, and a luminance and
+chrominance mode comes out tinted, because both color differences move the
+same way. Two signals with different delays are involved. What says a pulse
+happened is the sync tone detector's strength staying above a threshold for
+3 to 50 milliseconds, and that envelope trails the tone by six to eight
+milliseconds. What is averaged is the zero-crossing frequency of the
+band-passed input, which is barely delayed at all. The readings taken while
+the detector is above its threshold are therefore not the pulse: for a
+9-millisecond pulse they are its last millisecond and the step into the porch
+after it, which read tens of hertz high.
+
+The readings are instead kept for the longest run plus the detector's lag, and
+when a run ends the pulse is found in them by its own frequency: the longest
+stretch of readings within 100 Hz of the expected sync tone, with gaps of up to
+1.5 milliseconds allowed so one bad crossing does not split it, no earlier than
+12 milliseconds before the run began. The first and last 1.5 milliseconds of
+that stretch are left out, since the receive band-pass smears each step over
+its own length, and the mean of the rest is the pulse's frequency. This is the
+interior window MMSSTV measures in, reached from the other side: MMSSTV opens
+its window by counting discriminator samples inside the sync range, where this
+front end keeps the narrow tone detector as the gate and uses the frequency
+readings only to place the window.
+
 The AFC offset corrects the demodulated frequency as measured, but the tone
 detectors follow it in whole hertz and are retuned only when that whole number
 changes, as MMSSTV's `InitTone` does. A short pulse at a low sampling rate is
 measured from a handful of zero crossings, so its offset wanders by a fraction
 of a hertz from line to line, and retuning the detector bank on every such
 step moves the sync strength the raster decoder is following for no gain.
+
+The gate limits what the measurement can reach, and it is not symmetric. On a
+clean synthesized signal a 9-millisecond pulse is followed from about 55 Hz
+low to 30 Hz high and a 20-millisecond one to 45 Hz high; past that the
+detector strength never crosses the threshold, so nothing is measured and the
+offset stays at zero. A Martin pulse, at under five milliseconds, only just
+reaches the threshold: at 48 kHz it does not open the gate on frequency at
+all, and at 8 kHz it opens it on some lines and not others, so Martin modes
+are corrected late or not at all.
 
 Conventional VIS decoding arms on the start bit, as MMSSTV does: fifteen
 milliseconds of sync-tone dominance — longer than the break between the
