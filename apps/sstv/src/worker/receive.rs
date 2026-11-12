@@ -598,15 +598,38 @@ mod pipeline_tests {
         collect(worker, snapshot, frame);
     }
 
-    fn collect(worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) {
-        if let Some(mut latest) = worker.latest() {
-            if let Some(new) = latest.frame.take() {
-                *frame = Some(new);
-            }
-            if latest.history.is_none() {
-                latest.history = snapshot.history.take();
-            }
-            *snapshot = latest;
+    fn collect(worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) -> bool {
+        let Some(mut latest) = worker.latest() else {
+            return false;
+        };
+        if let Some(new) = latest.frame.take() {
+            *frame = Some(new);
+        }
+        if latest.history.is_none() {
+            latest.history = snapshot.history.take();
+        }
+        *snapshot = latest;
+        true
+    }
+
+    fn settle(
+        worker: &RxWorker,
+        snapshot: &mut RxSnapshot,
+        frame: &mut Option<Frame>,
+        done: impl Fn(&RxSnapshot) -> bool,
+    ) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !done(snapshot) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+            collect(worker, snapshot, frame);
+        }
+    }
+
+    fn answer(worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !collect(worker, snapshot, frame) {
+            assert!(Instant::now() < deadline, "the worker never answered");
+            thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -726,7 +749,9 @@ mod pipeline_tests {
         assert!(matches!(snapshot.progress, RxProgress::Decoding { .. }), "{snapshot:?}");
 
         worker.request_finish();
-        drain(&mut feed, &worker, &mut snapshot, &mut frame);
+        settle(&worker, &mut snapshot, &mut frame, |snapshot| {
+            snapshot.history.is_some()
+        });
 
         assert_eq!(snapshot.progress, RxProgress::Idle, "{snapshot:?}");
         assert!((0.65..1.0).contains(&snapshot.display_fraction), "{snapshot:?}");
@@ -750,11 +775,16 @@ mod pipeline_tests {
         push_all(&mut feed, &worker, &pcm, &mut snapshot, &mut frame);
         push_all(&mut feed, &worker, &silence, &mut snapshot, &mut frame);
         drain(&mut feed, &worker, &mut snapshot, &mut frame);
+        settle(&worker, &mut snapshot, &mut frame, |snapshot| {
+            snapshot.progress == RxProgress::Complete
+        });
         assert_eq!(snapshot.progress, RxProgress::Complete, "{snapshot:?}");
         assert!(snapshot.history.is_none(), "{snapshot:?}");
 
         worker.request_finish();
-        drain(&mut feed, &worker, &mut snapshot, &mut frame);
+        settle(&worker, &mut snapshot, &mut frame, |snapshot| {
+            snapshot.history.is_some()
+        });
 
         assert_eq!(snapshot.progress, RxProgress::Complete, "{snapshot:?}");
         assert_eq!(snapshot.mode, Some(mode), "{snapshot:?}");
@@ -764,7 +794,7 @@ mod pipeline_tests {
         assert!(error < 40.0, "the kept picture scored {error}");
 
         worker.request_finish();
-        drain(&mut feed, &worker, &mut snapshot, &mut frame);
+        answer(&worker, &mut snapshot, &mut frame);
         assert!(snapshot.history.is_none(), "the picture was kept twice");
     }
 
