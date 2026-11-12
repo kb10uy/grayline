@@ -132,22 +132,6 @@ pub fn inert_labels(ui: &mut egui::Ui) {
     ui.style_mut().interaction.selectable_labels = false;
 }
 
-/// Draws buttons at the size this family's layouts were measured against.
-///
-/// egui 0.37 doubled the default padding inside a button and made every
-/// control two points taller. Each bar here was laid out to fit its window's
-/// default width at the old size, and at the new one WEFAX's settings row no
-/// longer fits on one line at 1280 points. Set every theme's style and the
-/// `Ui` in hand for the reason [`inert_labels`] does.
-pub fn compact_controls(ui: &mut egui::Ui) {
-    let compact = |spacing: &mut egui::style::Spacing| {
-        spacing.button_padding = egui::vec2(4.0, 1.0);
-        spacing.interact_size.y = 18.0;
-    };
-    ui.ctx().all_styles_mut(|style| compact(&mut style.spacing));
-    compact(ui.spacing_mut());
-}
-
 /// The address `configured` names, or the identity's own.
 ///
 /// Split from the lookup so it can be checked without an environment: a test

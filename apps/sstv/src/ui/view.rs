@@ -59,7 +59,6 @@ pub(crate) fn contact_label_key(key: &str) -> String {
 /// has every menu action reachable.
 pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bool) -> Option<menu::Action> {
     grayline_shell::inert_labels(ui);
-    grayline_shell::compact_controls(ui);
 
     let mut action = None;
     if in_window_menu {
