@@ -526,6 +526,13 @@ front end performs band-pass filtering, level normalization, VIS/FSK tone
 detection, conventional VIS decoding, zero-crossing AFC measurement, and
 Hilbert frequency discrimination.
 
+The AFC offset corrects the demodulated frequency as measured, but the tone
+detectors follow it in whole hertz and are retuned only when that whole number
+changes, as MMSSTV's `InitTone` does. A short pulse at a low sampling rate is
+measured from a handful of zero crossings, so its offset wanders by a fraction
+of a hertz from line to line, and retuning the detector bank on every such
+step moves the sync strength the raster decoder is following for no gain.
+
 Conventional VIS decoding arms on the start bit, as MMSSTV does: fifteen
 milliseconds of sync-tone dominance — longer than the break between the
 leaders — opens the ten 30-millisecond bit cells, and the frame is accepted on
