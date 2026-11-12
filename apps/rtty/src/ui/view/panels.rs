@@ -256,7 +256,7 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
         let label = app.i18n.text(key);
         ui.horizontal(|ui| {
             field_label(ui, &label);
-            let id = Id::new(salt);
+            let id = Id::unique(salt);
             crate::ui::input::sanitize(ui.ctx(), id);
             let height = ui.spacing().interact_size.y;
             let width = if index == 0 { fields - height - gap } else { fields };

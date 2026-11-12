@@ -24,13 +24,13 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
     let mut done = false;
     let mut changed = false;
     let mut removed = None;
-    let response = egui::Modal::new(Id::new("station")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("station")).show(ui.ctx(), |ui| {
         ui.set_max_width(360.0);
         ui.heading(title);
         ui.add_space(8.0);
         let width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
         for (index, label) in labels.iter().enumerate() {
-            let id = Id::new(["station-callsign", "station-name", "station-qth", "station-grid"][index]);
+            let id = Id::unique(["station-callsign", "station-name", "station-qth", "station-grid"][index]);
             crate::ui::input::sanitize(ui.ctx(), id);
             let target = match index {
                 0 => &mut app.settings.station.callsign,
@@ -97,7 +97,7 @@ fn custom_fields(ui: &mut Ui, app: &mut App) -> (bool, Option<usize>) {
         ui.horizontal(|ui| {
             let usable = valid_variable_name(name);
             let field = egui::TextEdit::singleline(name)
-                .id(Id::new(("custom-name", index)))
+                .id(Id::unique(("custom-name", index)))
                 .desired_width(name_width)
                 .hint_text(&name_hint)
                 .text_color_opt((!usable).then_some(ERROR_COLOR));
@@ -112,7 +112,7 @@ fn custom_fields(ui: &mut Ui, app: &mut App) -> (bool, Option<usize>) {
             // The value goes on the air through whichever macro names it, so
             // it runs the filter every other sendable field runs; the name
             // never leaves the configuration, so it does not.
-            let value_id = Id::new(("custom-value", index));
+            let value_id = Id::unique(("custom-value", index));
             crate::ui::input::sanitize(ui.ctx(), value_id);
             changed |= ui
                 .add(
@@ -175,7 +175,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let mut removed = None;
     let mut adding = false;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("contact")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(format!("{title} — {callsign}"));
         ui.add_space(4.0);

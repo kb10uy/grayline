@@ -1,7 +1,7 @@
 //! Duplicate widget ids and impossible layouts only surface at runtime, so
 //! every locale is rendered here rather than only in front of an operator.
 
-use egui_kittest::{Harness, kittest::Queryable};
+use egui_kittest::{Harness, HarnessBuilder, kittest::Queryable};
 use grayline_rtty::ToneSet;
 use grayline_shell::i18n::{I18n, Locale};
 use rstest::rstest;
@@ -12,8 +12,14 @@ use crate::{
     worker::receive::{ColumnSnapshot, RxSnapshot},
 };
 
+fn harness() -> HarnessBuilder {
+    Harness::builder()
+        .allow_missing_glyphs()
+        .with_accessibility_check(false)
+}
+
 fn render(app: &mut App) -> Harness<'_> {
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         let model = menu::model(app);
         view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
@@ -22,7 +28,7 @@ fn render(app: &mut App) -> Harness<'_> {
 }
 
 fn render_sized(app: &mut App, size: egui::Vec2) -> Harness<'_> {
-    let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
+    let mut harness = harness().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
         view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
@@ -177,7 +183,7 @@ fn sending_is_done_from_the_panel_beside_the_text() {
 
     let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
 
-    let panel = egui::PanelState::load(&harness.ctx, Id::new("side-panel"))
+    let panel = egui::PanelState::load(&harness.ctx, harness.ui_id().with("side-panel"))
         .expect("the side panel is drawn")
         .outer_rect;
     for control in ["action-send", "action-stop", "label-level"] {
@@ -270,7 +276,7 @@ fn the_field_keeps_its_height_however_long_the_message_is() {
         let mut app = App::headless();
         app.transmit.draft = draft.to_owned();
         let harness = render_sized(&mut app, egui::vec2(1_100.0, 720.0));
-        let state = egui::PanelState::load(&harness.ctx, Id::new("transmit-panel"));
+        let state = egui::PanelState::load(&harness.ctx, harness.ui_id().with("transmit-panel"));
         state.expect("the transmit panel is drawn").size().y
     };
     assert_eq!(
@@ -289,8 +295,8 @@ fn the_stack_is_a_pane_of_its_own_and_leaves_the_field_where_it_was() {
     let mut idle = App::headless();
     let harness = render_sized(&mut idle, egui::vec2(1_100.0, 720.0));
     assert!(harness.query_by_label(&i18n.text("label-on-air")).is_none());
-    assert!(egui::PanelState::load(&harness.ctx, Id::new("pending-panel")).is_none());
-    let quiet = egui::PanelState::load(&harness.ctx, Id::new("transmit-panel"))
+    assert!(egui::PanelState::load(&harness.ctx, harness.ui_id().with("pending-panel")).is_none());
+    let quiet = egui::PanelState::load(&harness.ctx, harness.ui_id().with("transmit-panel"))
         .expect("the transmit panel is drawn")
         .size()
         .y;
@@ -298,8 +304,8 @@ fn the_stack_is_a_pane_of_its_own_and_leaves_the_field_where_it_was() {
     let mut busy = App::headless();
     sending(&mut busy);
     let harness = render_sized(&mut busy, egui::vec2(1_100.0, 720.0));
-    assert!(egui::PanelState::load(&harness.ctx, Id::new("pending-panel")).is_some());
-    let keyed = egui::PanelState::load(&harness.ctx, Id::new("transmit-panel"))
+    assert!(egui::PanelState::load(&harness.ctx, harness.ui_id().with("pending-panel")).is_some());
+    let keyed = egui::PanelState::load(&harness.ctx, harness.ui_id().with("transmit-panel"))
         .expect("the transmit panel is drawn")
         .size()
         .y;
@@ -487,7 +493,7 @@ fn the_contact_fields_give_way_to_the_loggers_form() {
     let name = app.i18n.text("label-his-name");
     let clear = app.i18n.text("action-clear-contact");
 
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         let model = menu::model(&app);
         view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
     });

@@ -17,12 +17,12 @@ criterion = { version = "0.8", default-features = false, features = ["cargo_benc
 ctrlc = "3.5"
 directories = "6.0"
 encoding_rs = "0.8"
-eframe = "0.35"
+eframe = "0.37"
 embed-resource = "3.0"
-egui = "0.35"
-egui_extras = "0.35"
+egui = { version = "0.37", features = ["monochrome_emoji_fonts"] }
+egui_extras = "0.37"
 fontdb = "0.24"
-egui_kittest = "0.35"
+egui_kittest = "0.37"
 fluent-bundle = "0.16"
 hound = "3.5"
 muda = { version = "0.21", default-features = false }

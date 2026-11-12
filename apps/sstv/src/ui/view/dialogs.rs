@@ -24,7 +24,7 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
 
     let mut finished = false;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("station")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("station")).show(ui.ctx(), |ui| {
         ui.set_max_width(360.0);
         ui.heading(title);
         ui.add_space(8.0);
@@ -70,7 +70,7 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
     let mut changed = false;
     let mut removed = None;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("custom-variables")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("custom-variables")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(title);
         ui.add_space(8.0);
@@ -161,7 +161,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let mut removed = None;
     let mut adding = false;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("contact")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(format!("{title} — {callsign}"));
         ui.add_space(4.0);
@@ -293,7 +293,7 @@ pub(super) fn device_fault_modal(ui: &mut Ui, app: &mut App) {
 
     let mut retry = false;
     let mut dismiss = false;
-    let response = egui::Modal::new(Id::new("device-fault")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("device-fault")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(app.i18n.text("device-lost-title"));
         ui.add_space(8.0);

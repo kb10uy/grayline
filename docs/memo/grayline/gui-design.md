@@ -12,7 +12,7 @@ assumed and are not restated here. Mode and timing data comes from
 
 ## Framework
 
-The interface uses [egui](https://github.com/emilk/egui) 0.35 through eframe.
+The interface uses [egui](https://github.com/emilk/egui) 0.37 through eframe.
 Its immediate-mode model keeps widget state in the application model while the
 receive, composition, and transmit workers remain explicitly owned. Windows
 uses `muda` for the native menu bar; Linux and macOS render the same menu model

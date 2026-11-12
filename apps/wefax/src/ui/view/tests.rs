@@ -2,7 +2,7 @@
 //! every locale is rendered here rather than only in front of an operator.
 
 use egui_kittest::{
-    Harness,
+    Harness, HarnessBuilder,
     kittest::{Queryable, by},
 };
 use grayline_shell::i18n::Locale;
@@ -12,8 +12,14 @@ use rstest::rstest;
 use super::*;
 use crate::{ui::menu, worker::receive::StripUpdate};
 
+fn harness() -> HarnessBuilder {
+    Harness::builder()
+        .allow_missing_glyphs()
+        .with_accessibility_check(false)
+}
+
 fn render(app: &mut App) -> Harness<'_> {
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         let model = menu::model(app);
         view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
@@ -25,7 +31,7 @@ fn render(app: &mut App) -> Harness<'_> {
 ///
 /// The bar's alignment answers to the installed font's metrics.
 fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
-    let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
+    let mut harness = harness().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
         view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
@@ -35,7 +41,7 @@ fn render_as_installed(app: &mut App, size: egui::Vec2) -> Harness<'_> {
 }
 
 fn render_sized(app: &mut App, size: egui::Vec2) -> Harness<'_> {
-    let mut harness = Harness::builder().with_size(size).build_ui(|ui| {
+    let mut harness = harness().with_size(size).build_ui(|ui| {
         let model = menu::model(app);
         view(ui, app, &model, grayline_shell::menu::is_in_window());
     });

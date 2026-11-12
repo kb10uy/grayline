@@ -54,7 +54,7 @@ fn install_faces(definitions: &mut FontDefinitions, database: &fontdb::Database,
         definitions.font_data.insert(
             (*family).to_owned(),
             Arc::new(FontData {
-                font: data.into(),
+                font: Arc::new(data),
                 index,
                 tweak: egui::FontTweak::default(),
             }),
