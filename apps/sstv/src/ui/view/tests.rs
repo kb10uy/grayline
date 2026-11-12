@@ -2,8 +2,8 @@
 //! test harness so what is asserted is what a widget actually reports.
 
 use egui_kittest::{
-    Harness,
-    kittest::{NodeT as _, Queryable as _},
+    Harness, HarnessBuilder,
+    kittest::{NodeT as _, Queryable as _, by},
 };
 use rstest::rstest;
 
@@ -15,12 +15,18 @@ use crate::test_util::{FakeLogger, refused_port};
 
 use super::panels::decibels;
 
+fn harness() -> HarnessBuilder {
+    Harness::builder()
+        .allow_missing_glyphs()
+        .with_accessibility_check(false)
+}
+
 /// Runs the interface for a few frames and returns the harness.
 ///
 /// Duplicate widget ids and bad layouts only surface at run time, so the
 /// whole view is exercised here: nothing else in the suite would notice.
 fn render(app: &mut App) -> Harness<'_> {
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         let model = menu::model(app);
         view(ui, app, &model, grayline_shell::menu::is_in_window());
     });
@@ -174,7 +180,7 @@ fn the_qso_panel_gives_way_to_the_loggers_form() {
     let received = app.i18n.text("qso-rsv-received");
     let increment = app.i18n.text("qso-nr-increment");
 
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         let model = menu::model(&app);
         view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
     });
@@ -334,12 +340,14 @@ fn hovering_the_receive_indicator_offers_the_reset() {
     app.tab = Tab::Receive;
     let hint = app.i18n.text("rx-reset-hint");
 
+    let tooltip = || by().role(egui::accesskit::Role::Label).label(&hint);
+
     let mut harness = render(&mut app);
-    assert!(harness.query_by_label(&hint).is_none());
+    assert!(harness.query(tooltip()).is_none());
     harness.get_by_role(egui::accesskit::Role::ProgressIndicator).hover();
     harness.run();
 
-    harness.get_by_label(&hint);
+    harness.get(tooltip());
 }
 
 #[test]
@@ -406,7 +414,7 @@ fn status_errors_are_left_and_audio_facts_are_right() {
     app.library.error = Some("library unavailable".to_owned());
     let no_audio = app.i18n.text("status-no-audio");
     let no_output = app.i18n.text("status-no-output");
-    let mut harness = Harness::builder()
+    let mut harness = harness()
         .with_size(egui::vec2(600.0, 40.0))
         .build_ui(|ui| status_bar(ui, &app));
     harness.run();
@@ -426,7 +434,7 @@ fn the_in_window_menu_bar_renders_on_every_platform() {
     // that never takes that path at run time.
     let model = menu::model(&App::headless());
     let labels: Vec<String> = model.iter().map(|menu| menu.label.clone()).collect();
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         menu::bar(ui, &model);
     });
     harness.run();
@@ -519,7 +527,7 @@ fn template_and_stock_tables_give_the_file_name_most_of_the_width() {
     let stock = "a-very-long-stock-file-name-that-needs-a-wide-column.png";
     app.library.templates = vec![crate::app::Entry::sample(template, "")];
     app.library.stocks = vec![crate::app::Entry::sample(stock, "320×256")];
-    let mut harness = Harness::new_ui(|ui| {
+    let mut harness = harness().build_ui(|ui| {
         ui.allocate_ui(egui::vec2(700.0, 180.0), |ui| library(ui, &mut app));
     });
     harness.run();
@@ -543,7 +551,7 @@ fn clicking_a_row_label_selects_that_row() {
     app.library.stock = Some(0);
 
     {
-        let mut harness = Harness::new_ui(|ui| {
+        let mut harness = harness().build_ui(|ui| {
             let model = menu::model(&app);
             view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
@@ -566,7 +574,7 @@ fn a_transmission_locks_the_library_lists() {
     app.library.stock = Some(0);
 
     {
-        let mut harness = Harness::new_ui(|ui| {
+        let mut harness = harness().build_ui(|ui| {
             let model = menu::model(&app);
             view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
@@ -596,7 +604,7 @@ fn the_library_fits_the_height_it_is_given() {
     let mut used = 0.0;
 
     {
-        let mut harness = Harness::new_ui(|ui| {
+        let mut harness = harness().build_ui(|ui| {
             used = ui
                 .allocate_ui(egui::vec2(560.0, 80.0), |ui| library(ui, &mut app))
                 .response
@@ -617,7 +625,7 @@ fn the_station_dialog_closes_from_its_own_button() {
     let close = app.i18n.text("station-close");
 
     {
-        let mut harness = Harness::new_ui(|ui| {
+        let mut harness = harness().build_ui(|ui| {
             let model = menu::model(&app);
             view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
@@ -646,7 +654,7 @@ fn the_tx_button_refuses_a_transmission_it_cannot_start() {
     assert!(!app.can_transmit());
 
     {
-        let mut harness = Harness::new_ui(|ui| {
+        let mut harness = harness().build_ui(|ui| {
             let model = menu::model(&app);
             view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
         });
@@ -713,7 +721,7 @@ fn the_transmit_trigger_is_refused_while_a_tone_is_being_sent() {
 #[test]
 fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
     let mut app = App::headless();
-    let mut harness = Harness::builder().with_size(egui::vec2(900.0, 700.0)).build_ui(|ui| {
+    let mut harness = harness().with_size(egui::vec2(900.0, 700.0)).build_ui(|ui| {
         let model = menu::model(&app);
         view(ui, &mut app, &model, grayline_shell::menu::is_in_window());
     });
@@ -734,5 +742,20 @@ fn the_side_panel_returns_to_its_width_after_a_narrow_window() {
 }
 
 fn side_panel_width(harness: &Harness<'_>) -> Option<f32> {
-    egui::containers::panel::PanelState::load(&harness.ctx, Id::new("side-panel")).map(|state| state.outer_rect.width())
+    egui::containers::panel::PanelState::load(&harness.ctx, harness.ui_id().with("side-panel"))
+        .map(|state| state.outer_rect.width())
+}
+
+#[test]
+fn the_details_button_ends_where_the_rows_below_it_do() {
+    let mut app = App::headless();
+    let reset = app.i18n.text("qso-nr-reset");
+    let harness = render(&mut app);
+
+    let details = harness.get_by_label("\u{2026}").rect().right();
+    let row = harness.get_by_label(&reset).rect().right();
+    assert!(
+        (details - row).abs() < 0.5,
+        "the details button ends at {details}, the rows at {row}"
+    );
 }

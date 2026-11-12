@@ -62,12 +62,12 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
 
     let mut activated = None;
     if in_window_menu {
-        Panel::top(Id::new("menu-bar")).show(ui, |ui| {
+        Panel::top("menu-bar").show(ui, |ui| {
             activated = menu::bar(ui, model);
         });
     }
-    Panel::bottom(Id::new("status-bar")).show(ui, |ui| status_bar(ui, app));
-    Panel::right(Id::new("side-panel"))
+    Panel::bottom("status-bar").show(ui, |ui| status_bar(ui, app));
+    Panel::right("side-panel")
         .resizable(false)
         .exact_size(SIDE_PANEL_WIDTH)
         .show(ui, |ui| side_panel(ui, app));
@@ -76,11 +76,11 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     // height is what it holds rather than what the operator dragged it to:
     // the field inside is a fixed four rows, so the buttons under it are
     // always in the same place.
-    Panel::bottom(Id::new("transmit-panel"))
+    Panel::bottom("transmit-panel")
         .resizable(false)
         .show(ui, |ui| transmit_panel(ui, app));
     if has_pending(app) {
-        Panel::bottom(Id::new("pending-panel"))
+        Panel::bottom("pending-panel")
             .resizable(false)
             .show(ui, |ui| pending_panel(ui, app));
     } else {

@@ -2,11 +2,17 @@
 //! handed is what these check: a picture nothing reaches is the failure this
 //! whole path has, and it looks exactly like a quiet band.
 
-use egui_kittest::{Harness, kittest::Queryable};
+use egui_kittest::{Harness, HarnessBuilder, kittest::Queryable};
 use rstest::rstest;
 
 use super::*;
 use crate::locales::CATALOG;
+
+fn harness() -> HarnessBuilder {
+    Harness::builder()
+        .allow_missing_glyphs()
+        .with_accessibility_check(false)
+}
 
 fn levels(mark: f64, space: f64) -> ChannelLevels {
     ChannelLevels { mark, space }
@@ -43,7 +49,7 @@ fn the_window_draws_in_every_locale(#[case] locale: Locale) {
     scope.retune(ToneSet::AFSK_170);
 
     let view = scope.view();
-    let mut harness = Harness::new_ui(|ui| contents(ui, &view));
+    let mut harness = harness().build_ui(|ui| contents(ui, &view));
     harness.run();
     harness.get_by_label(&i18n.text("label-spectrum"));
     harness.get_by_label(&i18n.text("label-channels"));
@@ -53,7 +59,7 @@ fn the_window_draws_in_every_locale(#[case] locale: Locale) {
 fn a_window_with_nothing_to_draw_still_draws() {
     let scope = opened(Locale::En);
     let view = scope.view();
-    let mut harness = Harness::new_ui(|ui| contents(ui, &view));
+    let mut harness = harness().build_ui(|ui| contents(ui, &view));
     harness.run();
     harness.get_by_label(&I18n::new(Locale::En, &CATALOG).text("label-spectrum"));
 }

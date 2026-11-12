@@ -25,8 +25,9 @@ use ui::{menu, view};
 /// The window size the interface is laid out for, in points.
 ///
 /// Wider than it is tall, because the picture is: a WEFAX line is turned a
-/// quarter turn so that time runs across the window.
-const DEFAULT_WINDOW_SIZE: [f32; 2] = [1280.0, 720.0];
+/// quarter turn so that time runs across the window. Wide enough for the whole
+/// control bar to sit on one line in either language.
+const DEFAULT_WINDOW_SIZE: [f32; 2] = [1440.0, 720.0];
 
 fn main() -> Result<(), Box<dyn Error>> {
     platform::prepare_process(&identity::IDENTITY);

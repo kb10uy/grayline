@@ -2,6 +2,8 @@
 
 use super::*;
 
+const DETAILS: &str = "\u{2026}";
+
 pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add_space(4.0);
@@ -305,7 +307,7 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
     let mut opening = false;
     ui.horizontal(|ui| {
         field_label(ui, &call_label);
-        let details_width = ui.spacing().interact_size.y;
+        let details_width = grayline_shell::button_width(ui, DETAILS);
         let edit = egui::TextEdit::singleline(&mut app.qso.call)
             .desired_width(fields - details_width - gap)
             .hint_text(call_hint.as_str());
@@ -317,7 +319,7 @@ pub(super) fn qso_panel(ui: &mut Ui, app: &mut App) {
         }
         let usable = grayline_qso::normalize_callsign(&app.qso.call).is_some();
         opening = ui
-            .add_enabled(usable, egui::Button::new("\u{2026}"))
+            .add_enabled(usable, egui::Button::new(DETAILS))
             .on_hover_text(details_hint.as_str())
             .clicked();
     });
@@ -382,21 +384,18 @@ fn followed_qso_panel(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         field_label(ui, &call_label);
         let height = ui.spacing().interact_size.y;
-        ui.allocate_ui_with_layout(
-            egui::vec2(fields - height - gap, height),
-            Layout::left_to_right(Align::Center),
-            |ui| {
-                ui.set_min_size(egui::vec2(fields - height - gap, height));
-                ui.add(
-                    egui::Label::new(RichText::new(app.qso.call.as_str()).strong())
-                        .selectable(true)
-                        .truncate(),
-                );
-            },
-        );
+        let width = fields - grayline_shell::button_width(ui, DETAILS) - gap;
+        ui.allocate_ui_with_layout(egui::vec2(width, height), Layout::left_to_right(Align::Center), |ui| {
+            ui.set_min_size(egui::vec2(width, height));
+            ui.add(
+                egui::Label::new(RichText::new(app.qso.call.as_str()).strong())
+                    .selectable(true)
+                    .truncate(),
+            );
+        });
         let usable = grayline_qso::normalize_callsign(&app.qso.call).is_some();
         opening = ui
-            .add_enabled(usable, egui::Button::new("\u{2026}"))
+            .add_enabled(usable, egui::Button::new(DETAILS))
             .on_hover_text(details_hint.as_str())
             .clicked();
     });

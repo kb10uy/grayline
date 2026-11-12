@@ -62,11 +62,11 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bo
 
     let mut action = None;
     if in_window_menu {
-        Panel::top(Id::new("menu-bar")).show(ui, |ui| {
+        Panel::top("menu-bar").show(ui, |ui| {
             action = menu::bar(ui, model);
         });
     }
-    Panel::bottom(Id::new("status-bar")).show(ui, |ui| status_bar(ui, app));
+    Panel::bottom("status-bar").show(ui, |ui| status_bar(ui, app));
     // The side panel is claimed before the library so it runs the full height
     // above the status bar: its sections are read while working in either half
     // of the window, and the library only needs the width the lists are laid
@@ -77,11 +77,11 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[menu::Menu], in_window_menu: bo
     // Exact rather than a default width: a panel keeps the width it was last
     // laid out at, and a window dragged narrow enough to squeeze it stores the
     // squeezed width and stays there once the window is given its size back.
-    Panel::right(Id::new("side-panel"))
+    Panel::right("side-panel")
         .resizable(false)
         .exact_size(SIDE_PANEL_WIDTH)
         .show(ui, |ui| side_panel(ui, app));
-    Panel::bottom(Id::new("library"))
+    Panel::bottom("library")
         .resizable(true)
         .default_size(LIBRARY_HEIGHT)
         .size_range(112.0..=640.0)
@@ -121,7 +121,7 @@ fn main_pane(ui: &mut Ui, app: &mut App) {
     // The bar is claimed first so it takes the height its text needs and the
     // canvas fills exactly what is left. Reserving a fixed height for it
     // instead left whatever it did not use as a gap under the image.
-    Panel::bottom(Id::new("action-bar")).show(ui, |ui| action_bar(ui, &geometry, &state));
+    Panel::bottom("action-bar").show(ui, |ui| action_bar(ui, &geometry, &state));
     canvas::image_view(ui, app.active_raster_mut(), fraction);
 }
 

@@ -192,7 +192,7 @@ impl<A: Application> eframe::App for Host<A> {
         if !self.fitted {
             self.fitted = self.fit_to_monitor(&ctx);
         }
-        if let Some(path) = ctx.input(|input| input.raw.dropped_files.iter().find_map(|file| file.path.clone())) {
+        if let Some(path) = ctx.input(|input| input.raw.dropped_files.first().map(|file| file.path().to_path_buf())) {
             self.app.open_file(&path);
         }
         self.app.poll(&ctx);
