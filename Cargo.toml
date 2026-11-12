@@ -37,7 +37,7 @@ proptest = "1.7"
 png = "0.18"
 resvg = "0.47"
 rstest = "0.26"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.42", features = ["bundled"] }
 thiserror = { version = "2.0", default-features = false }
 serde_json = "1.0"
 serialport = { version = "4.10", default-features = false }
