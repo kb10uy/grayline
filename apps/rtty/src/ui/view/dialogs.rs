@@ -5,6 +5,8 @@
 
 use super::*;
 
+const REMOVE: &str = "✖";
+
 /// Edits what this station says about itself.
 ///
 /// Behind the Settings menu rather than beside the text, where the SSTV
@@ -89,7 +91,7 @@ fn custom_fields(ui: &mut Ui, app: &mut App) -> (bool, Option<usize>) {
     heading(ui, &heading_text);
     ui.add_space(4.0);
 
-    let remove_width = ui.spacing().interact_size.y;
+    let remove_width = grayline_shell::button_width(ui, REMOVE);
     let gaps = ui.spacing().item_spacing.x * 2.0;
     let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
     let value_width = ui.available_width() - remove_width - gaps - name_width;
@@ -122,7 +124,7 @@ fn custom_fields(ui: &mut Ui, app: &mut App) -> (bool, Option<usize>) {
                         .hint_text(&value_hint),
                 )
                 .changed();
-            if ui.button("✖").clicked() {
+            if ui.button(REMOVE).clicked() {
                 removed = Some(index);
             }
         });
@@ -184,7 +186,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         }
         ui.add_space(8.0);
 
-        let remove_width = ui.spacing().interact_size.y;
+        let remove_width = grayline_shell::button_width(ui, REMOVE);
         let gaps = ui.spacing().item_spacing.x * 2.0;
         let labelled_width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
         let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
@@ -230,7 +232,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
                     changed |= ui
                         .add(egui::TextEdit::singleline(value).desired_width(value_width))
                         .changed();
-                    if ui.button("✖").clicked() {
+                    if ui.button(REMOVE).clicked() {
                         removed = Some(index);
                     }
                 });

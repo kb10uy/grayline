@@ -5,6 +5,8 @@
 
 use super::*;
 
+const REMOVE: &str = "×";
+
 /// Edits what the station says about itself.
 ///
 /// Kept out of the QSO panel and behind the Settings menu because none of it
@@ -74,7 +76,7 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
         ui.set_max_width(420.0);
         ui.heading(title);
         ui.add_space(8.0);
-        let remove_width = ui.spacing().interact_size.y;
+        let remove_width = grayline_shell::button_width(ui, REMOVE);
         let gaps = ui.spacing().item_spacing.x * 2.0;
         let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
         let value_width = ui.available_width() - remove_width - gaps - name_width;
@@ -95,7 +97,7 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
                 changed |= ui
                     .add(egui::TextEdit::singleline(value).desired_width(value_width))
                     .changed();
-                if ui.button("×").clicked() {
+                if ui.button(REMOVE).clicked() {
                     removed = Some(index);
                 }
             });
@@ -170,7 +172,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         }
         ui.add_space(8.0);
 
-        let remove_width = ui.spacing().interact_size.y;
+        let remove_width = grayline_shell::button_width(ui, REMOVE);
         let gaps = ui.spacing().item_spacing.x * 2.0;
         let labelled_width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
         let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
@@ -205,7 +207,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
                     changed |= ui
                         .add(egui::TextEdit::singleline(value).desired_width(value_width))
                         .changed();
-                    if ui.button("×").clicked() {
+                    if ui.button(REMOVE).clicked() {
                         removed = Some(index);
                     }
                 });

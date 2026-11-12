@@ -17,6 +17,8 @@ use crate::{
 const SLIDER_VALUE_WIDTH: f32 = 52.0;
 const MINIMUM_SLIDER_WIDTH: f32 = 32.0;
 
+const DETAILS: &str = "\u{2026}";
+
 pub(super) fn side_panel(ui: &mut Ui, app: &mut App) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add_space(4.0);
@@ -259,7 +261,11 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
             let id = Id::unique(salt);
             crate::ui::input::sanitize(ui.ctx(), id);
             let height = ui.spacing().interact_size.y;
-            let width = if index == 0 { fields - height - gap } else { fields };
+            let width = if index == 0 {
+                fields - grayline_shell::button_width(ui, DETAILS) - gap
+            } else {
+                fields
+            };
             let target = match index {
                 0 => &mut app.contact.callsign,
                 1 => &mut app.contact.name,
@@ -272,7 +278,7 @@ fn contact_panel(ui: &mut Ui, app: &mut App) {
             if index == 0 {
                 let known = grayline_qso::normalize_callsign(&app.contact.callsign).is_some();
                 opening = ui
-                    .add_enabled(known, egui::Button::new("\u{2026}"))
+                    .add_enabled(known, egui::Button::new(DETAILS))
                     .on_hover_text(&details_hint)
                     .clicked();
             }
@@ -317,21 +323,18 @@ fn followed_contact_panel(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         field_label(ui, &label);
         let height = ui.spacing().interact_size.y;
-        ui.allocate_ui_with_layout(
-            egui::vec2(fields - height - gap, height),
-            Layout::left_to_right(Align::Center),
-            |ui| {
-                ui.set_min_size(egui::vec2(fields - height - gap, height));
-                ui.add(
-                    egui::Label::new(RichText::new(app.contact.callsign.as_str()).strong())
-                        .selectable(true)
-                        .truncate(),
-                );
-            },
-        );
+        let width = fields - grayline_shell::button_width(ui, DETAILS) - gap;
+        ui.allocate_ui_with_layout(egui::vec2(width, height), Layout::left_to_right(Align::Center), |ui| {
+            ui.set_min_size(egui::vec2(width, height));
+            ui.add(
+                egui::Label::new(RichText::new(app.contact.callsign.as_str()).strong())
+                    .selectable(true)
+                    .truncate(),
+            );
+        });
         let known = grayline_qso::normalize_callsign(&app.contact.callsign).is_some();
         opening = ui
-            .add_enabled(known, egui::Button::new("\u{2026}"))
+            .add_enabled(known, egui::Button::new(DETAILS))
             .on_hover_text(&details_hint)
             .clicked();
     });

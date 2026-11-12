@@ -745,3 +745,17 @@ fn side_panel_width(harness: &Harness<'_>) -> Option<f32> {
     egui::containers::panel::PanelState::load(&harness.ctx, harness.ui_id().with("side-panel"))
         .map(|state| state.outer_rect.width())
 }
+
+#[test]
+fn the_details_button_ends_where_the_rows_below_it_do() {
+    let mut app = App::headless();
+    let reset = app.i18n.text("qso-nr-reset");
+    let harness = render(&mut app);
+
+    let details = harness.get_by_label("\u{2026}").rect().right();
+    let row = harness.get_by_label(&reset).rect().right();
+    assert!(
+        (details - row).abs() < 0.5,
+        "the details button ends at {details}, the rows at {row}"
+    );
+}
