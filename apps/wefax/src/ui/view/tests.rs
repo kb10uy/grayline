@@ -120,11 +120,14 @@ fn a_narrow_window_keeps_every_control() {
 /// a fraction of a point apart under a system font, and a combo box lays
 /// itself out from the top of the room it is given rather than centring in it,
 /// so the two differences add up.
-#[test]
-fn every_control_on_a_row_shares_its_centre() {
+#[rstest]
+#[case(Locale::En)]
+#[case(Locale::Ja)]
+fn every_control_on_a_row_shares_its_centre(#[case] locale: Locale) {
     let mut app = App::headless();
-    let i18n = I18n::new(Locale::En, &crate::locales::CATALOG);
-    let harness = render_as_installed(&mut app, egui::vec2(1_280.0, 500.0));
+    app.select_locale(locale);
+    let i18n = I18n::new(locale, &crate::locales::CATALOG);
+    let harness = render_as_installed(&mut app, egui::vec2(crate::DEFAULT_WINDOW_SIZE[0], 500.0));
 
     // A combo box carries its selection as a value rather than as a label.
     let button = |label: &str| harness.get_by_label(label).rect().center().y;
@@ -148,7 +151,7 @@ fn every_control_on_a_row_shares_its_centre() {
 #[test]
 fn the_bar_settles_and_stops_asking_for_frames() {
     let mut app = App::headless();
-    let mut harness = render_as_installed(&mut app, egui::vec2(1_280.0, 500.0));
+    let mut harness = render_as_installed(&mut app, egui::vec2(crate::DEFAULT_WINDOW_SIZE[0], 500.0));
     // `run` gives up after a few steps if frames keep being asked for, which
     // is the assertion: by now nothing should be.
     harness.run();
