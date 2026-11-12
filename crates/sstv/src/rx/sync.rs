@@ -101,11 +101,12 @@ pub(super) fn observe(
         peak_sample
     };
     let center_sample = refine_or_estimate(input, profile, envelope_center, sample_rate_hz, sync_detector_delay);
+    let whole = center_sample as f64 - pulse / 2.0 > input.first() as f64;
     Some(SyncObservation {
         unit,
         peak_sample,
         center_sample,
-        confidence: if peak >= MIN_PEAK && contrast >= MIN_CONTRAST {
+        confidence: if whole && peak >= MIN_PEAK && contrast >= MIN_CONTRAST {
             (contrast / (1.0 - background).max(0.001)).clamp(0.0, 1.0)
         } else {
             0.0
@@ -213,6 +214,8 @@ pub(super) fn push_bounded(history: &mut VecDeque<SyncObservation>, value: SyncO
 mod tests {
     use alloc::vec;
 
+    use rstest::rstest;
+
     use super::*;
     use crate::{mode::Mode, rx::input::DemodulatedBlock};
 
@@ -236,6 +239,29 @@ mod tests {
         let observation = observe(&input, profile, clock, 0, rate, delay).unwrap();
         assert_eq!(observation.center_sample, (epoch + pulse / 2) as u64);
         assert!(observation.confidence >= MIN_CONFIDENCE);
+    }
+
+    #[rstest]
+    #[case(-60, false)]
+    #[case(0, false)]
+    #[case(8, true)]
+    fn only_a_pulse_the_stream_holds_whole_is_trusted(#[case] lead: i64, #[case] trusted: bool) {
+        let profile = RasterProfile::for_mode(Mode::Pd50).unwrap();
+        let rate = 8_000;
+        let pulse = samples_spanned(f64::from(rate), profile.sync_duration_ps) as i64;
+        let first = 10_000_u64;
+        let held = lead.max(0) as usize..(lead + pulse) as usize;
+        let mut frequency = vec![1_500.0_f32; 4_000];
+        frequency[held.clone()].fill(1_200.0);
+        let mut sync = vec![0.0_f32; frequency.len()];
+        sync[held].fill(1.0);
+        let mut input = SampleBuffer::new(first);
+        input.append(DemodulatedBlock::new(first, &frequency, &sync), frequency.len());
+        let epoch = (first as i64 + lead) as f64;
+        let clock = RasterClock::from_estimate(epoch, f64::from(rate)).unwrap();
+
+        let observation = observe(&input, profile, clock, 0, rate, SstvDuration::ZERO).unwrap();
+        assert_eq!(observation.confidence >= MIN_CONFIDENCE, trusted);
     }
 
     #[test]

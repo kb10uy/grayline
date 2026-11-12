@@ -196,7 +196,11 @@ work in that one time base.
 search window around a detected pulse, so a rough figure is enough. Inputs whose
 two streams are already aligned use a zero delay. A pulse that the search window
 cannot see whole — one cut short by the start or the end of the retained samples
-— has no usable center and is left out of the fit rather than pulling it.
+— has no usable center and is left out of the fit rather than pulling it. A
+pulse that begins on the first sample retained counts as cut, because nothing
+tells it from one that began earlier. A header-started reception opens on such a
+pulse in every mode that begins its line with one, since detection ends inside
+or just after it.
 
 `RxDecoder` is stateful and streaming. It exposes acquisition, decoding,
 completion, and stopped states, consumes an explicit prefix of each input block,

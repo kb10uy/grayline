@@ -359,6 +359,19 @@ fn a_picture_does_not_slant_a_matched_transmission(#[case] mode: Mode, #[case] r
     );
 }
 
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn a_matched_transmission_is_not_adjusted_while_it_decodes(#[case] mode: Mode, #[case] rate: u32) {
+    let samples = transmission(mode, rate, gradient_image(mode), 0.0);
+    let (adjustments, _) = receive(&samples, rate, true);
+    assert_eq!(adjustments, [], "{mode:?} @{rate}");
+}
+
 #[test]
 fn detects_parity_inclusive_vis() {
     let samples = vis_signal(Mode::Scottie2, 8_000, 0.0);
