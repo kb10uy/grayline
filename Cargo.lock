@@ -2238,6 +2238,7 @@ dependencies = [
  "grayline-sstv-rx",
  "grayline-sstv-template",
  "grayline-tone-tx",
+ "hound",
  "image",
  "image-webp",
  "jiff",

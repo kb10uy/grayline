@@ -115,6 +115,7 @@ status-output-ready = 出力準備完了
 status-output-audio = 出力 { $rate } Hz
 status-dropped = { $samples } サンプル欠落
 status-audio = { $rate } Hz / モノラル
+status-reading = 読み込み中
 
 error-no-transmit-frame = 送信画像がまだ合成されていません
 error-tone-active = トーン送信中です
@@ -124,6 +125,7 @@ error-invalid-station-call = 自局コールが不正です: { $error }
 error-rig-unavailable = リグコントロールが使用できません: { $error }
 error-open-folder = フォルダーを開けませんでした
 error-open-manual = マニュアルをブラウザーで開けませんでした
+error-wav = 録音を読み込めませんでした
 
 geometry = { $mode } · { $width }×{ $height }
 

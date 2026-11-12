@@ -20,7 +20,9 @@ cargo run -p grayline-sstv-app
 Selecting an input device opens a capture stream and starts a worker that
 demodulates the audio, detects the mode from VIS, and decodes the image
 progressively. Mode, decoded rows, input level, synchronization strength, and
-decoded FSKID callsigns come from that worker.
+decoded FSKID callsigns come from that worker. Dropping a WAV recording on the
+window, or naming one on the command line, decodes it in place of the device
+until another device is selected.
 
 To transmit, select an output device from Settings, enter your callsign under
 Settings › Station…, select a KDL template and stock image, and press TX once
