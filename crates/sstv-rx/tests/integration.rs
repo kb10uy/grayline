@@ -9,11 +9,11 @@ use grayline_sstv::{
     RxDecoder, TxEncoder,
     image::{ImageSize, Rgb8, RgbImage},
     mode::Mode,
-    rx::{DemodulatedBlock, RxConfig, RxEvent},
+    rx::{DemodulatedBlock, RxConfig, RxEvent, RxOutcome},
     time::SstvDuration,
 };
 use grayline_sstv_rx::{
-    Demodulator, DemodulatorError, PipelineOptions, ReceivePipeline, demodulate, sync_detector_delay,
+    Demodulator, DemodulatorError, PipelineOptions, PipelineOutcome, ReceivePipeline, demodulate, sync_detector_delay,
 };
 use rstest::rstest;
 
@@ -250,6 +250,196 @@ fn a_header_reception_decodes_its_first_row_without_buffering_periods(#[case] mo
     assert!(
         first_row_end.is_some_and(|end| end < header_end + 2 * period),
         "{mode:?} @{rate}: row 0 arrived by sample {first_row_end:?}, header ends at {header_end}, period {period}"
+    );
+}
+
+fn grey_image(mode: Mode) -> RgbImage {
+    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+    RgbImage::new(size, Rgb8::new(128, 128, 128))
+}
+
+fn gradient_image(mode: Mode) -> RgbImage {
+    let width = mode.spec().width() as usize;
+    let height = mode.spec().height() as usize;
+    let mut image = grey_image(mode);
+    for (index, pixel) in image.pixels_mut().iter_mut().enumerate() {
+        let across = (index % width * 255 / width) as u8;
+        let down = (index / width * 255 / height) as u8;
+        *pixel = Rgb8::new(across, down, across / 2 + down / 2);
+    }
+    image
+}
+
+fn transmission(mode: Mode, rate: u32, image: RgbImage, offset_ppm: f64) -> Vec<f32> {
+    let transmit_rate = f64::from(rate) * (1.0 + offset_ppm / 1.0e6);
+    let mut samples = Vec::new();
+    let mut phase = 0.0_f64;
+    for timed in TxEncoder::new(mode, image).unwrap() {
+        let deadline = (timed.until().as_picos() as f64 * transmit_rate / 1.0e12).round() as usize;
+        while samples.len() < deadline {
+            samples.push((phase.sin() * 0.8) as f32);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / transmit_rate).rem_euclid(TAU);
+        }
+    }
+    tone(&mut samples, rate, 1_500.0, 0.5, &mut phase);
+    samples
+}
+
+fn receive(samples: &[f32], rate: u32, live_slant: bool) -> (Vec<(usize, f64)>, PipelineOutcome) {
+    let mut pipeline = ReceivePipeline::new(
+        rate,
+        PipelineOptions {
+            live_slant,
+            staging_max_samples: samples.len(),
+        },
+    )
+    .unwrap();
+    let mut adjustments = Vec::new();
+    for packet in samples.chunks(1_024) {
+        pipeline
+            .process(packet, |event| {
+                if let RxEvent::SlantAdjusted {
+                    unit,
+                    effective_sample_rate_hz,
+                } = event
+                {
+                    adjustments.push((*unit, (effective_sample_rate_hz / f64::from(rate) - 1.0) * 1.0e6));
+                }
+            })
+            .unwrap();
+    }
+    (adjustments, pipeline.finish().unwrap())
+}
+
+fn fitted_ppm(outcome: &PipelineOutcome, rate: u32) -> f64 {
+    (outcome.effective_sample_rate_hz.unwrap() / f64::from(rate) - 1.0) * 1.0e6
+}
+
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn a_whole_transmission_refines_after_its_header(#[case] mode: Mode, #[case] rate: u32) {
+    let samples = transmission(mode, rate, grey_image(mode), 0.0);
+    let (_, outcome) = receive(&samples, rate, false);
+    assert_eq!(outcome.mode, mode);
+    let fitted = fitted_ppm(&outcome, rate);
+    assert!(
+        fitted.abs() < 50.0,
+        "{mode:?} @{rate}: the raster was refitted {fitted} ppm away"
+    );
+    let RxOutcome::Complete(decoded) = outcome.outcome else {
+        panic!("{mode:?} @{rate}: the reception did not complete");
+    };
+    let size = decoded.size();
+    let green = decoded.row(size.height() / 2).unwrap()[size.width() / 2].g;
+    assert!(
+        green.abs_diff(128) <= 16,
+        "{mode:?} @{rate}: mid-grey decoded with a green of {green}"
+    );
+}
+
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn a_picture_does_not_slant_a_matched_transmission(#[case] mode: Mode, #[case] rate: u32) {
+    let samples = transmission(mode, rate, gradient_image(mode), 0.0);
+    let (_, outcome) = receive(&samples, rate, false);
+    let fitted = fitted_ppm(&outcome, rate);
+    assert!(
+        fitted.abs() < 20.0,
+        "{mode:?} @{rate}: the raster was refitted {fitted} ppm away"
+    );
+}
+
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn a_matched_transmission_is_not_adjusted_while_it_decodes(#[case] mode: Mode, #[case] rate: u32) {
+    let samples = transmission(mode, rate, gradient_image(mode), 0.0);
+    let (adjustments, _) = receive(&samples, rate, true);
+    assert_eq!(adjustments, [], "{mode:?} @{rate}");
+}
+
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn live_tracking_follows_a_mistimed_transmission(#[case] mode: Mode, #[case] rate: u32) {
+    let offset_ppm = 300.0;
+    let samples = transmission(mode, rate, gradient_image(mode), offset_ppm);
+    let (adjustments, outcome) = receive(&samples, rate, true);
+    assert!(
+        adjustments
+            .first()
+            .is_some_and(|(unit, ppm)| *unit <= 16 && (ppm - offset_ppm).abs() < 100.0),
+        "{mode:?} @{rate}: live tracking adjusted at {adjustments:?}"
+    );
+    let fitted = fitted_ppm(&outcome, rate);
+    assert!(
+        (fitted - offset_ppm).abs() < 20.0,
+        "{mode:?} @{rate}: the raster was refitted {fitted} ppm away"
+    );
+}
+
+#[rstest]
+#[case(Mode::Robot36, 8_000, 0.0)]
+#[case(Mode::Robot36, 48_000, 0.0)]
+#[case(Mode::Martin2, 8_000, 300.0)]
+#[case(Mode::Martin2, 48_000, 300.0)]
+#[case(Mode::Pd50, 48_000, 300.0)]
+fn a_header_reception_corrects_its_phase_while_it_decodes(
+    #[case] mode: Mode,
+    #[case] rate: u32,
+    #[case] offset_ppm: f64,
+) {
+    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+    let image = RgbImage::new(size, Rgb8::new(200, 60, 30));
+    let samples = transmission(mode, rate, image, offset_ppm);
+    let leading_ps = mode
+        .scan()
+        .leading()
+        .iter()
+        .map(|segment| segment.duration().as_picos())
+        .sum::<u64>();
+    let stop_ps = 910_000_000_000 + leading_ps + mode.spec().period().as_picos() * 12;
+    let stop_sample = SstvDuration::from_picos(stop_ps).to_samples(rate) as usize;
+
+    let mut pipeline = ReceivePipeline::new(
+        rate,
+        PipelineOptions {
+            live_slant: false,
+            staging_max_samples: samples.len(),
+        },
+    )
+    .unwrap();
+    let mut corrections = 0;
+    for packet in samples[..stop_sample].chunks(1_024) {
+        pipeline
+            .process(packet, |event| {
+                if matches!(event, RxEvent::PhaseAdjusted { .. }) {
+                    corrections += 1;
+                }
+            })
+            .unwrap();
+    }
+    assert!(
+        corrections > 0,
+        "{mode:?} @{rate}: the header's phase was never corrected"
     );
 }
 

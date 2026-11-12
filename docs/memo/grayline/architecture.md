@@ -171,6 +171,14 @@ competing tone detectors, its weighted center also moves with the picture tones
 either side of the pulse. Both errors would displace the whole picture
 horizontally.
 
+Finding a pulse means finding the envelope's peak within half a line period of
+where the raster clock expects it. The envelope's center is then weighed only
+within one sync duration of that peak. A short pulse does not drive the envelope
+far: Martin's 4.9 ms pulse peaks near 0.58 while steady black reads about 0.42,
+so a center weighed across the whole search window follows the dark parts of the
+picture instead of the pulse, by hundreds of samples, and the frequency-domain
+search that follows then looks where no pulse is.
+
 Every measured sync center is therefore refined on the frequency stream, where
 the pulse is the window of one sync duration whose mean frequency is lowest.
 Sliding a window of the known length beats reading edges off a threshold on two
@@ -188,7 +196,11 @@ work in that one time base.
 search window around a detected pulse, so a rough figure is enough. Inputs whose
 two streams are already aligned use a zero delay. A pulse that the search window
 cannot see whole — one cut short by the start or the end of the retained samples
-— has no usable center and is left out of the fit rather than pulling it.
+— has no usable center and is left out of the fit rather than pulling it. A
+pulse that begins on the first sample retained counts as cut, because nothing
+tells it from one that began earlier. A header-started reception opens on such a
+pulse in every mode that begins its line with one, since detection ends inside
+or just after it.
 
 `RxDecoder` is stateful and streaming. It exposes acquisition, decoding,
 completion, and stopped states, consumes an explicit prefix of each input block,
@@ -220,11 +232,21 @@ and reports typed events and errors. Its responsibilities include:
 - Skipping the leading raster units whose picture arrived before mode detection
   finished. Those rows stay blank and count as delivered, which is what the
   operator sees in MMSSTV too, instead of failing a reception over samples that
-  were never received.
+  were never received. A rebuild from retained samples, live or staged, skips
+  the same units under the clock it refits. A header-started Martin reception
+  always has one: detection ends about 7.5 ms after the raster epoch, the first
+  pixel of a Martin line begins 5.4 ms after it, and the refit puts the raster
+  back where that line began, ahead of the first sample retained.
 - Family-specific RGB and luminance/chroma reconstruction.
 - Stable live raster-phase correction. A correction may move the raster
   backwards, so the working window keeps one raster period behind the unit being
-  decoded rather than trimming to its start.
+  decoded rather than trimming to its start. A correction waits for three
+  consecutive units to agree, and how far they may disagree is a time, 250 µs,
+  rather than a count of samples: two samples at 8 kHz, twelve at 48 kHz. As a
+  count it was six times tighter at 48 kHz, where a transmitter 300 ppm off
+  drifts further than that from one line to the next, and where Robot 36's
+  alternating chrominance lines alone move the measured center by three samples
+  on a coloured picture, so neither was ever corrected.
 - Optional automatic stop based on synchronization history, and `RxDecoder::stop`
   for a caller that can see a reception is over for a reason the decoder cannot
   observe. A signal that stops arriving altogether is one: no further input
