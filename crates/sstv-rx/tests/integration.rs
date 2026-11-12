@@ -13,7 +13,7 @@ use grayline_sstv::{
     time::SstvDuration,
 };
 use grayline_sstv_rx::{
-    Demodulator, DemodulatorError, PipelineOptions, ReceivePipeline, demodulate, sync_detector_delay,
+    Demodulator, DemodulatorError, PipelineOptions, PipelineOutcome, ReceivePipeline, demodulate, sync_detector_delay,
 };
 use rstest::rstest;
 
@@ -253,6 +253,68 @@ fn a_header_reception_decodes_its_first_row_without_buffering_periods(#[case] mo
     );
 }
 
+fn grey_image(mode: Mode) -> RgbImage {
+    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
+    RgbImage::new(size, Rgb8::new(128, 128, 128))
+}
+
+fn gradient_image(mode: Mode) -> RgbImage {
+    let width = mode.spec().width() as usize;
+    let height = mode.spec().height() as usize;
+    let mut image = grey_image(mode);
+    for (index, pixel) in image.pixels_mut().iter_mut().enumerate() {
+        let across = (index % width * 255 / width) as u8;
+        let down = (index / width * 255 / height) as u8;
+        *pixel = Rgb8::new(across, down, across / 2 + down / 2);
+    }
+    image
+}
+
+fn transmission(mode: Mode, rate: u32, image: RgbImage, offset_ppm: f64) -> Vec<f32> {
+    let transmit_rate = f64::from(rate) * (1.0 + offset_ppm / 1.0e6);
+    let mut samples = Vec::new();
+    let mut phase = 0.0_f64;
+    for timed in TxEncoder::new(mode, image).unwrap() {
+        let deadline = (timed.until().as_picos() as f64 * transmit_rate / 1.0e12).round() as usize;
+        while samples.len() < deadline {
+            samples.push((phase.sin() * 0.8) as f32);
+            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / transmit_rate).rem_euclid(TAU);
+        }
+    }
+    tone(&mut samples, rate, 1_500.0, 0.5, &mut phase);
+    samples
+}
+
+fn receive(samples: &[f32], rate: u32, live_slant: bool) -> (Vec<(usize, f64)>, PipelineOutcome) {
+    let mut pipeline = ReceivePipeline::new(
+        rate,
+        PipelineOptions {
+            live_slant,
+            staging_max_samples: samples.len(),
+        },
+    )
+    .unwrap();
+    let mut adjustments = Vec::new();
+    for packet in samples.chunks(1_024) {
+        pipeline
+            .process(packet, |event| {
+                if let RxEvent::SlantAdjusted {
+                    unit,
+                    effective_sample_rate_hz,
+                } = event
+                {
+                    adjustments.push((*unit, (effective_sample_rate_hz / f64::from(rate) - 1.0) * 1.0e6));
+                }
+            })
+            .unwrap();
+    }
+    (adjustments, pipeline.finish().unwrap())
+}
+
+fn fitted_ppm(outcome: &PipelineOutcome, rate: u32) -> f64 {
+    (outcome.effective_sample_rate_hz.unwrap() / f64::from(rate) - 1.0) * 1.0e6
+}
+
 #[rstest]
 #[case(Mode::Martin1, 8_000)]
 #[case(Mode::Martin2, 8_000)]
@@ -261,44 +323,39 @@ fn a_header_reception_decodes_its_first_row_without_buffering_periods(#[case] mo
 #[case(Mode::Robot36, 8_000)]
 #[case(Mode::Pd50, 8_000)]
 fn a_whole_transmission_refines_after_its_header(#[case] mode: Mode, #[case] rate: u32) {
-    let size = ImageSize::new(mode.spec().width() as usize, mode.spec().height() as usize).unwrap();
-    let image = RgbImage::new(size, Rgb8::new(128, 128, 128));
-    let mut samples = Vec::new();
-    let mut phase = 0.0_f64;
-    for timed in TxEncoder::new(mode, image).unwrap() {
-        let deadline = timed.until().to_samples(rate) as usize;
-        while samples.len() < deadline {
-            samples.push((phase.sin() * 0.8) as f32);
-            phase = (phase + TAU * f64::from(timed.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
-        }
-    }
-    tone(&mut samples, rate, 1_500.0, 0.5, &mut phase);
-
-    let mut pipeline = ReceivePipeline::new(
-        rate,
-        PipelineOptions {
-            live_slant: false,
-            staging_max_samples: samples.len(),
-        },
-    )
-    .unwrap();
-    for packet in samples.chunks(1_024) {
-        pipeline.process(packet, |_| {}).unwrap();
-    }
-    let outcome = pipeline.finish().unwrap();
+    let samples = transmission(mode, rate, grey_image(mode), 0.0);
+    let (_, outcome) = receive(&samples, rate, false);
     assert_eq!(outcome.mode, mode);
-    let fitted = outcome.effective_sample_rate_hz.unwrap();
+    let fitted = fitted_ppm(&outcome, rate);
     assert!(
-        (fitted / f64::from(rate) - 1.0).abs() < 50.0e-6,
-        "{mode:?} @{rate}: the raster was refitted to {fitted} Hz"
+        fitted.abs() < 50.0,
+        "{mode:?} @{rate}: the raster was refitted {fitted} ppm away"
     );
     let RxOutcome::Complete(decoded) = outcome.outcome else {
         panic!("{mode:?} @{rate}: the reception did not complete");
     };
+    let size = decoded.size();
     let green = decoded.row(size.height() / 2).unwrap()[size.width() / 2].g;
     assert!(
         green.abs_diff(128) <= 16,
         "{mode:?} @{rate}: mid-grey decoded with a green of {green}"
+    );
+}
+
+#[rstest]
+#[case(Mode::Martin1, 8_000)]
+#[case(Mode::Martin2, 8_000)]
+#[case(Mode::Martin2, 48_000)]
+#[case(Mode::Scottie2, 8_000)]
+#[case(Mode::Robot36, 8_000)]
+#[case(Mode::Pd50, 8_000)]
+fn a_picture_does_not_slant_a_matched_transmission(#[case] mode: Mode, #[case] rate: u32) {
+    let samples = transmission(mode, rate, gradient_image(mode), 0.0);
+    let (_, outcome) = receive(&samples, rate, false);
+    let fitted = fitted_ppm(&outcome, rate);
+    assert!(
+        fitted.abs() < 20.0,
+        "{mode:?} @{rate}: the raster was refitted {fitted} ppm away"
     );
 }
 

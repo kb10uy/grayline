@@ -77,10 +77,14 @@ pub(super) fn observe(
     let background = (sum / (end - start) as f64) as f32;
     let contrast = (peak - background).max(0.0);
     let threshold = background + contrast * 0.5;
+    let pulse = samples_spanned(f64::from(sample_rate_hz), profile.sync_duration_ps);
+    let reach = (pulse as u64).max(1);
+    let pulse_start = peak_sample.saturating_sub(reach).max(start);
+    let pulse_end = peak_sample.saturating_add(reach).saturating_add(1).min(end);
     let mut weighted = 0.0_f64;
     let mut weight = 0.0_f64;
-    let mut position = start;
-    for run in runs {
+    let mut position = pulse_start;
+    for run in input.sync_runs(pulse_start, pulse_end)? {
         for &stored in run {
             let value = load_sync(stored);
             if value >= threshold {
@@ -211,6 +215,28 @@ mod tests {
 
     use super::*;
     use crate::{mode::Mode, rx::input::DemodulatedBlock};
+
+    #[test]
+    fn observation_centers_on_the_pulse_under_picture_content_above_its_threshold() {
+        let profile = RasterProfile::for_mode(Mode::Martin1).unwrap();
+        let rate = 8_000;
+        let delay = SstvDuration::from_picos(6_000_000_000);
+        let lag = sync_detector_delay_samples(rate, delay) as usize;
+        let pulse = samples_spanned(f64::from(rate), profile.sync_duration_ps) as usize;
+        let epoch = 2_000;
+        let mut frequency = vec![1_900.0_f32; 4_000];
+        frequency[epoch..epoch + pulse].fill(1_200.0);
+        let mut sync = vec![0.1_f32; frequency.len()];
+        sync[epoch + lag..epoch + lag + pulse].fill(0.58);
+        sync[epoch - 1_200..epoch - 600].fill(0.45);
+        let mut input = SampleBuffer::new(0);
+        input.append(DemodulatedBlock::new(0, &frequency, &sync), frequency.len());
+        let clock = RasterClock::from_estimate(epoch as f64, f64::from(rate)).unwrap();
+
+        let observation = observe(&input, profile, clock, 0, rate, delay).unwrap();
+        assert_eq!(observation.center_sample, (epoch + pulse / 2) as u64);
+        assert!(observation.confidence >= MIN_CONFIDENCE);
+    }
 
     #[test]
     fn refinement_finds_the_pulse_center_in_the_frequency_stream() {

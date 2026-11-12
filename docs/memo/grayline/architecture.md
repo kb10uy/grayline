@@ -171,6 +171,14 @@ competing tone detectors, its weighted center also moves with the picture tones
 either side of the pulse. Both errors would displace the whole picture
 horizontally.
 
+Finding a pulse means finding the envelope's peak within half a line period of
+where the raster clock expects it. The envelope's center is then weighed only
+within one sync duration of that peak. A short pulse does not drive the envelope
+far: Martin's 4.9 ms pulse peaks near 0.58 while steady black reads about 0.42,
+so a center weighed across the whole search window follows the dark parts of the
+picture instead of the pulse, by hundreds of samples, and the frequency-domain
+search that follows then looks where no pulse is.
+
 Every measured sync center is therefore refined on the frequency stream, where
 the pulse is the window of one sync duration whose mean frequency is lowest.
 Sliding a window of the known length beats reading edges off a threshold on two
