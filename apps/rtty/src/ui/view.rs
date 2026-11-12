@@ -59,6 +59,7 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
     // for itself: a received callsign is there to be copied, while a heading
     // that took the text cursor would only swallow the press.
     grayline_shell::inert_labels(ui);
+    grayline_shell::compact_controls(ui);
 
     let mut activated = None;
     if in_window_menu {

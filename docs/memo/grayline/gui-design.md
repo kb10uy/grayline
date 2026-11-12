@@ -582,6 +582,15 @@ the window does, and it is set on the context as well as on the `Ui` in hand
 because a modal builds its own `Ui` out of the context — setting only the `Ui`
 left every dialog selectable while nothing behind it was.
 
+Buttons keep the size egui gave them before 0.37, through
+`grayline_shell::compact_controls`: four points of padding across and one
+down, and controls 18 points tall. egui 0.37 doubled the padding and added two
+points of height, which widens every button by eight points. Each bar was laid
+out to fit its window's default width at the old size. At the new size, WEFAX's
+settings row no longer fits on one line at 1280 points. It is set the same way
+and at the same time as inert labels, so the test harness lays the bars out at
+the size the window does.
+
 Rig control is worked from the radio panel rather than from the menu bar: the
 connection is switched on and off there, beside the frequency it is being
 switched on for. What the menu keeps is writing `rigcontrol.lua` and
