@@ -28,6 +28,8 @@ pub struct AudioState {
     capture: Option<Capture>,
     /// The recording standing in for a device, if one is being read.
     file: Option<WavSource>,
+    /// Whether the recording's end has already closed out its reception.
+    file_finished: bool,
     worker: Option<RxWorker>,
     snapshot: RxSnapshot,
     /// Counts the receive sessions this state has started.
@@ -72,6 +74,7 @@ impl AudioState {
             error,
             capture: None,
             file: None,
+            file_finished: false,
             worker: None,
             snapshot: RxSnapshot::default(),
             session: 0,
@@ -102,6 +105,7 @@ impl AudioState {
             error: None,
             capture: None,
             file: None,
+            file_finished: false,
             worker: None,
             snapshot: RxSnapshot::default(),
             session: 0,
@@ -163,6 +167,7 @@ impl AudioState {
         self.worker = None;
         self.capture = None;
         self.file = None;
+        self.file_finished = false;
         self.snapshot = RxSnapshot::default();
     }
 
@@ -190,6 +195,12 @@ impl AudioState {
     /// Returns the decoded frame when one arrived, so the caller can refresh
     /// the raster without cloning pixels on every poll.
     pub fn poll(&mut self) -> Option<crate::worker::receive::Frame> {
+        if !self.file_finished && self.file.as_ref().is_some_and(WavSource::is_drained) {
+            self.file_finished = true;
+            if let Some(worker) = self.worker.as_ref() {
+                worker.request_finish();
+            }
+        }
         let worker = self.worker.as_ref()?;
         let mut snapshot = worker.latest()?;
         let frame = snapshot.frame.take();

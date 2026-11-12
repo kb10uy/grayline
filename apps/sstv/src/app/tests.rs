@@ -1473,3 +1473,85 @@ fn a_recording_that_cannot_be_read_is_reported() {
     assert!(error.starts_with(&app.i18n.text("error-wav")), "{error}");
     assert!(!app.audio.is_capturing());
 }
+
+#[test]
+fn a_recording_cut_short_is_kept_when_it_ends() {
+    let root = TempDir::new().unwrap();
+    let path = root.path().join("picture.wav");
+    let mode = grayline_sstv::mode::Mode::Robot36;
+    write_transmission(&path, 11_025, mode, 3.0 / 4.0);
+
+    let mut app = App::headless();
+    app.settings.auto_history = false;
+    let before = Arc::clone(&app.composition.received_image);
+    app.open_wav(&path);
+    assert!(app.audio.is_capturing(), "{:?}", app.error);
+    assert_eq!(app.audio.sample_rate_hz(), Some(11_025));
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < deadline && Arc::ptr_eq(&before, &app.composition.received_image) {
+        app.poll_workers();
+        std::thread::sleep(Duration::from_millis(4));
+    }
+
+    assert!(
+        !Arc::ptr_eq(&before, &app.composition.received_image),
+        "the picture was never kept: {:?}",
+        app.audio.snapshot()
+    );
+    let spec = mode.spec();
+    assert_eq!(
+        app.composition.received_image.size(),
+        grayline_sstv::image::ImageSize::new(spec.width() as usize, spec.height() as usize).unwrap()
+    );
+    assert_eq!(app.audio.snapshot().progress, crate::worker::receive::RxProgress::Idle);
+}
+
+/// Writes the first `fraction` of one transmission, header included.
+fn write_transmission(path: &Path, rate: u32, mode: grayline_sstv::mode::Mode, fraction: f64) {
+    use grayline_sstv::{
+        TxEncoder,
+        image::{ImageSize, RgbImage},
+    };
+    use hound::{SampleFormat, WavSpec, WavWriter};
+    use std::f64::consts::TAU;
+
+    let spec = mode.spec();
+    let (width, height) = (spec.width() as usize, spec.height() as usize);
+    let pixels = (0..width * height)
+        .map(|index| {
+            Rgb8::new(
+                (index % width * 255 / width) as u8,
+                (index / width * 255 / height) as u8,
+                128,
+            )
+        })
+        .collect();
+    let image = RgbImage::from_pixels(ImageSize::new(width, height).unwrap(), pixels).unwrap();
+
+    let mut pcm = Vec::new();
+    let mut phase = 0.0_f64;
+    for tone in TxEncoder::new(mode, image).unwrap() {
+        let deadline = (tone.until().as_picos() as f64 * f64::from(rate) / 1.0e12).round() as usize;
+        while pcm.len() < deadline {
+            pcm.push((phase.sin() * 24_000.0) as i16);
+            phase = (phase + TAU * f64::from(tone.frequency().as_hz()) / f64::from(rate)).rem_euclid(TAU);
+        }
+    }
+    pcm.truncate((pcm.len() as f64 * fraction) as usize);
+
+    let mut writer = WavWriter::create(
+        path,
+        WavSpec {
+            channels: 1,
+            sample_rate: rate,
+            bits_per_sample: 16,
+            sample_format: SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for sample in pcm {
+        writer.write_sample(sample).unwrap();
+    }
+    writer.finalize().unwrap();
+}

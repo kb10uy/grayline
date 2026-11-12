@@ -311,6 +311,16 @@ history enabled it is stored in the received-image directory. Earlier
 interruptions remain visible but are not retained in history. This is a normal
 outcome and is not reported as an error on the status line.
 
+A recording ends wherever it ends, and the stall window, the trailing FSKID
+wait, and staged refinement are all decided by audio that will not arrive after
+its last sample. Once the file source reports that the queue is empty, the
+interface asks the worker to finish, and the worker closes out what it holds
+without waiting. A picture cut short is closed out like one whose signal went
+away, under the same 65-percent rule. A completed one is refined once against
+whatever tail the file left, as `gl-sstv decode` does at the end of a file, and
+offered to history with the identifiers decoded so far; it stays on the canvas
+as a completed reception. A reception already offered is not offered again.
+
 History encoding is selectable between lossless WebP, PNG, and JPEG, with
 lossless WebP as the default. Every format carries the same XMP packet: the
 reception start time with its local UTC offset, the SSTV mode, and any FSKID

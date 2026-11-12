@@ -251,6 +251,36 @@ impl Session {
         }
     }
 
+    /// Closes out the reception a source ended under.
+    ///
+    /// A picture cut short is closed out like one whose signal went away. A
+    /// completed one is refined against whatever tail it has, as `gl-sstv
+    /// decode` does at the end of a file, and kept on screen as a completed
+    /// reception rather than started over. One already published has nothing
+    /// left to close.
+    fn finish(&mut self) -> Result<Option<(Frame, Option<HistoryCandidate>)>, AppError> {
+        if self.awaiting_signal {
+            return Ok(None);
+        }
+        let Some(decoder) = self.decoder.as_mut() else {
+            return Ok(None);
+        };
+        if decoder.state() != RxState::Complete {
+            return self.interrupt();
+        }
+        if matches!(self.refinement, Refinement::Waiting) {
+            self.refinement = match decoder.refine_staged() {
+                Ok(_) => Refinement::Done,
+                Err(error) => Refinement::Failed(AppError::Refinement(error)),
+            };
+        }
+        let frame = Frame::from_image(decoder.image());
+        let history = Self::history_candidate(decoder, &self.received_at, &self.fsk_ids);
+        self.published_revision = Some(decoder.image_revision());
+        self.restart_search()?;
+        Ok(Some((frame, history)))
+    }
+
     fn restart_search(&mut self) -> Result<(), AppError> {
         self.demodulator = demodulator(self.sample_rate_hz, self.settings)?;
         self.awaiting_signal = true;
@@ -459,6 +489,7 @@ pub(super) fn run(mut reader: CaptureReader, mailbox: &Mailbox, stop: &AtomicBoo
             history_deadline = None;
             mailbox.publish(closed_snapshot(
                 closed,
+                &session,
                 display_fraction,
                 &callsigns,
                 &numbers,
@@ -484,11 +515,38 @@ pub(super) fn run(mut reader: CaptureReader, mailbox: &Mailbox, stop: &AtomicBoo
             history_deadline = None;
             mailbox.publish(closed_snapshot(
                 closed,
+                &session,
                 display_fraction,
                 &callsigns,
                 &numbers,
                 reader.dropped_samples(),
                 error.take(),
+            ));
+        }
+
+        if controls.finish.swap(false, Ordering::Relaxed) {
+            let closed = match session.finish() {
+                Ok(closed) => closed,
+                Err(reason) => {
+                    error = Some(reason);
+                    None
+                }
+            };
+            if let Some(fraction) = session.display_fraction() {
+                display_fraction = fraction;
+            }
+            last_progress = session.progress();
+            progress_changed_at = Instant::now();
+            history_deadline = None;
+            let error = error.take().or_else(|| session.take_refinement_error());
+            mailbox.publish(closed_snapshot(
+                closed,
+                &session,
+                display_fraction,
+                &callsigns,
+                &numbers,
+                reader.dropped_samples(),
+                error,
             ));
         }
 
@@ -620,13 +678,14 @@ pub(super) fn run(mut reader: CaptureReader, mailbox: &Mailbox, stop: &AtomicBoo
     }
 }
 
-/// The snapshot published when a reception is closed out by hand.
+/// The snapshot published when a reception is closed out without new audio.
 ///
-/// Both the transmit mute and an operator's reset end whatever was being
-/// decoded and leave nothing running, so both say the same thing: no mode, no
-/// progress, and whatever the abandoned reception left worth keeping.
+/// The transmit mute, an operator's reset, and the end of a recording all end
+/// whatever was being decoded, and say so the same way: what the session holds
+/// afterwards, and whatever the closed reception left worth keeping.
 fn closed_snapshot(
     closed: Option<(Frame, Option<HistoryCandidate>)>,
+    session: &Session,
     display_fraction: f32,
     callsigns: &[String],
     numbers: &[String],
@@ -637,8 +696,8 @@ fn closed_snapshot(
         .map(|(frame, history)| (Some(frame), history))
         .unwrap_or_default();
     RxSnapshot {
-        mode: None,
-        progress: RxProgress::Idle,
+        mode: session.decoder.as_ref().map(RxDecoder::mode),
+        progress: session.progress(),
         display_fraction,
         frame,
         history,
