@@ -1464,3 +1464,12 @@ fn an_address_the_logger_cannot_be_at_is_reported() {
         app.error
     );
 }
+
+#[test]
+fn a_recording_that_cannot_be_read_is_reported() {
+    let mut app = App::headless();
+    app.open_wav(Path::new("no-such-recording.wav"));
+    let error = app.error.clone().expect("the failure was reported");
+    assert!(error.starts_with(&app.i18n.text("error-wav")), "{error}");
+    assert!(!app.audio.is_capturing());
+}

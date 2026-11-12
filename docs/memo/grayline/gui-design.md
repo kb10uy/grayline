@@ -209,8 +209,9 @@ positions. Keeping it separate preserves the rule that platform types must not
 appear in reusable core APIs, and lets the offline `gl-sstv` integrations
 remain unaffected.
 
-RTTY and WEFAX use `grayline-audio::WavSource` to feed recordings through a
-`CaptureReader`. Each application supplies its decoder's minimum sample rate;
+SSTV, RTTY, and WEFAX use `grayline-audio::WavSource` to feed recordings
+through a `CaptureReader`, opened by dropping a file on the window or naming
+one on the command line. Each application supplies its decoder's minimum sample rate;
 the adapter validates the recording, normalizes its first channel, and waits
 for queue space without dropping samples. Completion is reported only after
 the consumer empties the queue, and dropping the source stops and joins the

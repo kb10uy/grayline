@@ -1,4 +1,8 @@
-use grayline_audio::{AudioHost, Capture, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault};
+use std::path::Path;
+
+use grayline_audio::{
+    AudioHost, Capture, CaptureReader, InputDevice, OutputDevice, Playback, PlaybackWriter, StreamFault, WavSource,
+};
 
 use grayline_shell::worker::Waker;
 
@@ -22,6 +26,8 @@ pub struct AudioState {
     pub output_device: Option<OutputDevice>,
     pub error: Option<AppError>,
     capture: Option<Capture>,
+    /// The recording standing in for a device, if one is being read.
+    file: Option<WavSource>,
     worker: Option<RxWorker>,
     snapshot: RxSnapshot,
     /// Counts the receive sessions this state has started.
@@ -65,6 +71,7 @@ impl AudioState {
             output_device,
             error,
             capture: None,
+            file: None,
             worker: None,
             snapshot: RxSnapshot::default(),
             session: 0,
@@ -94,6 +101,7 @@ impl AudioState {
             output_device: None,
             error: None,
             capture: None,
+            file: None,
             worker: None,
             snapshot: RxSnapshot::default(),
             session: 0,
@@ -129,23 +137,52 @@ impl AudioState {
         Ok(self.host.open_playback(device, capacity_samples)?)
     }
 
-    fn open(&mut self, device: &InputDevice) {
-        // The worker is stopped before the device is reopened so the previous
-        // capture queue never outlives its producer.
+    /// Reads `path` in place of a device.
+    ///
+    /// The recording fills the same bounded queue a capture stream does, so
+    /// the receive worker is the one that runs on a device and needs no path
+    /// of its own.
+    pub fn play_file(&mut self, path: &Path) -> Result<(), AppError> {
+        let (source, reader) = WavSource::open(
+            path,
+            QUEUE_CAPACITY_SAMPLES,
+            grayline_sstv_rx::MINIMUM_SAMPLE_RATE_HZ,
+            "grayline-sstv-file".to_owned(),
+        )?;
+        self.close();
+        self.session += 1;
+        self.worker = Some(self.start(reader));
+        self.file = Some(source);
+        self.error = None;
+        Ok(())
+    }
+
+    fn close(&mut self) {
+        // The worker is stopped before its source is dropped, so a capture
+        // queue never outlives its producer.
         self.worker = None;
         self.capture = None;
+        self.file = None;
         self.snapshot = RxSnapshot::default();
+    }
+
+    fn open(&mut self, device: &InputDevice) {
+        self.close();
         self.session += 1;
         match self.host.open_capture(device, QUEUE_CAPACITY_SAMPLES) {
             Ok((capture, reader)) => {
-                let worker = RxWorker::spawn(reader, self.rx_settings, self.waker.clone());
-                worker.set_muted_for_transmit(self.muted_for_transmit);
-                self.worker = Some(worker);
+                self.worker = Some(self.start(reader));
                 self.capture = Some(capture);
                 self.error = None;
             }
             Err(error) => self.error = Some(error.into()),
         }
+    }
+
+    fn start(&self, reader: CaptureReader) -> RxWorker {
+        let worker = RxWorker::spawn(reader, self.rx_settings, self.waker.clone());
+        worker.set_muted_for_transmit(self.muted_for_transmit);
+        worker
     }
 
     /// Adopts the newest worker snapshot.
@@ -229,13 +266,18 @@ impl AudioState {
         self.rx_settings
     }
 
-    /// Returns the physical capture rate, if a device is open.
+    /// Returns the rate the samples are arriving at, whatever is producing
+    /// them.
     pub fn sample_rate_hz(&self) -> Option<u32> {
-        self.capture.as_ref().map(Capture::sample_rate_hz)
+        self.capture
+            .as_ref()
+            .map(Capture::sample_rate_hz)
+            .or_else(|| self.file.as_ref().map(WavSource::sample_rate_hz))
     }
 
+    /// Returns whether anything is feeding the receiver.
     pub const fn is_capturing(&self) -> bool {
-        self.capture.is_some()
+        self.capture.is_some() || self.file.is_some()
     }
 
     /// Takes the report the capture stream left if it stopped on its own.
