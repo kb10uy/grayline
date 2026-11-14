@@ -204,11 +204,11 @@ The keyer needs a firmware with four things that the first one did not have:
 | Needed | What it is |
 | --- | --- |
 | `SENDM <hex>` | `SEND` with each word's uppermost bit first on the line |
-| `SENT=` in `STATUS` | Words that have left the queue to be keyed since `PTT ON`, not counting the unit's own diddle |
-| `LAST=` in `STATUS` | How the latest transmission ended: `NONE`, `DONE`, `ABORT`, or `TOT` |
+| `SENT=` in `STATUS` | Words whose start bit has begun since `PTT ON`, not counting the unit's own diddle |
+| `LAST_TX=` in `STATUS` | How the latest transmission ended: `NONE`, `DONE`, `ABORT`, or `TOT` |
 | Abort on DTR | The unit aborts when the host drops DTR |
 
-A `STATUS` without `SENT` and `LAST` is unreadable and fails the stream.
+A `STATUS` without `SENT` and `LAST_TX` is unreadable and fails the stream.
 
 - **Taking the unit over.** The port is opened with DTR asserted and kept so,
   which is what lets the unit abort when the keyer goes away however it goes.
@@ -266,7 +266,7 @@ A `STATUS` without `SENT` and `LAST` is unreadable and fails the stream.
   is always zero: the unit times the line and reports no lateness.
 - **Cut short.** A stop, a dropped connection, `--max-transmit`, and shutdown
   send Ctrl-C, which discards the unit's queue and releases its PTT at once.
-  A unit that reports PTT released before it was asked to, or with `LAST`
+  A unit that reports PTT released before it was asked to, or with `LAST_TX`
   other than `DONE`, fails the stream, and the error says whether its `TOT`
   ran out or it was aborted.
 - **Sent.** `\status`'s `Sent` counts codes the method has taken rather than

@@ -368,7 +368,7 @@ impl UnitStatus {
             },
             free: field("FREE")?.parse().ok()?,
             sent: field("SENT")?.parse().ok()?,
-            last: match field("LAST")? {
+            last: match field("LAST_TX")? {
                 "NONE" => Last::None,
                 "DONE" => Last::Done,
                 "ABORT" => Last::Abort,
@@ -747,7 +747,7 @@ mod tests {
                     "OK".to_owned()
                 }
                 ["STATUS"] => format!(
-                    "OK PTT={} MODE=COMMAND QUEUED={} FREE={} SENT={} LAST={}",
+                    "OK PTT={} MODE=COMMAND QUEUED={} FREE={} SENT={} LAST_TX={}",
                     if self.keyed_at.is_some() { "ON" } else { "OFF" },
                     self.queue.len(),
                     self.capacity - self.queue.len(),
@@ -1176,11 +1176,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case("PTT=ON MODE=COMMAND QUEUED=12 FREE=8180 SENT=34 LAST=NONE", Some(UnitStatus { ptt: true, free: 8_180, sent: 34, last: Last::None }))]
-    #[case("PTT=OFF MODE=KEYBOARD QUEUED=0 FREE=8192 SENT=46 LAST=TOT", Some(UnitStatus { ptt: false, free: 8_192, sent: 46, last: Last::Tot }))]
-    #[case("PTT=OFF MODE=COMMAND QUEUED=0 FREE=8192 SENT=0 LAST=LATER", None)]
-    #[case("PTT=MAYBE QUEUED=0 FREE=8192 SENT=0 LAST=DONE", None)]
+    #[case("PTT=ON MODE=COMMAND QUEUED=12 FREE=8180 SENT=34 LAST_TX=NONE", Some(UnitStatus { ptt: true, free: 8_180, sent: 34, last: Last::None }))]
+    #[case("PTT=OFF MODE=KEYBOARD QUEUED=0 FREE=8192 SENT=46 LAST_TX=TOT", Some(UnitStatus { ptt: false, free: 8_192, sent: 46, last: Last::Tot }))]
+    #[case("PTT=OFF MODE=COMMAND QUEUED=0 FREE=8192 SENT=0 LAST_TX=LATER", None)]
+    #[case("PTT=MAYBE QUEUED=0 FREE=8192 SENT=0 LAST_TX=DONE", None)]
     #[case("PTT=ON MODE=COMMAND QUEUED=12 FREE=8180", None)]
+    #[case("PTT=OFF MODE=COMMAND QUEUED=0 FREE=8192 SENT=5 LAST=DONE", None)]
     fn status_is_read_by_its_fields(#[case] text: &str, #[case] status: Option<UnitStatus>) {
         assert_eq!(UnitStatus::parse(text), status);
     }
