@@ -17,11 +17,11 @@ use clap::{
 use grayline_keyer::{
     clock::{self, SystemClock},
     line::{self, SerialLine, Signal},
-    method::{LineMethod, Method},
+    method::{LineBitbang, Method},
     player::{self, Shared},
     server,
     stream::{FixedSource, Outcome, key_stream},
-    unit::{self, UnitMethod},
+    unit::{self, Jl1hisTerminalUnit},
 };
 use grayline_rtty::{BaudRate, Parity, StopElement, TxConfig, encode_text, tx::Diddle};
 use serialport::SerialPortType;
@@ -191,10 +191,14 @@ fn open_method(args: &LineArgs) -> Result<Box<dyn Method>> {
         MethodArgument::Bitbang => {
             let signal = args.fsk_line.context("--method bitbang needs --fsk-line")?;
             let line = SerialLine::new(line::open_port(&args.port)?, signal.into());
-            Ok(Box::new(LineMethod::new(line, SystemClock::new(), args.mark_asserted)?))
+            Ok(Box::new(LineBitbang::new(
+                line,
+                SystemClock::new(),
+                args.mark_asserted,
+            )?))
         }
         MethodArgument::Jl1his => {
-            let method = UnitMethod::new(unit::open_port(&args.port)?, SystemClock::new())?;
+            let method = Jl1hisTerminalUnit::new(unit::open_port(&args.port)?, SystemClock::new())?;
             log(&format!("terminal unit {} answered on {}", method.version(), args.port));
             Ok(Box::new(method))
         }

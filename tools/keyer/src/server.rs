@@ -151,7 +151,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        method::LineMethod,
+        method::LineBitbang,
         player,
         test_util::{FakeClock, RecordingLine},
     };
@@ -177,7 +177,7 @@ mod tests {
             let playing = Arc::clone(&shared);
             let line = fsk.clone();
             let player = thread::spawn(move || {
-                let mut method = LineMethod::new(line, clock, false).unwrap();
+                let mut method = LineBitbang::new(line, clock, false).unwrap();
                 player::run(&mut method, &playing, None, |_| {});
             });
             Self {

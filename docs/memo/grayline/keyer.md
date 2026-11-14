@@ -85,11 +85,12 @@ A new output line is a `ControlLine`. A new timing method is a `Method`, which
 takes the stream a code at a time and blocks until each has gone out. A UART
 method would write the code and wait for it to drain, with no framer at all.
 
-A method whose hardware times the line itself, as `unit::UnitMethod` does for
-the terminal unit, blocks no longer than it takes to hand codes over and to
-ask how far they have got. Two things in the trait are there for it. `ready`
-says whether the method can take another code, and a stream idles while it
-cannot, so codes the hardware has no room for stay in the session's bounded
+A method whose hardware times the line itself, as `unit::Jl1hisTerminalUnit`
+does for the terminal unit, blocks no longer than it takes to hand codes over
+and to ask how far they have got. Two things in the trait are there for it.
+`ready` says whether the method can take another code, and a stream idles
+while it cannot, so codes the hardware has no room for stay in the session's
+bounded
 queue. `finish` may answer `Flow::Pending`, and is then called again. Either
 way `key_stream` comes round between polls, which is where a stream's
 progress is recorded and its time limit enforced: a method that waited out
@@ -101,8 +102,8 @@ be timed out.
 ```text
 line.rs      ControlLine, and a serial port's DTR or RTS behind it
 clock.rs     Clock, and the host clock waited on as tightly as it allows
-method.rs    Method, and LineMethod: one deadline per element boundary
-unit.rs      UnitMethod: the terminal unit's control port, and its timeline
+method.rs    Method, and LineBitbang: one deadline per element boundary
+unit.rs      Jl1hisTerminalUnit: the unit's control port, and its timeline
 stream.rs    key_stream: one stream from lead-in to tail, from a CodeSource
 session.rs   what clients asked for, with no I/O in it
 error.rs     KeyerError, from the port, the line, and the listener
@@ -119,7 +120,7 @@ read would hold a line change behind it.
 
 ## Timing
 
-`LineMethod` measures every boundary from the start of the stream rather than
+`LineBitbang` measures every boundary from the start of the stream rather than
 from the boundary before it, so a transition that happens late does not move
 the ones after it. Each wait sleeps until a millisecond before its deadline
 and spins the rest; on Windows the sleep is a high-resolution waitable timer,
@@ -370,7 +371,7 @@ used.
 
 - `Framer` against hand-framed characters, stop lengths, parity, control
   codes, and diddle.
-- `LineMethod` on a fake clock and a recording line: each boundary at its
+- `LineBitbang` on a fake clock and a recording line: each boundary at its
   deadline, lateness measured without pushing later deadlines, polarity, and
   cancellation.
 - `Session` transitions: ownership, the queue bound, stopping before and
@@ -382,9 +383,9 @@ used.
   connection stops its stream at mark, requests that conflict are refused,
   status says whether the keyer keys PTT itself, and rig commands are left to
   `rigctld`.
-- `UnitMethod` against a simulated terminal unit on a fake clock: a stream is
-  set up, handed over, and followed to its tail; a code reaches the unit
-  first bit uppermost; tagged lines are not taken for answers; every report
+- `Jl1hisTerminalUnit` against a simulated terminal unit on a fake clock: a
+  stream is set up, handed over, and followed to its tail; a code reaches the
+  unit first bit uppermost; tagged lines are not taken for answers; every report
   of progress while the unit keys is no further than what it has keyed and no
   more than a poll behind; a stream that runs dry is not believed ahead of
   the unit; a stream longer than the unit's queue is handed over as room

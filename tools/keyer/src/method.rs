@@ -77,7 +77,7 @@ pub trait Method {
 ///
 /// The keyer owns the timing: every boundary is a deadline measured from the
 /// start of the stream, so a late transition does not push the ones after it.
-pub struct LineMethod<L, C> {
+pub struct LineBitbang<L, C> {
     line: L,
     clock: C,
     mark_asserted: bool,
@@ -89,7 +89,7 @@ pub struct LineMethod<L, C> {
     late: Duration,
 }
 
-impl<L: ControlLine, C: Clock> LineMethod<L, C> {
+impl<L: ControlLine, C: Clock> LineBitbang<L, C> {
     /// Takes over `line` and puts it at mark.
     pub fn new(line: L, clock: C, mark_asserted: bool) -> Result<Self, KeyerError> {
         let mut method = Self {
@@ -159,7 +159,7 @@ impl<L: ControlLine, C: Clock> LineMethod<L, C> {
     }
 }
 
-impl<L: ControlLine, C: Clock> Method for LineMethod<L, C> {
+impl<L: ControlLine, C: Clock> Method for LineBitbang<L, C> {
     fn now(&self) -> Duration {
         self.clock.now()
     }
@@ -247,7 +247,7 @@ mod tests {
     fn key_e(latency: Duration, mark_asserted: bool) -> (Vec<(Duration, bool)>, Progress) {
         let clock = FakeClock::default();
         let line = RecordingLine::new(clock.clone(), latency);
-        let mut method = LineMethod::new(line.clone(), clock, mark_asserted).unwrap();
+        let mut method = LineBitbang::new(line.clone(), clock, mark_asserted).unwrap();
         let cancel = AtomicBool::new(false);
         assert_eq!(method.begin(&config(), &cancel).unwrap(), Flow::Continue);
         assert_eq!(
@@ -300,7 +300,7 @@ mod tests {
     fn a_muted_element_holds_mark_on_a_line() {
         let clock = FakeClock::default();
         let line = RecordingLine::new(clock.clone(), Duration::ZERO);
-        let mut method = LineMethod::new(line.clone(), clock, false).unwrap();
+        let mut method = LineBitbang::new(line.clone(), clock, false).unwrap();
         let cancel = AtomicBool::new(false);
         method.begin(&config(), &cancel).unwrap();
         method.send(TxCode::CarrierOff, &cancel).unwrap();
@@ -312,7 +312,7 @@ mod tests {
     fn a_raised_cancel_stops_before_the_next_element() {
         let clock = FakeClock::default();
         let line = RecordingLine::new(clock.clone(), Duration::ZERO);
-        let mut method = LineMethod::new(line.clone(), clock, false).unwrap();
+        let mut method = LineBitbang::new(line.clone(), clock, false).unwrap();
         let cancel = AtomicBool::new(false);
         method.begin(&config(), &cancel).unwrap();
         cancel.store(true, Ordering::Release);
@@ -324,7 +324,7 @@ mod tests {
     fn idling_holds_mark_for_one_bit() {
         let clock = FakeClock::default();
         let line = RecordingLine::new(clock.clone(), Duration::ZERO);
-        let mut method = LineMethod::new(line, clock, false).unwrap();
+        let mut method = LineBitbang::new(line, clock, false).unwrap();
         let cancel = AtomicBool::new(false);
         method.begin(&config(), &cancel).unwrap();
         method.idle(&cancel).unwrap();

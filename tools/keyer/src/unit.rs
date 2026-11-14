@@ -71,7 +71,7 @@ pub fn open_port(path: &str) -> Result<Box<dyn SerialPort>, KeyerError> {
 /// once the first of them are there, and the stream's timeline is followed
 /// through the unit's `STATUS`: the count of codes it has started says where
 /// the stream is, and the host's clock only fills in the code being keyed.
-pub struct UnitMethod<P, C> {
+pub struct Jl1hisTerminalUnit<P, C> {
     link: Link<P>,
     clock: C,
     version: String,
@@ -79,7 +79,7 @@ pub struct UnitMethod<P, C> {
     progress: Progress,
 }
 
-impl<P: Read + Write, C: Clock> UnitMethod<P, C> {
+impl<P: Read + Write, C: Clock> Jl1hisTerminalUnit<P, C> {
     /// Takes over the unit on `port`, aborting whatever it was doing.
     pub fn new(port: P, clock: C) -> Result<Self, KeyerError> {
         let mut link = Link {
@@ -151,7 +151,7 @@ impl<P: Read + Write, C: Clock> UnitMethod<P, C> {
     }
 }
 
-impl<P: Read + Write, C: Clock> Method for UnitMethod<P, C> {
+impl<P: Read + Write, C: Clock> Method for Jl1hisTerminalUnit<P, C> {
     fn now(&self) -> Duration {
         self.clock.now()
     }
@@ -877,10 +877,10 @@ mod tests {
         }
     }
 
-    fn unit(model: Model) -> (UnitMethod<FakeUnit, FakeClock>, FakeUnit, FakeClock) {
+    fn unit(model: Model) -> (Jl1hisTerminalUnit<FakeUnit, FakeClock>, FakeUnit, FakeClock) {
         let clock = FakeClock::default();
         let fake = FakeUnit::new(clock.clone(), model);
-        let method = UnitMethod::new(fake.clone(), clock.clone()).unwrap();
+        let method = Jl1hisTerminalUnit::new(fake.clone(), clock.clone()).unwrap();
         (method, fake, clock)
     }
 
@@ -1164,7 +1164,7 @@ mod tests {
                 ..Model::default()
             },
         );
-        let result = UnitMethod::new(fake, clock);
+        let result = Jl1hisTerminalUnit::new(fake, clock);
         assert!(matches!(result, Err(KeyerError::Unit(_))));
     }
 

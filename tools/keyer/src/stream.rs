@@ -139,7 +139,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        method::LineMethod,
+        method::LineBitbang,
         test_util::{FakeClock, RecordingLine},
     };
 
@@ -162,10 +162,10 @@ mod tests {
         }
     }
 
-    fn method() -> (LineMethod<RecordingLine, FakeClock>, RecordingLine) {
+    fn method() -> (LineBitbang<RecordingLine, FakeClock>, RecordingLine) {
         let clock = FakeClock::default();
         let line = RecordingLine::new(clock.clone(), Duration::ZERO);
-        (LineMethod::new(line.clone(), clock, false).unwrap(), line)
+        (LineBitbang::new(line.clone(), clock, false).unwrap(), line)
     }
 
     #[test]
