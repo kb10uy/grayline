@@ -1,8 +1,9 @@
 //! Serial-line keying for Grayline.
 //!
 //! A keyer owns a serial port and times FSK on one of its control lines
-//! itself, because a bit at RTTY speeds is shorter than a socket round trip
-//! can be trusted to be. Clients reach it over the line protocol `rigctld`
+//! itself, or hands the codes to a terminal unit that times them, because a
+//! bit at RTTY speeds is shorter than a socket round trip can be trusted to
+//! be. Clients reach it over the line protocol `rigctld`
 //! speaks, so the transport that reaches the rig reaches this too. PTT is not
 //! the keyer's: it is held for a whole transmission, so the application keys
 //! it through rig control like any other.
@@ -27,6 +28,8 @@ pub mod server;
 pub mod session;
 /// One stream from its first code to its tail.
 pub mod stream;
+/// Keying handed to a JL1HIS terminal unit.
+pub mod unit;
 
 #[cfg(test)]
 mod test_util;
