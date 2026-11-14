@@ -90,12 +90,11 @@ does for the terminal unit, blocks no longer than it takes to hand codes over
 and to ask how far they have got. Two things in the trait are there for it.
 `ready` says whether the method can take another code, and a stream idles
 while it cannot, so codes the hardware has no room for stay in the session's
-bounded
-queue. `finish` may answer `Flow::Pending`, and is then called again. Either
-way `key_stream` comes round between polls, which is where a stream's
-progress is recorded and its time limit enforced: a method that waited out
-the hardware inside one call would report nothing until the end and could not
-be timed out.
+bounded queue. `finish` may answer `Flow::Pending`, and is then called again.
+Either way `key_stream` comes round between polls, which is where a stream's
+progress is recorded and its time limit enforced: a method that waited out the
+hardware inside one call would report nothing until the end and could not be
+timed out.
 
 ## Shape
 
