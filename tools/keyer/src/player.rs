@@ -23,12 +23,21 @@ pub struct Shared {
     wake: Condvar,
     cancel: AtomicBool,
     shutdown: AtomicBool,
+    keys_ptt: bool,
 }
 
 impl Shared {
-    /// A fresh session.
-    pub fn new() -> Self {
-        Self::default()
+    /// A fresh session for a method that does or does not key PTT itself.
+    pub fn new(keys_ptt: bool) -> Self {
+        Self {
+            keys_ptt,
+            ..Self::default()
+        }
+    }
+
+    /// Whether the keying method keys PTT itself around each stream.
+    pub const fn keys_ptt(&self) -> bool {
+        self.keys_ptt
     }
 
     /// Runs `change` on the session and wakes the keying thread.
@@ -58,7 +67,7 @@ impl Shared {
 /// Keys whatever the session asks for until the keyer is shut down.
 ///
 /// `limit` is the longest one stream may run; nothing is cut off without one.
-pub fn run<M: Method>(method: &mut M, shared: &Shared, limit: Option<Duration>, log: Logger) {
+pub fn run<M: Method + ?Sized>(method: &mut M, shared: &Shared, limit: Option<Duration>, log: Logger) {
     let mut session = shared.lock();
     while !shared.shutdown.load(Ordering::Acquire) {
         if session.expire(method.now(), limit) {
@@ -96,12 +105,12 @@ struct SessionSource<'a> {
 }
 
 impl CodeSource for SessionSource<'_> {
-    fn next(&mut self, now: Duration) -> Next {
+    fn next(&mut self, now: Duration, ready: bool) -> Next {
         self.shared.update(|session| {
             if session.expire(now, self.limit) {
                 self.shared.cancel.store(true, Ordering::Release);
             }
-            session.take_next()
+            session.take_next(ready)
         })
     }
 

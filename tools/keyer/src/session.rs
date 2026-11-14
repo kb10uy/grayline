@@ -214,13 +214,17 @@ impl Session {
         Some(stream.config)
     }
 
-    /// What the stream being keyed asks for next.
-    pub fn take_next(&mut self) -> Next {
+    /// What the stream being keyed asks for next. A keyer that is not `ready`
+    /// for a code is told to wait, and the queue keeps what it holds.
+    pub fn take_next(&mut self, ready: bool) -> Next {
         let Some(stream) = self.stream.as_mut() else {
             return Next::Stop;
         };
         if stream.stop.is_some() {
             return Next::Stop;
+        }
+        if !ready {
+            return Next::Wait;
         }
         match stream.queue.pop_front() {
             Some(code) => Next::Code(code),
@@ -285,13 +289,26 @@ mod tests {
             .append(OWNER, &[TxCode::Character(1), TxCode::HoldMark])
             .unwrap();
         assert!(session.take_started().is_some());
-        assert_eq!(session.take_next(), Next::Code(TxCode::Character(1)));
-        assert_eq!(session.take_next(), Next::Code(TxCode::HoldMark));
-        assert_eq!(session.take_next(), Next::Wait);
+        assert_eq!(session.take_next(true), Next::Code(TxCode::Character(1)));
+        assert_eq!(session.take_next(true), Next::Code(TxCode::HoldMark));
+        assert_eq!(session.take_next(true), Next::Wait);
         session.end(OWNER).unwrap();
-        assert_eq!(session.take_next(), Next::End);
+        assert_eq!(session.take_next(true), Next::End);
         session.finish(Some(Outcome::Completed));
         assert_eq!(session.status().phase, Phase::Completed);
+    }
+
+    #[test]
+    fn a_keyer_that_is_not_ready_is_told_to_wait_and_loses_nothing() {
+        let mut session = opened();
+        session.append(OWNER, &[TxCode::Character(1)]).unwrap();
+        session.end(OWNER).unwrap();
+        session.take_started();
+        assert_eq!(session.take_next(false), Next::Wait);
+        assert_eq!(session.status().queued, 1);
+        assert_eq!(session.take_next(true), Next::Code(TxCode::Character(1)));
+        assert_eq!(session.take_next(false), Next::Wait);
+        assert_eq!(session.take_next(true), Next::End);
     }
 
     #[test]
@@ -340,7 +357,7 @@ mod tests {
         session.append(OWNER, &[TxCode::HoldMark]).unwrap();
         session.take_started();
         assert!(session.stop(StopReason::Requested));
-        assert_eq!(session.take_next(), Next::Stop);
+        assert_eq!(session.take_next(true), Next::Stop);
         assert_eq!(session.append(OWNER, &[TxCode::HoldMark]), Err(Refusal::NotOpen));
         session.finish(Some(Outcome::Stopped));
         assert_eq!(session.status().phase, Phase::Stopped(StopReason::Requested));

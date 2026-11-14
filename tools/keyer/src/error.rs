@@ -19,6 +19,9 @@ pub enum KeyerError {
         /// What the platform said.
         detail: String,
     },
+    /// A terminal unit could not be talked to, or refused a command.
+    #[error("terminal unit: {0}")]
+    Unit(String),
     /// The stream's framing was refused by the RTTY core.
     #[error("the stream cannot be framed: {0}")]
     Framing(String),
