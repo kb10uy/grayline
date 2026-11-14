@@ -85,7 +85,7 @@ A new output line is a `ControlLine`. A new timing method is a `Method`, which
 takes the stream a code at a time and blocks until each has gone out. A UART
 method would write the code and wait for it to drain, with no framer at all.
 
-A method whose hardware times the line itself, as `unit::Jl1hisTerminalUnit`
+A method whose hardware times the line itself, as `method::Jl1hisTerminalUnit`
 does for the terminal unit, blocks no longer than it takes to hand codes over
 and to ask how far they have got. Two things in the trait are there for it.
 `ready` says whether the method can take another code, and a stream idles
@@ -101,8 +101,9 @@ timed out.
 ```text
 line.rs      ControlLine, and a serial port's DTR or RTS behind it
 clock.rs     Clock, and the host clock waited on as tightly as it allows
-method.rs    Method, and LineBitbang: one deadline per element boundary
-unit.rs      Jl1hisTerminalUnit: the unit's control port, and its timeline
+method.rs    Method, and the timeline every method reports in
+  line_bitbang.rs         LineBitbang: one deadline per element boundary
+  jl1his_terminal_unit.rs Jl1hisTerminalUnit: the unit's port and timeline
 stream.rs    key_stream: one stream from lead-in to tail, from a CodeSource
 session.rs   what clients asked for, with no I/O in it
 error.rs     KeyerError, from the port, the line, and the listener

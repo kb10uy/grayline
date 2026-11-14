@@ -28,8 +28,6 @@ pub mod server;
 pub mod session;
 /// One stream from its first code to its tail.
 pub mod stream;
-/// Keying handed to a JL1HIS terminal unit.
-pub mod unit;
 
 #[cfg(test)]
 mod test_util;

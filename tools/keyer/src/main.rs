@@ -17,11 +17,10 @@ use clap::{
 use grayline_keyer::{
     clock::{self, SystemClock},
     line::{self, SerialLine, Signal},
-    method::{LineBitbang, Method},
+    method::{Jl1hisTerminalUnit, LineBitbang, Method, jl1his_terminal_unit},
     player::{self, Shared},
     server,
     stream::{FixedSource, Outcome, key_stream},
-    unit::{self, Jl1hisTerminalUnit},
 };
 use grayline_rtty::{BaudRate, Parity, StopElement, TxConfig, encode_text, tx::Diddle};
 use serialport::SerialPortType;
@@ -198,7 +197,7 @@ fn open_method(args: &LineArgs) -> Result<Box<dyn Method>> {
             )?))
         }
         MethodArgument::Jl1his => {
-            let method = Jl1hisTerminalUnit::new(unit::open_port(&args.port)?, SystemClock::new())?;
+            let method = Jl1hisTerminalUnit::new(jl1his_terminal_unit::open_port(&args.port)?, SystemClock::new())?;
             log(&format!("terminal unit {} answered on {}", method.version(), args.port));
             Ok(Box::new(method))
         }

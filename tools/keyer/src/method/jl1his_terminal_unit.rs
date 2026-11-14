@@ -12,11 +12,8 @@ use grayline_rtty::{
 };
 use serialport::SerialPort;
 
-use crate::{
-    clock::Clock,
-    error::KeyerError,
-    method::{Flow, Method, Progress, TICKS_PER_SECOND, ticks_to_duration},
-};
+use super::{Flow, Method, Progress, TICKS_PER_SECOND, ticks_to_duration};
+use crate::{clock::Clock, error::KeyerError};
 
 /// The byte that aborts whatever the unit is doing, in any of its modes.
 const ABORT: u8 = 0x03;
