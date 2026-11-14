@@ -12,7 +12,7 @@ use grayline_rtty::{
 use crate::{clock::Clock, error::KeyerError, line::ControlLine};
 
 /// The ticks per second a line is framed in: one tick is a microsecond.
-const TICKS_PER_SECOND: u32 = 1_000_000;
+pub(crate) const TICKS_PER_SECOND: u32 = 1_000_000;
 
 /// The longest a wait goes without looking at whether it was cancelled.
 const CANCEL_POLL: Duration = Duration::from_millis(20);
@@ -22,6 +22,9 @@ const CANCEL_POLL: Duration = Duration::from_millis(20);
 pub enum Flow {
     /// It did.
     Continue,
+    /// It is still under way, and the same call has to be made again. Only
+    /// [`Method::finish`] answers this.
+    Pending,
     /// The cancel flag was raised first.
     Cancelled,
 }
@@ -38,17 +41,26 @@ pub struct Progress {
 /// A way of putting a code stream on the air.
 ///
 /// Every call blocks until what it keyed has gone out, and gives up early
-/// once `cancel` is raised.
+/// once `cancel` is raised. A method whose hardware times the line itself
+/// blocks no longer than it takes to hand the work over and to ask how far
+/// it has got, so that the stream's progress and its time limit are looked at
+/// while the hardware keys.
 pub trait Method {
     /// Where the method's own clock stands.
     fn now(&self) -> Duration;
+    /// Whether [`send`](Self::send) can take another code now. A stream idles
+    /// while it cannot.
+    fn ready(&self) -> bool {
+        true
+    }
     /// Starts a stream framed by `config`, through its lead-in.
     fn begin(&mut self, config: &TxConfig, cancel: &AtomicBool) -> Result<Flow, KeyerError>;
     /// Keys one code.
     fn send(&mut self, code: TxCode, cancel: &AtomicBool) -> Result<Flow, KeyerError>;
     /// Idles at mark for one bit while the stream waits for more codes.
     fn idle(&mut self, cancel: &AtomicBool) -> Result<Flow, KeyerError>;
-    /// Ends the stream through its tail.
+    /// Ends the stream through its tail, or answers [`Flow::Pending`] while
+    /// the tail is still to come.
     fn finish(&mut self, cancel: &AtomicBool) -> Result<Flow, KeyerError>;
     /// Returns the output to mark at once and forgets the stream.
     fn rest(&mut self) -> Result<(), KeyerError>;
@@ -203,7 +215,7 @@ impl<L: ControlLine, C: Clock> Method for LineMethod<L, C> {
     }
 }
 
-fn ticks_to_duration(ticks: f64) -> Duration {
+pub(crate) fn ticks_to_duration(ticks: f64) -> Duration {
     Duration::from_nanos((ticks * 1_000.0).round() as u64)
 }
 

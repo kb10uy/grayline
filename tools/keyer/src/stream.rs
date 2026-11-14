@@ -31,14 +31,15 @@ pub enum Outcome {
 
 /// Where a stream's codes come from, and where its progress goes.
 pub trait CodeSource {
-    /// The next thing to key, decided at `now` on the method's clock.
-    fn next(&mut self, now: Duration) -> Next;
+    /// The next thing to key, decided at `now` on the method's clock. A
+    /// source asked while the method is not `ready` keeps its codes.
+    fn next(&mut self, now: Duration, ready: bool) -> Next;
     /// Records that `sent` codes and `progress` have gone out.
     fn progress(&mut self, sent: usize, progress: Progress);
 }
 
 /// Keys one stream from `source` through `method`, leaving the output at mark.
-pub fn key_stream<M: Method, S: CodeSource>(
+pub fn key_stream<M: Method + ?Sized, S: CodeSource>(
     method: &mut M,
     config: &TxConfig,
     source: &mut S,
@@ -51,7 +52,7 @@ pub fn key_stream<M: Method, S: CodeSource>(
     Ok(outcome)
 }
 
-fn run<M: Method, S: CodeSource>(
+fn run<M: Method + ?Sized, S: CodeSource>(
     method: &mut M,
     config: &TxConfig,
     source: &mut S,
@@ -62,7 +63,7 @@ fn run<M: Method, S: CodeSource>(
     }
     let mut sent = 0;
     loop {
-        let flow = match source.next(method.now()) {
+        let flow = match source.next(method.now(), method.ready()) {
             Next::Code(code) => {
                 let flow = method.send(code, cancel)?;
                 if flow == Flow::Continue {
@@ -71,14 +72,16 @@ fn run<M: Method, S: CodeSource>(
                 flow
             }
             Next::Wait => method.idle(cancel)?,
-            Next::End => {
-                let flow = method.finish(cancel)?;
-                source.progress(sent, method.progress());
-                return Ok(match flow {
-                    Flow::Continue => Outcome::Completed,
-                    Flow::Cancelled => Outcome::Stopped,
-                });
-            }
+            Next::End => match method.finish(cancel)? {
+                Flow::Pending => Flow::Pending,
+                flow => {
+                    source.progress(sent, method.progress());
+                    return Ok(match flow {
+                        Flow::Continue => Outcome::Completed,
+                        Flow::Pending | Flow::Cancelled => Outcome::Stopped,
+                    });
+                }
+            },
             Next::Stop => return Ok(Outcome::Stopped),
         };
         source.progress(sent, method.progress());
@@ -117,7 +120,10 @@ impl FixedSource {
 }
 
 impl CodeSource for FixedSource {
-    fn next(&mut self, _now: Duration) -> Next {
+    fn next(&mut self, _now: Duration, ready: bool) -> Next {
+        if !ready {
+            return Next::Wait;
+        }
         self.codes.pop_front().map_or(Next::End, Next::Code)
     }
 
@@ -144,11 +150,11 @@ mod tests {
     }
 
     impl CodeSource for CancellingSource<'_> {
-        fn next(&mut self, now: Duration) -> Next {
+        fn next(&mut self, now: Duration, ready: bool) -> Next {
             if self.inner.sent() >= self.after {
                 self.cancel.store(true, Ordering::Release);
             }
-            self.inner.next(now)
+            self.inner.next(now, ready)
         }
 
         fn progress(&mut self, sent: usize, progress: Progress) {

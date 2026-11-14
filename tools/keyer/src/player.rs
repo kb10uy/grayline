@@ -58,7 +58,7 @@ impl Shared {
 /// Keys whatever the session asks for until the keyer is shut down.
 ///
 /// `limit` is the longest one stream may run; nothing is cut off without one.
-pub fn run<M: Method>(method: &mut M, shared: &Shared, limit: Option<Duration>, log: Logger) {
+pub fn run<M: Method + ?Sized>(method: &mut M, shared: &Shared, limit: Option<Duration>, log: Logger) {
     let mut session = shared.lock();
     while !shared.shutdown.load(Ordering::Acquire) {
         if session.expire(method.now(), limit) {
@@ -96,12 +96,12 @@ struct SessionSource<'a> {
 }
 
 impl CodeSource for SessionSource<'_> {
-    fn next(&mut self, now: Duration) -> Next {
+    fn next(&mut self, now: Duration, ready: bool) -> Next {
         self.shared.update(|session| {
             if session.expire(now, self.limit) {
                 self.shared.cancel.store(true, Ordering::Release);
             }
-            session.take_next()
+            session.take_next(ready)
         })
     }
 
