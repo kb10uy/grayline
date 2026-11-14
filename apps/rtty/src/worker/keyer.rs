@@ -43,6 +43,8 @@ pub struct KeyerSnapshot {
     pub elapsed: Duration,
     /// The latest any transition took effect behind its deadline.
     pub late: Duration,
+    /// Whether the keyer keys PTT itself around the stream, once it has said.
+    pub keys_ptt: Option<bool>,
     /// Whether the keyer reported the stream as having gone out whole.
     pub completed: bool,
     pub error: Option<AppError>,
@@ -50,10 +52,11 @@ pub struct KeyerSnapshot {
 
 /// One message being keyed by `gl-keyer`.
 ///
-/// The connection is made at once, so a keyer that is not running is reported
-/// while the rig is still switching over; the stream is opened only once the
-/// interface says the rig is keyed, because the keyer starts keying the moment
-/// a stream opens.
+/// The connection is made at once and the keyer is asked whether it keys PTT
+/// itself, so a keyer that is not running is reported before the rig is keyed
+/// and one that keys PTT leaves the rig alone. The stream is opened only once
+/// the interface says to start, which is once a rig that had to be keyed is,
+/// because the keyer starts keying the moment a stream opens.
 pub struct KeyerWorker {
     snapshot: Arc<Mutex<KeyerSnapshot>>,
     start: Arc<AtomicBool>,
@@ -160,7 +163,14 @@ fn stream_loop(address: &str, codes: &[TxCode], config: &TxConfig, signals: &Sig
         Ok(client) => client,
         Err(error) => return signals.fail(AppError::Keyer(error)),
     };
-    update(&signals.snapshot, |state| state.phase = TxPhase::Producing);
+    let keys_ptt = match client.status() {
+        Ok(status) => status.keys_ptt,
+        Err(error) => return signals.fail(AppError::Keyer(error)),
+    };
+    update(&signals.snapshot, |state| {
+        state.keys_ptt = Some(keys_ptt);
+        state.phase = TxPhase::Producing;
+    });
     while !signals.start.load(Ordering::Acquire) {
         if signals.cancelled() {
             return;
@@ -236,14 +246,25 @@ mod tests {
     }
 
     #[test]
-    fn nothing_is_opened_until_the_rig_is_keyed() {
+    fn nothing_is_opened_until_the_stream_is_started() {
         let fake = FakeKeyer::spawn(&[("completed", 0)]);
         let worker = spawn(&fake, "RY");
 
-        settle(&worker, |snapshot| snapshot.phase == TxPhase::Producing);
+        let ready = settle(&worker, |snapshot| snapshot.phase == TxPhase::Producing);
         thread::sleep(Duration::from_millis(30));
 
-        assert_eq!(fake.received(), ["+\\chk_vfo"]);
+        assert_eq!(ready.keys_ptt, Some(false));
+        assert_eq!(fake.received(), ["+\\chk_vfo", "+\\status"]);
+    }
+
+    #[test]
+    fn a_keyer_that_keys_ptt_itself_is_known_before_the_stream_is_started() {
+        let fake = FakeKeyer::keying_ptt(&[("completed", 0)]);
+        let worker = spawn(&fake, "RY");
+
+        let ready = settle(&worker, |snapshot| snapshot.phase == TxPhase::Producing);
+
+        assert_eq!(ready.keys_ptt, Some(true));
     }
 
     #[test]
@@ -259,10 +280,11 @@ mod tests {
         assert_eq!(finished.elapsed, Duration::from_millis(1_500));
         assert_eq!(finished.late, Duration::from_micros(40));
         let received = fake.received();
-        assert!(received[1].starts_with("+\\rtty_open baud=45.45 "), "{received:?}");
-        assert!(received[2].starts_with("+\\rtty_send "), "{received:?}");
-        assert_eq!(received[3], "+\\rtty_end");
-        assert!(received[4..].iter().all(|line| line == "+\\status"), "{received:?}");
+        assert_eq!(received[1], "+\\status");
+        assert!(received[2].starts_with("+\\rtty_open baud=45.45 "), "{received:?}");
+        assert!(received[3].starts_with("+\\rtty_send "), "{received:?}");
+        assert_eq!(received[4], "+\\rtty_end");
+        assert!(received[5..].iter().all(|line| line == "+\\status"), "{received:?}");
     }
 
     #[test]

@@ -952,6 +952,20 @@ impl App {
         !self.rig_keyed || matches!(self.rig_snapshot.state, RigState::Transmitting)
     }
 
+    /// Whether the message on the air still needs the rig keyed for it.
+    ///
+    /// True of a message a keyer has said it does not key PTT for, until the
+    /// rig is keyed or the stream has started. A keyer that keys PTT itself
+    /// leaves the rig unkeyed: keying it through rig control as well would be
+    /// a second set of rules for when the transmitter is on.
+    pub(crate) fn rig_keying_due(&self) -> bool {
+        !self.rig_keyed
+            && self.transmit.on_air().is_some_and(|on_air| {
+                let output = on_air.output();
+                !output.is_started() && output.snapshot().keys_ptt == Some(false)
+            })
+    }
+
     /// Whether the rig has nothing left to send and may be unkeyed.
     ///
     /// The queue counts as well as the stream: a message waiting behind the
@@ -981,6 +995,15 @@ impl App {
     }
 
     fn poll_transmit(&mut self) {
+        if let Some(on_air) = self.transmit.on_air_mut() {
+            on_air.refresh();
+        }
+        if self.rig_keying_due()
+            && let Some(worker) = self.rig_worker.as_ref()
+        {
+            worker.transmit(self.keying());
+            self.rig_keyed = true;
+        }
         let ready = self.rig_ready_to_send();
         let rig_error = self.rig_snapshot.error.as_ref().filter(|_| self.rig_keyed);
         if let Some(on_air) = self.transmit.on_air_mut() {
@@ -1040,8 +1063,12 @@ impl App {
         // transmitter's own mark lead-in is a separate half-second, and the
         // two add up: it is there for the receiving integrators rather than
         // for the rig, which is why neither replaces the other.
+        //
+        // A keyer is asked first whether it keys PTT itself, so a message
+        // going to one is keyed from `poll_transmit` once it has answered.
         if let Some(worker) = self.rig_worker.as_ref()
             && !self.rig_keyed
+            && !self.settings.keyer.enabled
         {
             worker.transmit(self.keying());
             self.rig_keyed = true;

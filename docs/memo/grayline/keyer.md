@@ -40,10 +40,14 @@ in any other, so the keyer has nothing to add there, and a second place that
 could key the transmitter would be a second set of rules for when it is
 unkeyed.
 
-The terminal unit is the exception in one respect: it sends FSK only while
-its own PTT output is keyed, so the keyer keys that output for each stream
-([The Terminal Unit](#the-terminal-unit)). Rig control still keys the rig
-around it.
+The terminal unit is the exception: it sends FSK only while its own PTT output
+is keyed, so the keyer keys that output for each stream
+([The Terminal Unit](#the-terminal-unit)). There is still one place that keys
+the transmitter, not two. `\status` says which in its `PTT` value, `1` for a
+keyer that keys PTT itself around each stream and `0` for one that leaves it
+to the client, and a client that is told `1` does not key the rig. `PTT` is a
+property of the keying method and does not change while the keyer runs; a
+keyer that does not report it is taken to leave PTT to the client.
 
 The one station this leaves out keys FSK on DTR and PTT on RTS of the same
 port, with no CAT to key through: `rigctld` cannot open a port the keyer
@@ -143,7 +147,7 @@ with its values alone and everything else with `RPRT`, as `rigctld` does.
 | `\rtty_open key=value...` | Opens a stream; the keys are below |
 | `\rtty_send <codes>` | Queues codes on the stream this connection opened |
 | `\rtty_end` | No more codes; key the tail once the queue runs out |
-| `\status` | `State`, `Sent`, `Queued`, `Elapsed` and `Late` in µs, and `Error` after a failure |
+| `\status` | `State`, `Sent`, `Queued`, `Elapsed` and `Late` in µs, `PTT`, and `Error` after a failure |
 | `\stop` | Cuts the open stream short |
 | `q` | Closes the connection |
 
@@ -243,9 +247,11 @@ A `STATUS` without `SENT` and `LAST` is unreadable and fails the stream.
   stream has nothing more to give, so a message sent whole starts its lead-in
   with codes already queued. `PTT OFF` follows the last code handed over once
   the stream has ended; the unit releases PTT after its queue and `TXTAIL`.
-  The application keys the rig through rig control around the stream as with
-  a line. Whether the unit's PTT output is wired to the rig as well is the
-  station's choice: keyed by both, the rig is keyed for the stream either way.
+  The keyer reports `PTT: 1` for the unit, so the application does not key
+  the rig through rig control, and the unit's PTT output has to be what keys
+  the rig. It is keyed and released once for every stream, so messages queued
+  one behind another are separate transmissions with the rig receiving in
+  between, where rig control would have held the carrier across them.
 - **The timeline.** Every character takes the same time, so where the stream
   stands is the lead-in plus one character for each code `SENT` counts. The
   keyer asks `STATUS` every 20 ms. What is being keyed, the lead-in or the
@@ -305,19 +311,24 @@ address = "127.0.0.1:4534"
 Like `[rig]`, the section has no editor and is written out with its defaults
 on the first save: which line the rig's FSK input hangs off is wired once for
 a station. Nothing else about a transmission changes. Messages queue the same
-way, rig control keys PTT around them the same way, and the sent text is
-echoed and underlined the same way.
+way and the sent text is echoed and underlined the same way. Which of the
+keyer and rig control keys PTT is the keyer's to say, so that a station can
+change the keyer's method and leave this file alone.
 
-1. The rig is keyed through rig control with `ctx.keying` set to `"fsk"`, so
-   the script can put the rig in its FSK mode before `T 1`
-   ([rig-control.md](rig-control.md)).
-2. A worker connects to the keyer at once, so a keyer that is not running is
-   found out while the rig is still switching over.
-3. Once the rig reports it is transmitting — after rig control's `lead-in` —
-   the worker opens the stream and sends the whole message, then `\rtty_end`.
-   Opening waits for the rig because the keyer starts keying the moment a
-   stream opens. Sending everything before ending means the stream never runs
-   dry: a dry stream idles at mark and falls behind its schedule.
+1. A worker connects to the keyer at once and asks `\status`, so a keyer that
+   is not running is found out before the rig is keyed, and so the
+   application knows from `PTT` whether keying the rig is its job.
+2. If the keyer leaves PTT to the application, the rig is keyed through rig
+   control with `ctx.keying` set to `"fsk"`, so the script can put the rig in
+   its FSK mode before `T 1` ([rig-control.md](rig-control.md)). If the keyer
+   keys PTT itself, rig control is not asked to transmit or, afterwards, to
+   receive; the connection to the rig stays as it is.
+3. Once a rig that was keyed reports it is transmitting — after rig control's
+   `lead-in` — or at once if none was, the worker opens the stream and sends
+   the whole message, then `\rtty_end`. Opening waits for the rig because the
+   keyer starts keying the moment a stream opens. Sending everything before
+   ending means the stream never runs dry: a dry stream idles at mark and
+   falls behind its schedule.
 4. The worker asks `\status` every 20 ms. `Elapsed`, in microseconds, is read
    as a playback position against a `TxSchedule` built at 1 MHz, which is what
    drives the echo, the underline, the time remaining, and the text returned
@@ -333,8 +344,9 @@ unsent text goes back to the draft with the queue behind it, as a rig failure
 does. No audio device is needed to send. Tones, level, and reverse are not
 used, because a keyed line has two states: the rig decides what they sound
 like, and `--mark-asserted`, or the terminal unit's `INVERT`, decides which
-state is mark. Nothing in the application changes for a terminal unit: only
-`gl-keyer serve --method jl1his` differs, and a character gap or parity the
+state is mark. Nothing in the application's settings changes for a terminal
+unit: only `gl-keyer serve --method jl1his` differs, the keyer's `PTT: 1`
+takes the keying away from rig control, and a character gap or parity the
 unit cannot key fails the message as soon as the keyer starts the stream,
 reported as a failed stream. The status bar names the keyer's address while
 the section is on, since nothing else on screen says the audio is not being
@@ -367,8 +379,9 @@ used.
   input is refused.
 - A keyer served on a loopback socket and driven by `KeyerClient` and
   `grayline_rig::Rigctld`: a stream keys the line in framing order, a dropped
-  connection stops its stream at mark, requests that conflict are refused, and
-  rig commands are left to `rigctld`.
+  connection stops its stream at mark, requests that conflict are refused,
+  status says whether the keyer keys PTT itself, and rig commands are left to
+  `rigctld`.
 - `UnitMethod` against a simulated terminal unit on a fake clock: a stream is
   set up, handed over, and followed to its tail; a code reaches the unit
   first bit uppermost; tagged lines are not taken for answers; every report
@@ -383,7 +396,10 @@ used.
   taken for a unit.
 - In `grayline-keyer-protocol`: every state name reads back, and a status
   answer is read by its labels.
-- In the RTTY application, against a stand-in keyer: nothing is opened before
-  the rig is keyed, a started stream is sent whole and followed to its end, a
+- In the RTTY application, against a stand-in keyer: the keyer is asked
+  whether it keys PTT before anything is opened, the rig is keyed for a keyer
+  only when the keyer leaves PTT to it and only until the stream has started,
+  nothing is opened before the stream is started, a started stream is sent
+  whole and followed to its end, a
   stream cut short and an unreachable keyer are failures that give the text
   back, and a cancelled stream is stopped at the keyer.

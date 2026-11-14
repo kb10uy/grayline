@@ -119,6 +119,7 @@ pub fn execute(command: &Command, id: ConnectionId, shared: &Shared) -> Reply {
                 format!("Elapsed: {}", status.progress.elapsed.as_micros()),
                 format!("Late: {}", status.progress.late.as_micros()),
             ];
+            lines.push(format!("PTT: {}", u8::from(shared.keys_ptt())));
             if let Some(fault) = status.fault {
                 lines.push(format!("Error: {fault}"));
             }
@@ -168,7 +169,7 @@ mod tests {
         fn start() -> Self {
             let clock = FakeClock::default();
             let fsk = RecordingLine::new(clock.clone(), Duration::ZERO);
-            let shared = Arc::new(Shared::new());
+            let shared = Arc::new(Shared::new(false));
             let listener = bind("127.0.0.1:0").unwrap();
             let address = listener.local_addr().unwrap().to_string();
             let serving = Arc::clone(&shared);
@@ -279,6 +280,14 @@ mod tests {
         other.run("\\stop").unwrap();
         wait_for_state(&mut owner, StreamState::Stopped);
         other.run("\\rtty_open").unwrap();
+    }
+
+    #[test]
+    fn status_says_whether_the_keyer_keys_ptt_itself() {
+        let keyer = Keyer::start();
+        assert!(!keyer.client().status().unwrap().keys_ptt);
+        let reply = execute(&Command::Status, ConnectionId(1), &Shared::new(true));
+        assert!(reply.render(true).contains("\nPTT: 1\n"), "{reply:?}");
     }
 
     #[test]

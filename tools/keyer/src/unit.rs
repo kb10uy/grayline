@@ -162,6 +162,10 @@ impl<P: Read + Write, C: Clock> Method for UnitMethod<P, C> {
             .is_none_or(|stream| stream.batch.len() < CODES_PER_SEND)
     }
 
+    fn keys_ptt(&self) -> bool {
+        true
+    }
+
     fn begin(&mut self, config: &TxConfig, cancel: &AtomicBool) -> Result<Flow, KeyerError> {
         let commands = settings(config)?;
         let mut framer =
@@ -1066,7 +1070,8 @@ mod tests {
         let (mut method, fake, _) = unit(Model::default());
         let config = TxConfig::default();
         let codes = encode_text("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG", &config).unwrap();
-        let shared = Arc::new(Shared::new());
+        let shared = Arc::new(Shared::new(method.keys_ptt()));
+        assert!(shared.keys_ptt());
         shared.update(|session| {
             session.open(OWNER, config).unwrap();
             session.append(OWNER, &codes).unwrap();

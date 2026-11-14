@@ -53,6 +53,11 @@ pub trait Method {
     fn ready(&self) -> bool {
         true
     }
+    /// Whether the method keys PTT itself around each stream, so that a
+    /// client has no need to key the rig any other way.
+    fn keys_ptt(&self) -> bool {
+        false
+    }
     /// Starts a stream framed by `config`, through its lead-in.
     fn begin(&mut self, config: &TxConfig, cancel: &AtomicBool) -> Result<Flow, KeyerError>;
     /// Keys one code.

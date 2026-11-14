@@ -23,12 +23,21 @@ pub struct Shared {
     wake: Condvar,
     cancel: AtomicBool,
     shutdown: AtomicBool,
+    keys_ptt: bool,
 }
 
 impl Shared {
-    /// A fresh session.
-    pub fn new() -> Self {
-        Self::default()
+    /// A fresh session for a method that does or does not key PTT itself.
+    pub fn new(keys_ptt: bool) -> Self {
+        Self {
+            keys_ptt,
+            ..Self::default()
+        }
+    }
+
+    /// Whether the keying method keys PTT itself around each stream.
+    pub const fn keys_ptt(&self) -> bool {
+        self.keys_ptt
     }
 
     /// Runs `change` on the session and wakes the keying thread.

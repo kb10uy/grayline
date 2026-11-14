@@ -40,9 +40,10 @@ pub(crate) fn refused_port() -> RigControlError {
 
 /// A stand-in for `gl-keyer` that reports a scripted run of states.
 ///
-/// Each `\status` takes the next of the `(state, elapsed microseconds)`
-/// pairs, and the last one repeats, so a test says how a stream goes without a
-/// serial port. It serves one connection, which is one message.
+/// Each `\status` once a stream is open takes the next of the `(state,
+/// elapsed microseconds)` pairs, and the last one repeats, so a test says how
+/// a stream goes without a serial port. One asked before that is answered
+/// idle. It serves one connection, which is one message.
 pub(crate) struct FakeKeyer {
     pub address: String,
     received: Arc<Mutex<Vec<String>>>,
@@ -50,6 +51,15 @@ pub(crate) struct FakeKeyer {
 
 impl FakeKeyer {
     pub fn spawn(states: &[(&'static str, u64)]) -> Self {
+        Self::serve(states, false)
+    }
+
+    /// A keyer that says it keys PTT itself.
+    pub fn keying_ptt(states: &[(&'static str, u64)]) -> Self {
+        Self::serve(states, true)
+    }
+
+    fn serve(states: &[(&'static str, u64)], keys_ptt: bool) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap().to_string();
         let received = Arc::new(Mutex::new(Vec::new()));
@@ -62,13 +72,20 @@ impl FakeKeyer {
             let mut writer = BufWriter::new(stream.try_clone().unwrap());
             let reader = BufReader::new(stream);
             let mut next = 0;
+            let mut opened = false;
+            let ptt = u8::from(keys_ptt);
             for request in reader.lines().map_while(Result::ok) {
+                opened |= request.contains("\\rtty_open");
                 let answer = if request.contains("chk_vfo") {
                     "chk_vfo:\nChkVFO: 0\nRPRT 0\n".to_owned()
+                } else if request.contains("\\status") && !opened {
+                    format!("status:\nState: idle\nSent: 0\nQueued: 0\nElapsed: 0\nLate: 0\nPTT: {ptt}\nRPRT 0\n")
                 } else if request.contains("\\status") {
                     let (state, elapsed) = states[next.min(states.len() - 1)];
                     next += 1;
-                    format!("status:\nState: {state}\nSent: 0\nQueued: 0\nElapsed: {elapsed}\nLate: 40\nRPRT 0\n")
+                    format!(
+                        "status:\nState: {state}\nSent: 0\nQueued: 0\nElapsed: {elapsed}\nLate: 40\nPTT: {ptt}\nRPRT 0\n"
+                    )
                 } else {
                     "RPRT 0\n".to_owned()
                 };

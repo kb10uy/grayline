@@ -211,7 +211,7 @@ fn serve(args: &ServeArgs) -> Result<ExitCode> {
     }
     let limit = (args.max_transmit > 0.0).then(|| Duration::from_secs_f64(args.max_transmit));
     let mut method = open_method(&args.line)?;
-    let shared = Arc::new(Shared::new());
+    let shared = Arc::new(Shared::new(method.keys_ptt()));
     let listener = server::bind(&args.listen)?;
     log(&format!("keying {} and listening on {}", args.line.port, args.listen));
     let serving = Arc::clone(&shared);
