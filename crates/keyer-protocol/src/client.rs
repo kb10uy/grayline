@@ -27,6 +27,9 @@ pub struct Status {
     pub elapsed: Duration,
     /// The latest any transition took effect behind its deadline.
     pub late: Duration,
+    /// Whether the keyer keys PTT itself around each stream, which a keyer
+    /// that does not say is taken not to.
+    pub keys_ptt: bool,
     /// The hardware failure the stream ended on, if it ended on one.
     pub error: Option<String>,
 }
@@ -46,6 +49,11 @@ impl Status {
             queued: field("Queued")?.parse().ok()?,
             elapsed: micros("Elapsed")?,
             late: micros("Late")?,
+            keys_ptt: match field("PTT") {
+                None | Some("0") => false,
+                Some("1") => true,
+                Some(_) => return None,
+            },
             error: field("Error").map(str::to_owned),
         })
     }
@@ -126,9 +134,22 @@ mod tests {
                 queued: 3,
                 elapsed: Duration::from_millis(1_500),
                 late: Duration::from_micros(250),
+                keys_ptt: false,
                 error: None,
             })
         );
+    }
+
+    #[test]
+    fn a_keyer_that_keys_ptt_itself_says_so() {
+        let answer = |ptt: &str| {
+            Status::parse(&lines(&format!(
+                "State: idle\nSent: 0\nQueued: 0\nElapsed: 0\nLate: 0\nPTT: {ptt}"
+            )))
+        };
+        assert!(answer("1").unwrap().keys_ptt);
+        assert!(!answer("0").unwrap().keys_ptt);
+        assert_eq!(answer("maybe"), None);
     }
 
     #[test]

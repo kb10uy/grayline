@@ -216,7 +216,10 @@ It is `"fsk"` when `gl-keyer` keys the rig's FSK input and nothing is played
 ([keyer.md](keyer.md)). A rig keyed for FSK usually has to be in its FSK mode,
 and which mode that is belongs to the rig, so the application reports the
 keying and the script selects the mode. `receive` is told the keying of the
-transmission it ends, so a script that changed the mode can change it back:
+transmission it ends, so a script that changed the mode can change it back.
+A keyer that says it keys PTT itself is left to: neither `transmit` nor
+`receive` is called for a message it carries ([keyer.md](keyer.md)), so a
+station keyed that way puts the rig in its FSK mode by hand.
 
 ```lua
 local function transmit(ctx)

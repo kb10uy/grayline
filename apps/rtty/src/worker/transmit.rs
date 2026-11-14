@@ -163,6 +163,9 @@ pub struct OutputSnapshot {
     pub underrun: bool,
     /// How late the keyer's worst transition was, for a message it keyed.
     pub late: Option<Duration>,
+    /// Whether a keyer keys PTT itself around the message, once it has said.
+    /// Audio never says.
+    pub keys_ptt: Option<bool>,
 }
 
 /// The output one message is going out on, and whether it has been started.
@@ -234,6 +237,7 @@ impl Output {
                     drained,
                     underrun: playback.underrun_samples() > 0,
                     late: None,
+                    keys_ptt: None,
                 }
             }
             Line::Keyer(worker) => {
@@ -245,6 +249,7 @@ impl Output {
                     drained: snapshot.completed,
                     underrun: false,
                     late: Some(snapshot.late),
+                    keys_ptt: snapshot.keys_ptt,
                 }
             }
             #[cfg(test)]

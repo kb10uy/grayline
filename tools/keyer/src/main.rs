@@ -10,13 +10,14 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{
-    Args, Parser, Subcommand, ValueEnum,
+    Args, CommandFactory, Parser, Subcommand, ValueEnum,
     builder::{PossibleValuesParser, TypedValueParser},
+    error::ErrorKind,
 };
 use grayline_keyer::{
     clock::{self, SystemClock},
     line::{self, SerialLine, Signal},
-    method::LineMethod,
+    method::{Jl1hisTerminalUnit, LineBitbang, Method, jl1his_terminal_unit},
     player::{self, Shared},
     server,
     stream::{FixedSource, Outcome, key_stream},
@@ -27,7 +28,7 @@ use serialport::SerialPortType;
 /// Exit status for a transmission cut short by an interrupt.
 const INTERRUPTED_EXIT_CODE: u8 = 130;
 
-/// FSK keying on a serial port's control line.
+/// FSK keying on a serial port's control line or through a terminal unit.
 #[derive(Debug, Parser)]
 #[command(name = "gl-keyer", version, about, long_about = None)]
 struct Cli {
@@ -47,17 +48,49 @@ enum Command {
 
 #[derive(Debug, Args)]
 struct LineArgs {
-    /// The serial port whose control lines key the rig.
+    /// How the rig's FSK input is keyed.
+    #[arg(long, value_enum, value_name = "METHOD", default_value_t = MethodArgument::Bitbang)]
+    method: MethodArgument,
+
+    /// The serial port whose control line keys the rig, or the control port
+    /// of the terminal unit.
     #[arg(long, value_name = "PORT")]
     port: String,
 
-    /// The line FSK is keyed on.
+    /// The line FSK is keyed on, with bitbang.
     #[arg(long, value_enum, value_name = "LINE")]
-    fsk_line: SignalArgument,
+    fsk_line: Option<SignalArgument>,
 
-    /// Assert the FSK line for mark rather than for space.
+    /// Assert the FSK line for mark rather than for space, with bitbang.
     #[arg(long)]
     mark_asserted: bool,
+}
+
+impl LineArgs {
+    /// What the chosen method cannot be given, or cannot do without.
+    fn misuse(&self) -> Option<(ErrorKind, &'static str)> {
+        match self.method {
+            MethodArgument::Bitbang if self.fsk_line.is_none() => Some((
+                ErrorKind::MissingRequiredArgument,
+                "--method bitbang needs --fsk-line <LINE>",
+            )),
+            MethodArgument::Jl1his if self.fsk_line.is_some() || self.mark_asserted => Some((
+                ErrorKind::ArgumentConflict,
+                "--fsk-line and --mark-asserted cannot be used with --method jl1his",
+            )),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum MethodArgument {
+    /// Switch a serial port's DTR or RTS line, timed by this process.
+    Bitbang,
+    /// Hand the codes to a JL1HIS terminal unit, which times the line itself
+    /// and keys its own PTT output.
+    #[value(name = "jl1his")]
+    Jl1his,
 }
 
 #[derive(Debug, Args)]
@@ -152,9 +185,23 @@ impl SendArgs {
     }
 }
 
-fn open_line(args: &LineArgs) -> Result<SerialLine> {
-    let port = line::open_port(&args.port)?;
-    Ok(SerialLine::new(port, args.fsk_line.into()))
+fn open_method(args: &LineArgs) -> Result<Box<dyn Method>> {
+    match args.method {
+        MethodArgument::Bitbang => {
+            let signal = args.fsk_line.context("--method bitbang needs --fsk-line")?;
+            let line = SerialLine::new(line::open_port(&args.port)?, signal.into());
+            Ok(Box::new(LineBitbang::new(
+                line,
+                SystemClock::new(),
+                args.mark_asserted,
+            )?))
+        }
+        MethodArgument::Jl1his => {
+            let method = Jl1hisTerminalUnit::new(jl1his_terminal_unit::open_port(&args.port)?, SystemClock::new())?;
+            log(&format!("terminal unit {} answered on {}", method.version(), args.port));
+            Ok(Box::new(method))
+        }
+    }
 }
 
 fn log(message: &str) {
@@ -166,8 +213,8 @@ fn serve(args: &ServeArgs) -> Result<ExitCode> {
         bail!("--max-transmit has to be zero or more seconds");
     }
     let limit = (args.max_transmit > 0.0).then(|| Duration::from_secs_f64(args.max_transmit));
-    let mut method = LineMethod::new(open_line(&args.line)?, SystemClock::new(), args.line.mark_asserted)?;
-    let shared = Arc::new(Shared::new());
+    let mut method = open_method(&args.line)?;
+    let shared = Arc::new(Shared::new(method.keys_ptt()));
     let listener = server::bind(&args.listen)?;
     log(&format!("keying {} and listening on {}", args.line.port, args.listen));
     let serving = Arc::clone(&shared);
@@ -178,20 +225,20 @@ fn serve(args: &ServeArgs) -> Result<ExitCode> {
     let interrupted = Arc::clone(&shared);
     ctrlc::set_handler(move || interrupted.shut_down()).context("cannot catch an interrupt")?;
     clock::raise_thread_priority();
-    player::run(&mut method, &shared, limit, log);
+    player::run(&mut *method, &shared, limit, log);
     Ok(ExitCode::SUCCESS)
 }
 
 fn send(args: &SendArgs) -> Result<ExitCode> {
     let config = args.config()?;
     let codes = encode_text(&args.text, &config).context("the text cannot be sent")?;
-    let mut method = LineMethod::new(open_line(&args.line)?, SystemClock::new(), args.line.mark_asserted)?;
+    let mut method = open_method(&args.line)?;
     let cancel = Arc::new(AtomicBool::new(false));
     let interrupted = Arc::clone(&cancel);
     ctrlc::set_handler(move || interrupted.store(true, Ordering::Release)).context("cannot catch an interrupt")?;
     clock::raise_thread_priority();
     let mut source = FixedSource::new(codes);
-    let outcome = key_stream(&mut method, &config, &mut source, &cancel)?;
+    let outcome = key_stream(&mut *method, &config, &mut source, &cancel)?;
     let progress = source.last_progress();
     log(&format!(
         "{} codes keyed in {:.3} s; the latest transition was {} µs behind its deadline",
@@ -229,6 +276,14 @@ fn ports() -> Result<ExitCode> {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let misuse = match &cli.command {
+        Command::Serve(args) => args.line.misuse(),
+        Command::Send(args) => args.line.misuse(),
+        Command::Ports => None,
+    };
+    if let Some((kind, message)) = misuse {
+        Cli::command().error(kind, message).exit();
+    }
     let result = match &cli.command {
         Command::Serve(args) => serve(args),
         Command::Send(args) => send(args),

@@ -95,9 +95,10 @@ The Rust implementation: what it is meant to be, and what it currently is.
   read, including the shared keying worker and Lua host, what each application
   uses of them, and the SSTV radio panel.
 - [grayline/keyer.md](grayline/keyer.md): `gl-keyer`, the process that times
-  FSK on a serial port's control line, why PTT stays with rig control, the
-  three seams later keying methods plug into, the protocol clients reach it
-  over, and how the RTTY application streams to it.
+  FSK on a serial port's control line or hands it to a JL1HIS terminal unit,
+  why PTT stays with rig control, the three seams keying methods plug into,
+  the protocol clients reach it over, and how the RTTY application streams to
+  it.
 - [grayline/qso-directory.md](grayline/qso-directory.md): the directory of
   stations a template looks a callsign up in, the store behind it, and why it
   is not a log.
