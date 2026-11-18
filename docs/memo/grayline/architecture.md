@@ -171,6 +171,14 @@ competing tone detectors, its weighted center also moves with the picture tones
 either side of the pulse. Both errors would displace the whole picture
 horizontally.
 
+Finding a pulse means finding the envelope's peak within half a line period of
+where the raster clock expects it. The envelope's center is then weighed only
+within one sync duration of that peak. A short pulse does not drive the envelope
+far: Martin's 4.9 ms pulse peaks near 0.58 while steady black reads about 0.42,
+so a center weighed across the whole search window follows the dark parts of the
+picture instead of the pulse, by hundreds of samples, and the frequency-domain
+search that follows then looks where no pulse is.
+
 Every measured sync center is therefore refined on the frequency stream, where
 the pulse is the window of one sync duration whose mean frequency is lowest.
 Sliding a window of the known length beats reading edges off a threshold on two
@@ -188,7 +196,11 @@ work in that one time base.
 search window around a detected pulse, so a rough figure is enough. Inputs whose
 two streams are already aligned use a zero delay. A pulse that the search window
 cannot see whole — one cut short by the start or the end of the retained samples
-— has no usable center and is left out of the fit rather than pulling it.
+— has no usable center and is left out of the fit rather than pulling it. A
+pulse that begins on the first sample retained counts as cut, because nothing
+tells it from one that began earlier. A header-started reception opens on such a
+pulse in every mode that begins its line with one, since detection ends inside
+or just after it.
 
 `RxDecoder` is stateful and streaming. It exposes acquisition, decoding,
 completion, and stopped states, consumes an explicit prefix of each input block,
@@ -220,11 +232,21 @@ and reports typed events and errors. Its responsibilities include:
 - Skipping the leading raster units whose picture arrived before mode detection
   finished. Those rows stay blank and count as delivered, which is what the
   operator sees in MMSSTV too, instead of failing a reception over samples that
-  were never received.
+  were never received. A rebuild from retained samples, live or staged, skips
+  the same units under the clock it refits. A header-started Martin reception
+  always has one: detection ends about 7.5 ms after the raster epoch, the first
+  pixel of a Martin line begins 5.4 ms after it, and the refit puts the raster
+  back where that line began, ahead of the first sample retained.
 - Family-specific RGB and luminance/chroma reconstruction.
 - Stable live raster-phase correction. A correction may move the raster
   backwards, so the working window keeps one raster period behind the unit being
-  decoded rather than trimming to its start.
+  decoded rather than trimming to its start. A correction waits for three
+  consecutive units to agree, and how far they may disagree is a time, 250 µs,
+  rather than a count of samples: two samples at 8 kHz, twelve at 48 kHz. As a
+  count it was six times tighter at 48 kHz, where a transmitter 300 ppm off
+  drifts further than that from one line to the next, and where Robot 36's
+  alternating chrominance lines alone move the measured center by three samples
+  on a coloured picture, so neither was ever corrected.
 - Optional automatic stop based on synchronization history, and `RxDecoder::stop`
   for a caller that can see a reception is over for a reason the decoder cannot
   observe. A signal that stops arriving altogether is one: no further input
@@ -390,7 +412,7 @@ The workspace currently contains twenty-six packages:
 | `grayline-rtty` | RTTY protocol model, receive path, and transmit path | Implemented; described in [rtty.md](rtty.md) |
 | `grayline-rtty-cli` | Offline RTTY encode and decode integration, as `gl-rtty` | Implemented |
 | `grayline-keyer-protocol` | The protocol `gl-keyer` speaks, and a client for it | Implemented; described in [keyer.md](keyer.md) |
-| `grayline-keyer` | Serial-line FSK keying, as `gl-keyer` | DTR and RTS implemented; described in [keyer.md](keyer.md) |
+| `grayline-keyer` | FSK keying, as `gl-keyer` | DTR, RTS, and the JL1HIS terminal unit implemented; described in [keyer.md](keyer.md) |
 | `grayline-rtty-app` | Application composition root | egui interface with live receive and buffered transmit, as audio or as FSK through `gl-keyer` |
 | `grayline-wefax-app` | Application composition root | egui interface with live receive |
 | `grayline-sstv-app` | Application composition root | egui interface with live receive and transmit |
@@ -525,6 +547,47 @@ offline behavior. The
 front end performs band-pass filtering, level normalization, VIS/FSK tone
 detection, conventional VIS decoding, zero-crossing AFC measurement, and
 Hilbert frequency discrimination.
+
+AFC measures the sync tone once per pulse and subtracts the smoothed offset
+from every demodulated frequency, so an error in it shifts every picture level
+alike: a direct-color mode comes out darker or lighter, and a luminance and
+chrominance mode comes out tinted, because both color differences move the
+same way. Two signals with different delays are involved. What says a pulse
+happened is the sync tone detector's strength staying above a threshold for
+3 to 50 milliseconds, and that envelope trails the tone by six to eight
+milliseconds. What is averaged is the zero-crossing frequency of the
+band-passed input, which is barely delayed at all. The readings taken while
+the detector is above its threshold are therefore not the pulse: for a
+9-millisecond pulse they are its last millisecond and the step into the porch
+after it, which read tens of hertz high.
+
+The readings are instead kept for the longest run plus the detector's lag, and
+when a run ends the pulse is found in them by its own frequency: the longest
+stretch of readings within 100 Hz of the expected sync tone, with gaps of up to
+1.5 milliseconds allowed so one bad crossing does not split it, no earlier than
+12 milliseconds before the run began. The first and last 1.5 milliseconds of
+that stretch are left out, since the receive band-pass smears each step over
+its own length, and the mean of the rest is the pulse's frequency. This is the
+interior window MMSSTV measures in, reached from the other side: MMSSTV opens
+its window by counting discriminator samples inside the sync range, where this
+front end keeps the narrow tone detector as the gate and uses the frequency
+readings only to place the window.
+
+The AFC offset corrects the demodulated frequency as measured, but the tone
+detectors follow it in whole hertz and are retuned only when that whole number
+changes, as MMSSTV's `InitTone` does. A short pulse at a low sampling rate is
+measured from a handful of zero crossings, so its offset wanders by a fraction
+of a hertz from line to line, and retuning the detector bank on every such
+step moves the sync strength the raster decoder is following for no gain.
+
+The gate limits what the measurement can reach, and it is not symmetric. On a
+clean synthesized signal a 9-millisecond pulse is followed from about 55 Hz
+low to 30 Hz high and a 20-millisecond one to 45 Hz high; past that the
+detector strength never crosses the threshold, so nothing is measured and the
+offset stays at zero. A Martin pulse, at under five milliseconds, only just
+reaches the threshold: at 48 kHz it does not open the gate on frequency at
+all, and at 8 kHz it opens it on some lines and not others, so Martin modes
+are corrected late or not at all.
 
 Conventional VIS decoding arms on the start bit, as MMSSTV does: fifteen
 milliseconds of sync-tone dominance — longer than the break between the

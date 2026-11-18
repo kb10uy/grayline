@@ -936,6 +936,81 @@ fn partial_staged_rebuild_is_typed_and_preserves_image_and_state() {
     assert_eq!(decoder.image_revision, revision);
 }
 
+const HEADER_LAG: usize = 75;
+const ENVELOPE_LAG: usize = 60;
+
+fn drive_late_header(mode: Mode, frequency: &[f32], sync: &[f32], live_slant: bool) -> (RxDecoder, Vec<RxEvent>) {
+    let absolute_start = 40_000_u64;
+    let mut delayed = vec![0.0; ENVELOPE_LAG];
+    delayed.extend_from_slice(&sync[..sync.len() - ENVELOPE_LAG]);
+    let sync = &delayed;
+    let mut decoder = RxDecoder::with_config(
+        mode,
+        SAMPLE_RATE,
+        RxConfig {
+            raster_start: RasterStart::AfterHeader,
+            sync_detector_delay: SstvDuration::from_picos(6_000_000_000),
+            ..config(live_slant, frequency.len())
+        },
+    )
+    .unwrap();
+    let mut offset = HEADER_LAG;
+    let mut events = Vec::new();
+    while decoder.state() != RxState::Complete {
+        let result = decoder
+            .process(DemodulatedBlock::new(
+                absolute_start + offset as u64,
+                &frequency[offset..],
+                &sync[offset..],
+            ))
+            .unwrap();
+        offset += result.consumed();
+        if let Some(event) = result.event() {
+            events.push(event);
+        }
+        assert!(result.consumed() != 0 || result.event().is_some());
+    }
+    decoder
+        .stage_for_refinement(DemodulatedBlock::new(
+            absolute_start + offset as u64,
+            &frequency[offset..],
+            &sync[offset..],
+        ))
+        .unwrap();
+    (decoder, events)
+}
+
+#[rstest]
+#[case(Mode::Martin1)]
+#[case(Mode::Martin2)]
+fn staged_rebuild_leaves_a_unit_the_header_cut_into_blank(#[case] mode: Mode) {
+    let expected = source_image(mode);
+    let (frequency, sync) = sampled_image_body(mode, expected.clone(), 0);
+    let (mut decoder, _) = drive_late_header(mode, &frequency, &sync, false);
+
+    decoder.refine_staged().unwrap();
+    assert_eq!(decoder.state(), RxState::Complete);
+    let image = decoder.image();
+    assert!(image.row(0).unwrap().iter().all(|pixel| *pixel == Rgb8::default()));
+    for row in 1..image.size().height() {
+        assert_eq!(image.row(row), expected.row(row), "row {row}");
+    }
+}
+
+#[rstest]
+#[case(0.0, None)]
+#[case(4_000.0, Some(LIVE_SLANT_MIN_UNITS))]
+fn live_tracking_follows_a_raster_the_header_cut_into(#[case] offset_ppm: f64, #[case] expected: Option<usize>) {
+    let mode = Mode::Martin2;
+    let (frequency, sync) = mistimed_body(mode, source_image(mode), offset_ppm);
+    let (_, events) = drive_late_header(mode, &frequency, &sync, true);
+    let first_adjustment = events.iter().find_map(|event| match event {
+        RxEvent::SlantAdjusted { unit, .. } => Some(*unit),
+        _ => None,
+    });
+    assert_eq!(first_adjustment, expected);
+}
+
 #[test]
 fn robot36_tcs_classification_overrides_parity_and_initial_selector() {
     let (mut frequency, sync) = sampled_body(Mode::Robot36, 0);

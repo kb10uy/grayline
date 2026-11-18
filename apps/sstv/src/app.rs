@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, mpsc},
     thread,
     time::{Duration, Instant},
@@ -642,6 +642,22 @@ impl App {
     /// never a picture at all.
     pub fn reset_reception(&mut self) {
         self.audio.reset_reception();
+    }
+
+    /// Decodes a recording in place of the capture device.
+    pub fn open_wav(&mut self, path: &Path) {
+        match self.audio.play_file(path) {
+            Ok(()) => {
+                let message = self.i18n.text("status-reading");
+                self.notice = Some(format!("{message}: {}", path.display()));
+                self.error = None;
+            }
+            Err(error) => {
+                let message = self.i18n.text("error-wav");
+                self.error = Some(format!("{message}: {error}"));
+                self.notice = None;
+            }
+        }
     }
 
     pub fn toggle_dsp(&mut self, dsp: Dsp) {

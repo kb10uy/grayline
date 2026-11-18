@@ -37,7 +37,7 @@ The repository contains:
   and ADIF import. `tools/keyer/` is the exception to both the naming and the
   "not shipped": it holds the package `grayline-keyer` and the binary
   `gl-keyer`, a keyer an operator runs beside `rigctld` to key FSK on a
-  serial port's DTR or RTS line. Each binary parses its command line
+  serial port's DTR or RTS line, or through a JL1HIS terminal unit. Each binary parses its command line
   with clap's derive interface and reaches the work through its own library,
   so a subcommand stays a thin layer over a tested function.
 - `assets/`: data the repository ships outside any one crate, such as the

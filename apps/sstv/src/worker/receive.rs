@@ -200,6 +200,8 @@ pub(super) struct Controls {
     settings: Mutex<RxSettings>,
     /// Set by the interface to abandon the reception in progress.
     pub(super) reset: AtomicBool,
+    /// Set by the interface once the source has delivered its last sample.
+    pub(super) finish: AtomicBool,
     /// Set while the station transmits, so nothing it hears is decoded.
     pub(super) muted: AtomicBool,
 }
@@ -227,6 +229,7 @@ impl RxWorker {
         let controls = Arc::new(Controls {
             settings: Mutex::new(settings),
             reset: AtomicBool::new(false),
+            finish: AtomicBool::new(false),
             muted: AtomicBool::new(false),
         });
         let mailbox = Arc::new(Mailbox::new(waker));
@@ -275,6 +278,17 @@ impl RxWorker {
     /// audio, and one is arriving continuously while a device is open.
     pub fn request_reset(&self) {
         self.controls.reset.store(true, Ordering::Relaxed);
+    }
+
+    /// Closes out the reception the source ended under.
+    ///
+    /// A recording stops in the middle of whatever it holds, and nothing
+    /// after its last sample will ever arrive to complete a picture, refine
+    /// its slant, or run out the wait for an identifier. Asked for only once
+    /// the queue is empty, so every sample the source delivered has been
+    /// decoded by the time it is acted on.
+    pub fn request_finish(&self) {
+        self.controls.finish.store(true, Ordering::Relaxed);
     }
 
     /// Hands the worker what the operator chose, for the next block of audio.
@@ -584,15 +598,38 @@ mod pipeline_tests {
         collect(worker, snapshot, frame);
     }
 
-    fn collect(worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) {
-        if let Some(mut latest) = worker.latest() {
-            if let Some(new) = latest.frame.take() {
-                *frame = Some(new);
-            }
-            if latest.history.is_none() {
-                latest.history = snapshot.history.take();
-            }
-            *snapshot = latest;
+    fn collect(worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) -> bool {
+        let Some(mut latest) = worker.latest() else {
+            return false;
+        };
+        if let Some(new) = latest.frame.take() {
+            *frame = Some(new);
+        }
+        if latest.history.is_none() {
+            latest.history = snapshot.history.take();
+        }
+        *snapshot = latest;
+        true
+    }
+
+    fn settle(
+        worker: &RxWorker,
+        snapshot: &mut RxSnapshot,
+        frame: &mut Option<Frame>,
+        done: impl Fn(&RxSnapshot) -> bool,
+    ) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !done(snapshot) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+            collect(worker, snapshot, frame);
+        }
+    }
+
+    fn answer(worker: &RxWorker, snapshot: &mut RxSnapshot, frame: &mut Option<Frame>) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !collect(worker, snapshot, frame) {
+            assert!(Instant::now() < deadline, "the worker never answered");
+            thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -696,6 +733,69 @@ mod pipeline_tests {
         );
         let history = snapshot.history.expect("the abandoned reception is kept");
         assert_eq!(history.mode, mode);
+    }
+
+    #[test]
+    fn the_end_of_a_recording_closes_out_the_picture_it_cut_short() {
+        let mode = Mode::Robot36;
+        let pcm = transmission(mode, source_image(mode), 0.0);
+        let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
+        let worker = RxWorker::spawn(reader, test_settings(SyncStart::Disabled), Waker::default());
+        let mut snapshot = RxSnapshot::default();
+        let mut frame = None;
+
+        push_all(&mut feed, &worker, &pcm[..pcm.len() * 3 / 4], &mut snapshot, &mut frame);
+        drain(&mut feed, &worker, &mut snapshot, &mut frame);
+        assert!(matches!(snapshot.progress, RxProgress::Decoding { .. }), "{snapshot:?}");
+
+        worker.request_finish();
+        settle(&worker, &mut snapshot, &mut frame, |snapshot| {
+            snapshot.history.is_some()
+        });
+
+        assert_eq!(snapshot.progress, RxProgress::Idle, "{snapshot:?}");
+        assert!((0.65..1.0).contains(&snapshot.display_fraction), "{snapshot:?}");
+        let history = snapshot.history.expect("the reception the recording cut short");
+        assert_eq!(history.mode, mode);
+    }
+
+    #[test]
+    fn the_end_of_a_recording_keeps_a_completed_picture_once() {
+        let mode = Mode::Robot36;
+        let expected = source_image(mode);
+        let pcm = transmission(mode, expected.clone(), 0.0);
+        let (mut feed, reader) = synthetic_capture(RATE, 1 << 16).unwrap();
+        let worker = RxWorker::spawn(reader, test_settings(SyncStart::Disabled), Waker::default());
+        let mut snapshot = RxSnapshot::default();
+        let mut frame = None;
+
+        // Too little tail for the identifier wait to run out on audio, so the
+        // picture is still waiting to be kept when the recording ends.
+        let silence = vec![0.0_f32; RATE as usize / 2];
+        push_all(&mut feed, &worker, &pcm, &mut snapshot, &mut frame);
+        push_all(&mut feed, &worker, &silence, &mut snapshot, &mut frame);
+        drain(&mut feed, &worker, &mut snapshot, &mut frame);
+        settle(&worker, &mut snapshot, &mut frame, |snapshot| {
+            snapshot.progress == RxProgress::Complete
+        });
+        assert_eq!(snapshot.progress, RxProgress::Complete, "{snapshot:?}");
+        assert!(snapshot.history.is_none(), "{snapshot:?}");
+
+        worker.request_finish();
+        settle(&worker, &mut snapshot, &mut frame, |snapshot| {
+            snapshot.history.is_some()
+        });
+
+        assert_eq!(snapshot.progress, RxProgress::Complete, "{snapshot:?}");
+        assert_eq!(snapshot.mode, Some(mode), "{snapshot:?}");
+        let history = snapshot.history.take().expect("the completed reception");
+        assert_eq!(history.mode, mode);
+        let error = mean_abs_error(&history.frame, &expected);
+        assert!(error < 40.0, "the kept picture scored {error}");
+
+        worker.request_finish();
+        answer(&worker, &mut snapshot, &mut frame);
+        assert!(snapshot.history.is_none(), "the picture was kept twice");
     }
 
     #[test]

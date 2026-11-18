@@ -82,6 +82,7 @@ pub(crate) struct FrontEnd {
     sample_rate_hz: f64,
     fsk: FskDecoder,
     afc: Afc,
+    detector_offset_hz: f64,
 }
 
 impl FrontEnd {
@@ -132,6 +133,7 @@ impl FrontEnd {
             sample_rate_hz,
             fsk,
             afc: Afc::new(sample_rate_hz),
+            detector_offset_hz: 0.0,
         })
     }
 
@@ -173,11 +175,8 @@ impl FrontEnd {
         let fsk_record = self.fsk.process(fsk_tone);
 
         let measured = self.zero_crossing.process_sample(filtered);
-        let changed = self.afc.process(sync_strength, measured);
-        if changed {
-            for (detector, (nominal, _)) in self.detectors.iter_mut().zip(DETECTORS) {
-                detector.set_frequency(nominal + self.afc.offset_hz())?;
-            }
+        if self.afc.process(sync_strength, measured) {
+            self.retune_detectors()?;
         }
 
         let frequency = self.hilbert.process_sample(filtered);
@@ -207,9 +206,18 @@ impl FrontEnd {
 
     pub(crate) fn finish_afc(&mut self) -> Result<(), DemodulatorError> {
         if self.afc.finish_run() {
+            self.retune_detectors()?;
+        }
+        Ok(())
+    }
+
+    fn retune_detectors(&mut self) -> Result<(), DemodulatorError> {
+        let offset_hz = libm::trunc(self.afc.offset_hz());
+        if offset_hz != self.detector_offset_hz {
             for (detector, (nominal, _)) in self.detectors.iter_mut().zip(DETECTORS) {
-                detector.set_frequency(nominal + self.afc.offset_hz())?;
+                detector.set_frequency(nominal + offset_hz)?;
             }
+            self.detector_offset_hz = offset_hz;
         }
         Ok(())
     }

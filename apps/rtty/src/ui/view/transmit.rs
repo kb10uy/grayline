@@ -58,7 +58,7 @@ const LINE_BREAK_MARK: &str = "\u{21b5}";
 /// The identifier of the message field, which the keyboard filter needs before
 /// the field is drawn.
 pub fn draft_id() -> Id {
-    Id::new("transmit-draft")
+    Id::unique("transmit-draft")
 }
 
 /// How wide the list of set messages is, in points.
@@ -111,9 +111,6 @@ pub(super) fn has_pending(app: &App) -> bool {
 /// would otherwise push them down the window mid-sentence.
 pub(super) fn pending_panel(ui: &mut Ui, app: &mut App) {
     ui.add_space(2.0);
-    // Cut off at the pane's own edge rather than a few points past it, so a
-    // long queue does not print its fifth row over the field below.
-    ui.visuals_mut().clip_rect_margin = 0.0;
     egui::ScrollArea::vertical()
         .id_salt("pending")
         .max_height(STACK_HEIGHT)
@@ -402,10 +399,6 @@ fn draft(ui: &mut Ui, app: &mut App) {
         .fill(ui.visuals().text_edit_bg_color())
         .show(ui, |ui| {
             ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-            // egui lets a scrolling area paint a few points past its own
-            // edge, which here would print the fifth line of a message
-            // outside the field's border.
-            ui.visuals_mut().clip_rect_margin = 0.0;
             egui::ScrollArea::vertical()
                 .id_salt("draft")
                 // Rounded down, so the row after the last one begins below

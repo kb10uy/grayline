@@ -132,6 +132,23 @@ pub fn inert_labels(ui: &mut egui::Ui) {
     ui.style_mut().interaction.selectable_labels = false;
 }
 
+/// How wide a framed button labelled `text` is drawn in `ui`.
+///
+/// A field that shares its row with a button is sized from what the button
+/// leaves, and the button is as wide as its label plus the padding on both
+/// sides, which is not a size the style records anywhere. Measured the way
+/// egui's own button style lays it out: the label in the body font, inside a
+/// frame whose margin is the spacing's button padding.
+pub fn button_width(ui: &egui::Ui, text: &str) -> f32 {
+    let label = egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    );
+    label.size().x + ui.spacing().button_padding.x * 2.0
+}
+
 /// The address `configured` names, or the identity's own.
 ///
 /// Split from the lookup so it can be checked without an environment: a test

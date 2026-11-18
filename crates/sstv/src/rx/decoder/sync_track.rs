@@ -55,7 +55,8 @@ impl RxDecoder {
                 let minimum = *self.phase_displacements.iter().min().expect("non-empty");
                 let maximum = *self.phase_displacements.iter().max().expect("non-empty");
                 let correction = self.phase_displacements.iter().sum::<i64>() / PHASE_AGREEMENT as i64;
-                if maximum - minimum <= 2 && correction.unsigned_abs() >= MIN_PHASE_DISPLACEMENT {
+                let spread = (samples_spanned(f64::from(self.sample_rate_hz), PHASE_AGREEMENT_SPREAD_PS) as i64).max(2);
+                if maximum - minimum <= spread && correction.unsigned_abs() >= MIN_PHASE_DISPLACEMENT {
                     clock.adjust_epoch(correction)?;
                     self.last_phase_adjustment = Some(unit);
                     self.phase_displacements.clear();

@@ -42,6 +42,7 @@ const LIVE_SLANT_THRESHOLD_SCALE: f64 = 3_200.0;
 const LIVE_SLANT_MIN_THRESHOLD_PPM: f64 = 8.0;
 
 const PHASE_AGREEMENT: usize = 3;
+const PHASE_AGREEMENT_SPREAD_PS: u64 = 250_000_000;
 const PHASE_HOLDOFF_UNITS: usize = 6;
 const MIN_PHASE_DISPLACEMENT: u64 = 2;
 
@@ -516,6 +517,16 @@ impl RxDecoder {
     /// what MMSSTV shows as well, rather than failing the whole reception on
     /// samples that were never received.
     fn skip_units_before_input(&mut self, first: u64, clock: RasterClock) -> Result<(), SstvError> {
+        let unit = self.units_before(first, clock)?;
+        if unit == self.raster.units() {
+            return Err(SstvError::RasterNotAcquired);
+        }
+        self.decode.raster_unit = unit;
+        self.decode.delivered_rows = unit * self.raster.mode.spec().rows_per_raster_unit() as usize;
+        Ok(())
+    }
+
+    fn units_before(&self, first: u64, clock: RasterClock) -> Result<usize, SstvError> {
         let Some(segment) = self.raster.profile.pixels().iter().next() else {
             return Err(SstvError::UnsupportedRxMode(self.raster.mode));
         };
@@ -524,12 +535,7 @@ impl RxDecoder {
         while unit < units && self.raster.pixel_window(clock, unit, segment, 0)?.0 < first {
             unit += 1;
         }
-        if unit == units {
-            return Err(SstvError::RasterNotAcquired);
-        }
-        self.decode.raster_unit = unit;
-        self.decode.delivered_rows = unit * self.raster.mode.spec().rows_per_raster_unit() as usize;
-        Ok(())
+        Ok(unit)
     }
 
     /// Takes `count` samples of `block` from `offset` into the working window,

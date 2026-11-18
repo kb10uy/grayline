@@ -115,6 +115,7 @@ status-output-ready = Output ready
 status-output-audio = Output { $rate } Hz
 status-dropped = Dropped { $samples } samples
 status-audio = { $rate } Hz / mono
+status-reading = Reading
 
 error-no-transmit-frame = No transmit image has been composed yet
 error-tone-active = A tone is being sent
@@ -124,6 +125,7 @@ error-invalid-station-call = Invalid station callsign: { $error }
 error-rig-unavailable = Rig control is not ready: { $error }
 error-open-folder = The folder could not be opened
 error-open-manual = The manual could not be opened in a browser
+error-wav = The recording could not be read
 
 geometry = { $mode } · { $width }×{ $height }
 

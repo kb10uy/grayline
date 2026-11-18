@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{error::Error, time::Duration};
+use std::{error::Error, path::Path, time::Duration};
 
 mod app;
 mod error;
@@ -49,6 +49,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 impl Application for App {
     type Action = menu::Action;
+
+    /// Dropping a recording on the window, or naming one on the command line,
+    /// is how one is opened: the application keeps no file browser of its own,
+    /// for the same reason it opens its directories in the operator's file
+    /// manager rather than listing them.
+    fn open_file(&mut self, path: &Path) {
+        self.open_wav(path);
+    }
 
     fn poll(&mut self, _ctx: &egui::Context) {
         self.poll_workers();
