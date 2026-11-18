@@ -142,12 +142,19 @@ impl OnAir {
         Duration::from_secs_f64(remaining as f64 / f64::from(self.output.sample_rate_hz()))
     }
 
-    /// Reads the output once and decides what this frame does about it.
+    /// Reads the output once, for everything this frame asks of it.
+    ///
+    /// Apart from [`advance`](Self::advance) because what the output says
+    /// decides whether the rig is keyed, and that decides `ready`.
+    pub fn refresh(&mut self) {
+        self.output.refresh();
+    }
+
+    /// Decides what this frame does about the output as it was last read.
     ///
     /// `ready` is whether the rig may be sent into, and `rig_error` is what a
     /// rig keyed for this message has refused, if anything.
     pub fn advance(&mut self, ready: bool, rig_error: Option<&RigControlError>) -> Advance {
-        self.output.refresh();
         // A rig that refused one of the operator's commands has not been
         // keyed, so the message it was keyed for cannot go out.
         if let Some(error) = rig_error {

@@ -450,6 +450,66 @@ fn script(app: &mut App, snapshot: OutputSnapshot) {
         .script_for_test(snapshot);
 }
 
+#[rstest]
+#[case::the_keyer_leaves_ptt_to_the_rig(Some(false), false, true)]
+#[case::the_keyer_keys_ptt_itself(Some(true), false, false)]
+#[case::the_keyer_has_not_said(None, false, false)]
+#[case::the_rig_is_keyed_already(Some(false), true, false)]
+fn the_rig_is_keyed_for_a_keyer_only_when_the_keyer_leaves_ptt_to_it(
+    #[case] keys_ptt: Option<bool>,
+    #[case] rig_keyed: bool,
+    #[case] due: bool,
+) {
+    let mut app = App::headless();
+    on_air(&mut app, "RY", TxPhase::Producing);
+    script(
+        &mut app,
+        OutputSnapshot {
+            phase: TxPhase::Producing,
+            keys_ptt,
+            ..OutputSnapshot::default()
+        },
+    );
+    app.rig_keyed = rig_keyed;
+
+    assert_eq!(app.rig_keying_due(), due);
+}
+
+#[test]
+fn a_stream_that_has_started_no_longer_asks_for_the_rig() {
+    let mut app = App::headless();
+    on_air(&mut app, "RY", TxPhase::Producing);
+    script(
+        &mut app,
+        OutputSnapshot {
+            phase: TxPhase::Producing,
+            keys_ptt: Some(false),
+            ..OutputSnapshot::default()
+        },
+    );
+    assert!(app.rig_keying_due());
+
+    app.poll_transmit();
+
+    assert!(app.transmit.on_air().unwrap().output().is_started());
+    assert!(!app.rig_keying_due());
+}
+
+#[test]
+fn a_message_goes_out_through_a_keyer_that_keys_ptt_itself() {
+    let fake = FakeKeyer::keying_ptt(&[("sending", 0), ("completed", 60_000_000)]);
+    let mut app = App::headless();
+    app.settings.keyer.enabled = true;
+    app.settings.keyer.address.clone_from(&fake.address);
+    app.transmit.queue("RYRY".to_owned());
+
+    run_until_idle(&mut app);
+
+    assert!(app.notice.is_none(), "{:?}", app.notice);
+    assert!(app.columns[0].text().contains("RYRY"), "{:?}", app.columns[0].text());
+    assert!(!app.rig_keyed);
+}
+
 #[test]
 fn a_keyed_rig_is_waited_for_before_the_output_starts() {
     use grayline_rig_control::RigState;

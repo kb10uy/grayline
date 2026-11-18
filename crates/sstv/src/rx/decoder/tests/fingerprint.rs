@@ -241,12 +241,12 @@ fn live_slant_receptions_are_unchanged(#[case] mode: Mode, #[case] offset_ppm: f
 }
 
 const SLANT: [u64; 6] = [
-    0x2de6_4144_14db_cb94,
-    0x81e5_8c3d_1ef0_f42d,
-    0x00d8_c67d_7d68_1d0f,
-    0xc0b8_9ad7_f29a_70f2,
+    0xf1e4_5846_228a_b989,
+    0x5cf4_c0f3_aa35_65f5,
+    0xe6db_7518_fe10_4e26,
+    0x83bd_3ceb_a874_7464,
     0x4db0_21d9_0bcb_e59c,
-    0x9dc8_ca28_7665_66ba,
+    0xfa77_6a2c_3e22_f969,
 ];
 
 #[rstest]
@@ -323,12 +323,12 @@ fn disturbed_receptions_are_unchanged(#[case] variant: usize) {
 }
 
 const DISTURBED: [u64; 8] = [
-    0x68d4_ba6b_e3ea_8368,
+    0xc3f6_820d_f73a_c759,
     0x457e_748d_81f0_5024,
     0x430f_51a2_c161_cad8,
-    0xffa4_49f6_678c_be4c,
-    0xbabe_d33c_0253_746b,
-    0x2a9a_4709_5a94_6306,
-    0xb0d6_9386_cd91_eee6,
-    0x2d5f_8f02_f482_520d,
+    0x0d4f_394d_50c3_a6b1,
+    0x8724_ad9d_78b9_6d14,
+    0x01c3_39c9_3668_da96,
+    0x1ce0_6fb5_cf1b_fb48,
+    0xb790_395c_3648_ebfd,
 ];

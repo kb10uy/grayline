@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use grayline_audio::AudioError;
+use grayline_audio::{AudioError, WavError};
 use grayline_dsp::DspError;
 use grayline_qso::QsoError;
 use grayline_rig_control::{RigControlError, RigError};
@@ -21,6 +21,9 @@ use thiserror::Error;
 pub enum AppError {
     #[error(transparent)]
     Audio(#[from] AudioError),
+    /// A recording could not be opened or read.
+    #[error(transparent)]
+    Wav(#[from] WavError),
     #[error(transparent)]
     Demodulator(#[from] DemodulatorError),
     #[error(transparent)]

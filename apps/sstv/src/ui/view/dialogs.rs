@@ -5,6 +5,8 @@
 
 use super::*;
 
+const REMOVE: &str = "×";
+
 /// Edits what the station says about itself.
 ///
 /// Kept out of the QSO panel and behind the Settings menu because none of it
@@ -24,7 +26,7 @@ pub(super) fn station_dialog(ui: &mut Ui, app: &mut App) {
 
     let mut finished = false;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("station")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("station")).show(ui.ctx(), |ui| {
         ui.set_max_width(360.0);
         ui.heading(title);
         ui.add_space(8.0);
@@ -70,11 +72,11 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
     let mut changed = false;
     let mut removed = None;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("custom-variables")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("custom-variables")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(title);
         ui.add_space(8.0);
-        let remove_width = ui.spacing().interact_size.y;
+        let remove_width = grayline_shell::button_width(ui, REMOVE);
         let gaps = ui.spacing().item_spacing.x * 2.0;
         let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
         let value_width = ui.available_width() - remove_width - gaps - name_width;
@@ -95,7 +97,7 @@ pub(super) fn custom_variable_dialog(ui: &mut Ui, app: &mut App) {
                 changed |= ui
                     .add(egui::TextEdit::singleline(value).desired_width(value_width))
                     .changed();
-                if ui.button("×").clicked() {
+                if ui.button(REMOVE).clicked() {
                     removed = Some(index);
                 }
             });
@@ -161,7 +163,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
     let mut removed = None;
     let mut adding = false;
     let mut done = false;
-    let response = egui::Modal::new(Id::new("contact")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("contact")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(format!("{title} — {callsign}"));
         ui.add_space(4.0);
@@ -170,7 +172,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
         }
         ui.add_space(8.0);
 
-        let remove_width = ui.spacing().interact_size.y;
+        let remove_width = grayline_shell::button_width(ui, REMOVE);
         let gaps = ui.spacing().item_spacing.x * 2.0;
         let labelled_width = ui.available_width() - FIELD_LABEL_WIDTH - ui.spacing().item_spacing.x;
         let name_width = (ui.available_width() - remove_width - gaps) * 0.4;
@@ -205,7 +207,7 @@ pub(super) fn contact_dialog(ui: &mut Ui, app: &mut App) {
                     changed |= ui
                         .add(egui::TextEdit::singleline(value).desired_width(value_width))
                         .changed();
-                    if ui.button("×").clicked() {
+                    if ui.button(REMOVE).clicked() {
                         removed = Some(index);
                     }
                 });
@@ -293,7 +295,7 @@ pub(super) fn device_fault_modal(ui: &mut Ui, app: &mut App) {
 
     let mut retry = false;
     let mut dismiss = false;
-    let response = egui::Modal::new(Id::new("device-fault")).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique("device-fault")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
         ui.heading(app.i18n.text("device-lost-title"));
         ui.add_space(8.0);

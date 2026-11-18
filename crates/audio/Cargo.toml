@@ -13,9 +13,9 @@ authors.workspace = true
 # client, adds no system build dependency, and is ignored on other platforms.
 # PipeWire answers on the same socket, and ALSA remains the fallback for a
 # machine running no server at all.
-cpal = { version = "0.18.1", features = ["pulseaudio"] }
+cpal = { version = "0.18.2", features = ["pulseaudio"] }
 grayline-wav = { path = "../wav" }
-ringbuf = "0.5.1"
+ringbuf = "0.6.0"
 thiserror.workspace = true
 
 [dev-dependencies]

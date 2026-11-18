@@ -26,11 +26,11 @@ pub fn view(ui: &mut Ui, app: &mut App, model: &[Menu], in_window_menu: bool) ->
 
     let mut activated = None;
     if in_window_menu {
-        Panel::top(Id::new("menu-bar")).show(ui, |ui| {
+        Panel::top("menu-bar").show(ui, |ui| {
             activated = menu::bar(ui, model);
         });
     }
-    Panel::bottom(Id::new("control-bar")).show(ui, |ui| {
+    Panel::bottom("control-bar").show(ui, |ui| {
         ui.add_space(2.0);
         controls(ui, app);
         ui.add_space(2.0);
@@ -106,7 +106,7 @@ fn group(ui: &mut Ui, salt: &str, add: impl FnOnce(&mut Ui)) {
 }
 
 fn group_id(salt: &str) -> Id {
-    Id::new("wefax-control-group").with(salt)
+    Id::unique("wefax-control-group").with(salt)
 }
 
 fn flags(ui: &mut Ui, app: &mut App) {
