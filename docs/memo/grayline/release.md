@@ -89,7 +89,7 @@ otherwise. The file is generated and is not edited by hand.
 
 On first pinning, the extension narrowed partial version tags such as `v5` to
 the full release they resolved to, which is why the workflows name versions
-like `actions/checkout@v5.1.0`. `dtolnay/rust-toolchain@stable` is a branch
+like `actions/checkout@v7.0.1`. `dtolnay/rust-toolchain@stable` is a branch
 and is not narrowed: the lockfile holds it at the commit it had when locked,
 and it only advances when `gh actions-lock --relock` is run after reviewing
 what changed upstream.
